@@ -4,6 +4,7 @@ import type { SignalReactionNotificationMode } from "../config/types.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { chunkTextWithMode, resolveChunkMode, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "../auto-reply/reply/history.js";
+import { buildMentionRegexes } from "../auto-reply/reply/mentions.js";
 import { loadConfig } from "../config/config.js";
 import { waitForTransportReady } from "../infra/transport-ready.js";
 import { saveMediaBuffer } from "../media/store.js";
@@ -307,6 +308,26 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   const ignoreAttachments = opts.ignoreAttachments ?? accountInfo.config.ignoreAttachments ?? false;
   const sendReadReceipts = Boolean(opts.sendReadReceipts ?? accountInfo.config.sendReadReceipts);
 
+  // Resolve per-group config for requireMention, enabled, allowFrom
+  const resolveGroupConfig = (groupId: string) => {
+    const groups = accountInfo.config.groups;
+    if (!groups) {
+      return undefined;
+    }
+    const normalizedId = groupId.trim();
+    const groupConfig = groups[normalizedId];
+    const defaultConfig = groups["*"];
+    return {
+      requireMention: groupConfig?.requireMention ?? defaultConfig?.requireMention,
+      enabled: groupConfig?.enabled ?? defaultConfig?.enabled,
+      allowFrom: groupConfig?.allowFrom
+        ? normalizeAllowList(groupConfig.allowFrom)
+        : defaultConfig?.allowFrom
+          ? normalizeAllowList(defaultConfig.allowFrom)
+          : undefined,
+    };
+  };
+
   const autoStart = opts.autoStart ?? accountInfo.config.autoStart ?? !accountInfo.config.httpUrl;
   const startupTimeoutMs = Math.min(
     120_000,
@@ -349,6 +370,9 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       });
     }
 
+    // Build mention regexes for text-based mention detection fallback
+    const mentionRegexes = buildMentionRegexes(cfg);
+
     const handleEvent = createSignalEventHandler({
       runtime,
       cfg,
@@ -363,6 +387,8 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       allowFrom,
       groupAllowFrom,
       groupPolicy,
+      resolveGroupConfig,
+      mentionRegexes,
       reactionMode,
       reactionAllowlist,
       mediaMaxBytes,

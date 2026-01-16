@@ -432,8 +432,13 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const groupName = dataMessage.groupInfo?.groupName ?? undefined;
     const isGroup = Boolean(groupId);
     const storeAllowFrom = await readChannelAllowFromStore("signal").catch(() => []);
+
+    // Resolve group-specific config for allowFrom override
+    const groupConfig = isGroup && groupId ? deps.resolveGroupConfig(groupId) : undefined;
+    const groupAllowList = groupConfig?.allowFrom ?? deps.groupAllowFrom;
+
     const effectiveDmAllow = [...deps.allowFrom, ...storeAllowFrom];
-    const effectiveGroupAllow = [...deps.groupAllowFrom, ...storeAllowFrom];
+    const effectiveGroupAllow = [...groupAllowList, ...storeAllowFrom];
     const dmAllowed =
       deps.dmPolicy === "open" ? true : isSignalSenderAllowed(sender, effectiveDmAllow);
 
@@ -488,6 +493,41 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       if (!isSignalSenderAllowed(sender, effectiveGroupAllow)) {
         logVerbose(`Blocked signal group sender ${senderDisplay} (not in groupAllowFrom)`);
         return;
+      }
+    }
+
+    // Check requireMention for groups
+    if (isGroup && groupId) {
+      const groupConfig = deps.resolveGroupConfig(groupId);
+      if (groupConfig?.enabled === false) {
+        logVerbose(`Blocked signal group ${groupId} (enabled: false)`);
+        return;
+      }
+      const requireMention = groupConfig?.requireMention ?? true;
+      if (requireMention) {
+        // Check if the bot is mentioned in the message via native mentions or text patterns
+        const mentions = dataMessage.mentions ?? [];
+        const accountNumber = deps.account?.replace(/\D/g, "") ?? "";
+
+        // Native mention check (number or uuid from signal-cli payload)
+        const nativeMention = mentions.some(
+          (m) => m.number?.replace(/\D/g, "") === accountNumber || m.uuid === deps.accountId,
+        );
+
+        // Regex fallback for text-based mentions (e.g., "@ClawdBot")
+        const messageText = dataMessage.message ?? "";
+        const regexMatch =
+          deps.mentionRegexes.length > 0 &&
+          matchesMentionPatterns(messageText, deps.mentionRegexes);
+
+        const isMentioned = nativeMention || regexMatch;
+
+        if (!isMentioned) {
+          logVerbose(
+            `Skipped signal group message from ${senderDisplay} (no mention of bot, requireMention: true)`,
+          );
+          return;
+        }
       }
     }
 
