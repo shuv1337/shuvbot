@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Tracks features/fixes in this fork that diverge from upstream clawdbot. Check before syncing upstream.",
+  "features": [
+    {
+      "id": "optional-provider-fields",
+      "date": "2026-01-13",
+      "files": [
+        "src/config/zod-schema.ts",
+        "src/agents/models-config.providers.ts"
+      ],
+      "description": "Make baseUrl and models optional in ModelProviderSchema, allowing users to define providers with just apiKey for built-in providers (e.g., openai, google). Also adds null check in normalizeGoogleProvider() for providers without models array.",
+      "reason": "Config validation failed when users set models.providers.openai.apiKey without specifying baseUrl/models for built-in providers."
+    },
+    {
+      "id": "signal-require-mention",
+      "date": "2026-01-16",
+      "files": [
+        "src/config/types.signal.ts",
+        "src/config/zod-schema.providers-core.ts",
+        "src/signal/monitor.ts",
+        "src/signal/monitor/event-handler.ts",
+        "src/signal/monitor/event-handler.types.ts",
+        "src/signal/monitor.requireMention.test.ts"
+      ],
+      "description": "Add per-group requireMention support for Signal groups. Groups default to requireMention=true (only respond when bot is @mentioned). Supports native signal-cli mentions (number/uuid) plus regex fallback via mentionPatterns config. Includes SignalGroupSchema in Zod validation, per-group enabled/allowFrom overrides, and wildcard '*' default config.",
+      "reason": "Signal groups triggered replies on every message, unlike Telegram/Discord which require explicit mentions. This led to undesired bot responses in group chats."
+    }
+  ]
+}
