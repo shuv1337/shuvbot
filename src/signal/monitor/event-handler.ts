@@ -538,6 +538,41 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       }
     }
 
+    // Check requireMention for groups
+    if (isGroup && groupId) {
+      const groupConfig = deps.resolveGroupConfig(groupId);
+      if (groupConfig?.enabled === false) {
+        logVerbose(`Blocked signal group ${groupId} (enabled: false)`);
+        return;
+      }
+      const requireMention = groupConfig?.requireMention ?? true;
+      if (requireMention) {
+        // Check if the bot is mentioned in the message via native mentions or text patterns
+        const mentions = dataMessage.mentions ?? [];
+        const accountNumber = deps.account?.replace(/\D/g, "") ?? "";
+
+        // Native mention check (number or uuid from signal-cli payload)
+        const nativeMention = mentions.some(
+          (m) => m.number?.replace(/\D/g, "") === accountNumber || m.uuid === deps.accountId,
+        );
+
+        // Regex fallback for text-based mentions (e.g., "@ClawdBot")
+        const messageText = dataMessage.message ?? "";
+        const regexMatch =
+          deps.mentionRegexes.length > 0 &&
+          matchesMentionPatterns(messageText, deps.mentionRegexes);
+
+        const isMentioned = nativeMention || regexMatch;
+
+        if (!isMentioned) {
+          logVerbose(
+            `Skipped signal group message from ${senderDisplay} (no mention of bot, requireMention: true)`,
+          );
+          return;
+        }
+      }
+    }
+
     const useAccessGroups = deps.cfg.commands?.useAccessGroups !== false;
     const commandDmAllow = isGroup ? deps.allowFrom : effectiveDmAllow;
     const ownerAllowedForCommands = isSignalSenderAllowed(sender, commandDmAllow);
