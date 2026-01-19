@@ -349,7 +349,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           id: isGroup ? (groupId ?? "unknown") : senderPeerId,
         },
       });
-      const groupLabel = isGroup ? `${groupName ?? "Signal Group"} id:${groupId}` : undefined;
+      const groupLabel = isGroup ? `${groupName ?? "Signal Group"} from ${senderName} id:${groupId}` : undefined;
       const messageId = reaction.targetSentTimestamp
         ? String(reaction.targetSentTimestamp)
         : "unknown";
