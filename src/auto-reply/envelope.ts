@@ -217,6 +217,7 @@ export function formatInboundFromLabel(params: {
   isGroup: boolean;
   groupLabel?: string;
   groupId?: string;
+  groupSender?: string;
   directLabel: string;
   directId?: string;
   groupFallback?: string;
@@ -225,7 +226,8 @@ export function formatInboundFromLabel(params: {
   if (params.isGroup) {
     const label = params.groupLabel?.trim() || params.groupFallback || "Group";
     const id = params.groupId?.trim();
-    return id ? `${label} id:${id}` : label;
+    const sender = params.groupSender?.trim();
+    return id ? `${label}${sender ? ` from ${sender}` : ""} id:${id}` : label;
   }
 
   const directLabel = params.directLabel.trim();

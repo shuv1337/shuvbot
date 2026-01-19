@@ -74,6 +74,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       groupLabel: entry.groupName ?? undefined,
       groupId: entry.groupId ?? "unknown",
       groupFallback: "Group",
+      groupSender: entry.senderName,
       directLabel: entry.senderName,
       directId: entry.senderDisplay,
     });
