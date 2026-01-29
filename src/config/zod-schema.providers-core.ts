@@ -494,6 +494,12 @@ export const SlackConfigSchema = SlackAccountSchema.extend({
   }
 });
 
+export const SignalGroupSchema = z.object({
+  requireMention: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
+});
+
 export const SignalAccountSchemaBase = z
   .object({
     name: z.string().optional(),
@@ -534,6 +540,7 @@ export const SignalAccountSchemaBase = z
       .optional(),
     reactionLevel: z.enum(["off", "ack", "minimal", "extensive"]).optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
+    groups: z.record(z.string(), SignalGroupSchema.optional()).optional(),
   })
   .strict();
 
