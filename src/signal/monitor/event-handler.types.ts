@@ -26,6 +26,14 @@ export type SignalDataMessage = {
   } | null;
   quote?: { text?: string | null } | null;
   reaction?: SignalReactionMessage | null;
+  /** Mentioned recipients in the message (signal-cli JSON format). */
+  mentions?: Array<{
+    number?: string | null; // E.164 phone number (signal-cli field name)
+    uuid?: string | null;
+    start?: number | null; // Character position in message
+    length?: number | null; // Length of mention text
+    name?: string | null; // Deprecated but may still appear
+  }>;
 };
 
 export type SignalReactionMessage = {
@@ -72,6 +80,16 @@ export type SignalEventHandlerDeps = {
   allowFrom: string[];
   groupAllowFrom: string[];
   groupPolicy: GroupPolicy;
+  /** Function to resolve group-specific config (requireMention, enabled, etc.) */
+  resolveGroupConfig: (groupId: string) =>
+    | {
+        requireMention?: boolean;
+        enabled?: boolean;
+        allowFrom?: string[];
+      }
+    | undefined;
+  /** Pre-built mention regexes for text-based mention detection fallback */
+  mentionRegexes: RegExp[];
   reactionMode: SignalReactionNotificationMode;
   reactionAllowlist: string[];
   mediaMaxBytes: number;
