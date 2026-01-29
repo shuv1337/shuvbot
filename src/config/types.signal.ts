@@ -10,6 +10,15 @@ import type { DmConfig } from "./types.messages.js";
 export type SignalReactionNotificationMode = "off" | "own" | "all" | "allowlist";
 export type SignalReactionLevel = "off" | "ack" | "minimal" | "extensive";
 
+export type SignalGroupConfig = {
+  /** If true, only respond when bot is @mentioned. Default: true for groups. */
+  requireMention?: boolean;
+  /** If false, disable the bot for this group. */
+  enabled?: boolean;
+  /** Optional allowlist for group senders (E.164). Overrides groupAllowFrom. */
+  allowFrom?: Array<string | number>;
+};
+
 export type SignalAccountConfig = {
   /** Optional display name for this account (used in CLI/UI lists). */
   name?: string;
@@ -86,6 +95,8 @@ export type SignalAccountConfig = {
   heartbeat?: ChannelHeartbeatVisibilityConfig;
   /** Outbound response prefix override for this channel/account. */
   responsePrefix?: string;
+  /** Per-group configuration (key is group ID or name). Use "*" for default. */
+  groups?: Record<string, SignalGroupConfig>;
 };
 
 export type SignalConfig = {
