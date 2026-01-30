@@ -51,6 +51,39 @@ import { sendMessageSignal, sendReadReceiptSignal, sendTypingSignal } from "../s
 export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
   const inboundDebounceMs = resolveInboundDebounceMs({ cfg: deps.cfg, channel: "signal" });
 
+  /**
+   * Strip native Signal mentions from message text for command detection.
+   * Uses the mention positions provided by signal-cli to precisely remove @mentions.
+   */
+  function stripNativeSignalMentions(
+    text: string,
+    mentions: Array<{ start?: number | null; length?: number | null }> | undefined,
+  ): string {
+    let result = text;
+
+    // First, try to strip using native mention positions (most precise)
+    if (mentions?.length) {
+      // Sort by start position descending so we can remove from end to start
+      // (preserves earlier positions)
+      const sorted = [...mentions]
+        .filter((m) => typeof m.start === "number" && typeof m.length === "number")
+        .sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
+
+      for (const m of sorted) {
+        if (typeof m.start === "number" && typeof m.length === "number") {
+          result = result.slice(0, m.start) + result.slice(m.start + m.length);
+        }
+      }
+    }
+
+    // Also strip regex-based mention patterns (for text-based @mentions)
+    for (const re of deps.mentionRegexes) {
+      result = result.replace(re, " ");
+    }
+
+    return result.replace(/\s+/g, " ").trim();
+  }
+
   type SignalInboundEntry = {
     senderName: string;
     senderDisplay: string;
@@ -391,7 +424,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           id: isGroup ? (groupId ?? "unknown") : senderPeerId,
         },
       });
-      const groupLabel = isGroup ? `${groupName ?? "Signal Group"} from ${senderName} id:${groupId}` : undefined;
+      const groupLabel = isGroup
+        ? `${groupName ?? "Signal Group"} from ${senderName} id:${groupId}`
+        : undefined;
       const messageId = reaction.targetSentTimestamp
         ? String(reaction.targetSentTimestamp)
         : "unknown";
@@ -535,7 +570,11 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const useAccessGroups = deps.cfg.commands?.useAccessGroups !== false;
     const ownerAllowedForCommands = isSignalSenderAllowed(sender, effectiveDmAllow);
     const groupAllowedForCommands = isSignalSenderAllowed(sender, effectiveGroupAllow);
-    const hasControlCommandInMessage = hasControlCommand(messageText, deps.cfg);
+    // Strip mentions for command detection in groups so "@Nick Nack /model" detects "/model"
+    const textForCommandCheck = isGroup
+      ? stripNativeSignalMentions(messageText, dataMessage.mentions)
+      : messageText;
+    const hasControlCommandInMessage = hasControlCommand(textForCommandCheck, deps.cfg);
     const commandGate = resolveControlCommandGate({
       useAccessGroups,
       authorizers: [
@@ -656,10 +695,15 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       placeholder = "<media:attachment>";
     }
 
-    const bodyText = messageText || placeholder || dataMessage.quote?.text?.trim() || "";
-    if (!bodyText) {
+    const rawBodyText = messageText || placeholder || dataMessage.quote?.text?.trim() || "";
+    if (!rawBodyText) {
       return;
     }
+    // Strip mentions from body text for groups so commands are detected correctly
+    const bodyText =
+      isGroup && messageText
+        ? stripNativeSignalMentions(messageText, dataMessage.mentions) || rawBodyText
+        : rawBodyText;
 
     const receiptTimestamp =
       typeof envelope.timestamp === "number"
