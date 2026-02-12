@@ -65,9 +65,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     if (mentions?.length) {
       // Sort by start position descending so we can remove from end to start
       // (preserves earlier positions)
-      const sorted = [...mentions]
+      const sorted = mentions
         .filter((m) => typeof m.start === "number" && typeof m.length === "number")
-        .sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
+        .toSorted((a, b) => (b.start ?? 0) - (a.start ?? 0));
 
       for (const m of sorted) {
         if (typeof m.start === "number" && typeof m.length === "number") {
