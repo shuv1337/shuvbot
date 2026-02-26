@@ -28,6 +28,42 @@ export const handleHelpCommand: CommandHandler = async (params, allowTextCommand
   };
 };
 
+export const handleSkillsCommand: CommandHandler = async (params, allowTextCommands) => {
+  if (!allowTextCommands) {
+    return null;
+  }
+  if (params.command.commandBodyNormalized !== "/skills") {
+    return null;
+  }
+  if (!params.command.isAuthorizedSender) {
+    logVerbose(
+      `Ignoring /skills from unauthorized sender: ${params.command.senderId || "<unknown>"}`,
+    );
+    return { shouldContinue: false };
+  }
+
+  const skillCommands =
+    params.skillCommands ??
+    listSkillCommandsForAgents({
+      cfg: params.cfg,
+      agentIds: params.agentId ? [params.agentId] : undefined,
+    });
+
+  if (skillCommands.length === 0) {
+    return {
+      shouldContinue: false,
+      reply: { text: "No skills loaded in this session." },
+    };
+  }
+
+  const skillList = skillCommands.map((cmd) => `• /${cmd.name} — ${cmd.description}`).join("\n");
+
+  return {
+    shouldContinue: false,
+    reply: { text: `Loaded skills:\n${skillList}` },
+  };
+};
+
 export const handleCommandsListCommand: CommandHandler = async (params, allowTextCommands) => {
   if (!allowTextCommands) {
     return null;
