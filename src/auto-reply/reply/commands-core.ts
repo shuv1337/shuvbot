@@ -15,6 +15,7 @@ import {
   handleContextCommand,
   handleExportSessionCommand,
   handleHelpCommand,
+  handleSkillsCommand,
   handleStatusCommand,
   handleWhoamiCommand,
 } from "./commands-info.js";
@@ -144,6 +145,7 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleTtsCommands,
       handleHelpCommand,
       handleCommandsListCommand,
+      handleSkillsCommand,
       handleStatusCommand,
       handleAllowlistCommand,
       handleApproveCommand,
