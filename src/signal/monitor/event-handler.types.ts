@@ -35,14 +35,6 @@ export type SignalDataMessage = {
   } | null;
   quote?: { text?: string | null } | null;
   reaction?: SignalReactionMessage | null;
-  /** Mentioned recipients in the message (signal-cli JSON format). */
-  mentions?: Array<{
-    number?: string | null; // E.164 phone number (signal-cli field name)
-    uuid?: string | null;
-    start?: number | null; // Character position in message
-    length?: number | null; // Length of mention text
-    name?: string | null; // Deprecated but may still appear
-  }>;
 };
 
 export type SignalReactionMessage = {

@@ -61,7 +61,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
    */
   function stripNativeSignalMentions(
     text: string,
-    mentions: Array<{ start?: number | null; length?: number | null }> | undefined,
+    mentions: Array<{ start?: number | null; length?: number | null }> | null | undefined,
   ): string {
     let result = text;
 
