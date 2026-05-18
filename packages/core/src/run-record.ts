@@ -1,10 +1,19 @@
 import type { AgentId, ReviewbotMode } from "./types.ts";
+import type { RuntimePolicy } from "./policy.ts";
+
+export interface ToolCallSummary {
+  name: string;
+  durationMs: number;
+  status: "success" | "failure";
+}
 
 export interface RunRecord {
   runId: string;
   repo?: string;
   event: string;
+  eventAction?: string;
   actor: string;
+  trigger: string;
   mode: ReviewbotMode;
   agent: AgentId;
   model: string;
@@ -12,29 +21,69 @@ export interface RunRecord {
   completedAt?: string;
   status: "running" | "success" | "failure";
   timings: Record<string, number>;
-  toolCalls: Array<{ name: string; durationMs: number; status: "success" | "failure" }>;
+  toolCalls: ToolCallSummary[];
+  filesConsidered: string[];
+  filesIgnored: string[];
+  errors: Array<{ class: string; message: string }>;
+  policy?: PolicySummary;
   failure?: {
     class: string;
     message: string;
   };
 }
 
-export function createRunRecord(input: {
+export interface PolicySummary {
+  actor: string;
+  actorPermission: string;
+  event: string;
+  isFork: boolean;
+  isPrivateRepo: boolean;
+  shell: string;
+  push: string;
+  canCreatePr: boolean;
+  canComment: boolean;
+  canReview: boolean;
+  canApprove: boolean;
+  canRequestChanges: boolean;
+  canReadChecks: boolean;
+  canReadSecrets: boolean;
+  canAddLabels: boolean;
+  canUpdateIssue: boolean;
+  canUpdatePullRequest: boolean;
+  reasons: string[];
+}
+
+export interface CreateRunRecordInput {
   repo?: string;
   event: string;
+  eventAction?: string;
   actor: string;
+  trigger?: string;
   mode: ReviewbotMode;
   agent: AgentId;
   model: string;
-}): RunRecord {
-  return {
+}
+
+export function createRunRecord(input: CreateRunRecordInput): RunRecord {
+  const record: RunRecord = {
     runId: crypto.randomUUID(),
-    ...input,
+    event: input.event,
+    actor: input.actor,
+    trigger: input.trigger ?? input.event,
+    mode: input.mode,
+    agent: input.agent,
+    model: input.model,
     startedAt: new Date().toISOString(),
     status: "running",
     timings: {},
-    toolCalls: []
+    toolCalls: [],
+    filesConsidered: [],
+    filesIgnored: [],
+    errors: []
   };
+  if (input.repo !== undefined) record.repo = input.repo;
+  if (input.eventAction !== undefined) record.eventAction = input.eventAction;
+  return record;
 }
 
 export function completeRunRecord(record: RunRecord, status: "success" | "failure"): RunRecord {
@@ -42,5 +91,32 @@ export function completeRunRecord(record: RunRecord, status: "success" | "failur
     ...record,
     status,
     completedAt: new Date().toISOString()
+  };
+}
+
+export function recordPolicy(record: RunRecord, policy: RuntimePolicy): RunRecord {
+  return { ...record, policy: summarizePolicy(policy) };
+}
+
+export function summarizePolicy(policy: RuntimePolicy): PolicySummary {
+  return {
+    actor: policy.actor,
+    actorPermission: policy.actorPermission,
+    event: policy.event,
+    isFork: policy.isFork,
+    isPrivateRepo: policy.isPrivateRepo,
+    shell: policy.shell,
+    push: policy.push,
+    canCreatePr: policy.canCreatePr,
+    canComment: policy.canComment,
+    canReview: policy.canReview,
+    canApprove: policy.canApprove,
+    canRequestChanges: policy.canRequestChanges,
+    canReadChecks: policy.canReadChecks,
+    canReadSecrets: policy.canReadSecrets,
+    canAddLabels: policy.canAddLabels,
+    canUpdateIssue: policy.canUpdateIssue,
+    canUpdatePullRequest: policy.canUpdatePullRequest,
+    reasons: [...policy.reasons]
   };
 }
