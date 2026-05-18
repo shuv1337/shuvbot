@@ -377,63 +377,63 @@ Normalize GitHub events, derive trusted actor permissions, build runtime policy,
 
 ### Tasks
 
-- [ ] Implement `packages/core/src/events.ts` with normalized event types:
-  - [ ] `PullRequestEvent`
-  - [ ] `IssueCommentEvent`
-  - [ ] `PullRequestReviewCommentEvent`
-  - [ ] `IssuesEvent`
-  - [ ] `WorkflowDispatchEvent`
-  - [ ] `WorkflowRunEvent`
-  - [ ] `ScheduleEvent`
-- [ ] Implement `packages/core/src/modes.ts`:
-  - [ ] Parse explicit mode input.
-  - [ ] Infer mode for `auto` from event and prompt/comment text.
-  - [ ] Map commands to modes.
-- [ ] Implement command parsing in `packages/core/src/modes.ts` or a dedicated `commands.ts`:
-  - [ ] prefix defaults to `@reviewbot`.
-  - [ ] commands: `review`, `improve`, `ask`, `implement`, `fix-ci`, `describe`, `changelog`, `test-plan`, `explain`, `summarize`.
-- [ ] Implement `packages/github/src/octokit.ts` for GitHub client creation.
-- [ ] Implement `packages/github/src/permissions.ts`:
-  - [ ] Determine actor repository permission.
-  - [ ] Detect fork PRs.
-  - [ ] Detect private repo state.
-- [ ] Implement `packages/core/src/policy.ts`:
-  - [ ] Hardcoded default matrix from `SPEC.md`.
-  - [ ] Merge hardcoded defaults, repo config, skill config, action inputs, and event/mode restrictions.
-  - [ ] Ensure event/mode restrictions always win.
-  - [ ] Force fork PRs to no secrets, no push, and shell disabled by default.
-- [ ] Reject forbidden envelope fields:
-  - [ ] `shell`
-  - [ ] `push`
-  - [ ] `canWrite`
-  - [ ] `canUseSecrets`
-  - [ ] `permissions`
-  - [ ] `actorPermission`
-- [ ] Implement `packages/action/src/workflow-summary.ts` with summary fields:
-  - [ ] mode
-  - [ ] agent
-  - [ ] model
-  - [ ] trigger
-  - [ ] actor
-  - [ ] permission policy summary
-  - [ ] files considered/ignored when available
-  - [ ] tools called when available
-  - [ ] errors when available
-- [ ] Implement run record creation and persistence to a local artifact candidate object.
+- [x] Implement `packages/core/src/events.ts` with normalized event types:
+  - [x] `PullRequestEvent`
+  - [x] `IssueCommentEvent`
+  - [x] `PullRequestReviewCommentEvent`
+  - [x] `IssuesEvent`
+  - [x] `WorkflowDispatchEvent`
+  - [x] `WorkflowRunEvent`
+  - [x] `ScheduleEvent`
+- [x] Implement `packages/core/src/modes.ts`:
+  - [x] Parse explicit mode input.
+  - [x] Infer mode for `auto` from event and prompt/comment text.
+  - [x] Map commands to modes.
+- [x] Implement command parsing in `packages/core/src/modes.ts` or a dedicated `commands.ts`:
+  - [x] prefix defaults to `@reviewbot`.
+  - [x] commands: `review`, `improve`, `ask`, `implement`, `fix-ci`, `describe`, `changelog`, `test-plan`, `explain`, `summarize`.
+- [x] Implement `packages/github/src/octokit.ts` for GitHub client creation.
+- [x] Implement `packages/github/src/permissions.ts`:
+  - [x] Determine actor repository permission.
+  - [x] Detect fork PRs.
+  - [x] Detect private repo state.
+- [x] Implement `packages/core/src/policy.ts`:
+  - [x] Hardcoded default matrix from `SPEC.md`.
+  - [x] Merge hardcoded defaults, repo config, skill config, action inputs, and event/mode restrictions.
+  - [x] Ensure event/mode restrictions always win.
+  - [x] Force fork PRs to no secrets, no push, and shell disabled by default.
+- [x] Reject forbidden envelope fields:
+  - [x] `shell`
+  - [x] `push`
+  - [x] `canWrite`
+  - [x] `canUseSecrets`
+  - [x] `permissions`
+  - [x] `actorPermission`
+- [x] Implement `packages/action/src/workflow-summary.ts` with summary fields:
+  - [x] mode
+  - [x] agent
+  - [x] model
+  - [x] trigger
+  - [x] actor
+  - [x] permission policy summary
+  - [x] files considered/ignored when available
+  - [x] tools called when available
+  - [x] errors when available
+- [x] Implement run record creation and persistence to a local artifact candidate object.
 
 ### Tests
 
-- [ ] Event fixture tests for supported GitHub events.
-- [ ] `auto` mode inference tests.
-- [ ] Command parser tests.
-- [ ] Policy matrix tests for:
-  - [ ] fork PR
-  - [ ] same-repo PR by non-collaborator
-  - [ ] collaborator mention
-  - [ ] maintainer mention
-  - [ ] scheduled maintenance
-  - [ ] workflow dispatch
-- [ ] Forbidden envelope field tests.
+- [x] Event fixture tests for supported GitHub events.
+- [x] `auto` mode inference tests.
+- [x] Command parser tests.
+- [x] Policy matrix tests for:
+  - [x] fork PR
+  - [x] same-repo PR by non-collaborator
+  - [x] collaborator mention
+  - [x] maintainer mention
+  - [x] scheduled maintenance
+  - [x] workflow dispatch
+- [x] Forbidden envelope field tests.
 
 ### Validation commands
 
@@ -446,9 +446,9 @@ bun run build
 
 ### Completion criteria
 
-- [ ] The action can parse a fixture event and produce a workflow summary.
-- [ ] No agent or MCP server is required yet.
-- [ ] Policy decisions are fully deterministic and covered by tests.
+- [x] The action can parse a fixture event and produce a workflow summary.
+- [x] No agent or MCP server is required yet.
+- [x] Policy decisions are fully deterministic and covered by tests.
 
 ## Milestone 2 — MCP Tool Server and Safe Tool Execution
 
