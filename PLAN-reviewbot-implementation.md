@@ -458,22 +458,22 @@ Implement a local MCP server bound to `127.0.0.1:<ephemeral-port>` and expose po
 
 ### Tasks
 
-- [ ] Implement `packages/mcp/src/tool-spec.ts`:
-  - [ ] `ToolSpec<Input, Output>`
-  - [ ] `ToolContext`
-  - [ ] schema validation helpers
-  - [ ] policy requirement helpers
-- [ ] Implement `packages/mcp/src/server.ts` using MCP protocol directly.
-- [ ] Ensure server binds only to `127.0.0.1` on an ephemeral port.
-- [ ] Add audit logging for every tool call:
-  - [ ] run ID
-  - [ ] tool name
-  - [ ] actor
-  - [ ] mode
-  - [ ] sanitized input
-  - [ ] sanitized output/error
-  - [ ] duration
-  - [ ] policy decision
+- [x] Implement `packages/mcp/src/tool-spec.ts`:
+  - [x] `ToolSpec<Input, Output>`
+  - [x] `ToolContext`
+  - [x] schema validation helpers
+  - [x] policy requirement helpers
+- [x] Implement `packages/mcp/src/server.ts` using MCP protocol directly.
+- [x] Ensure server binds only to `127.0.0.1` on an ephemeral port.
+- [x] Add audit logging for every tool call:
+  - [x] run ID
+  - [x] tool name
+  - [x] actor
+  - [x] mode
+  - [x] sanitized input
+  - [x] sanitized output/error
+  - [x] duration
+  - [x] policy decision
 - [ ] Implement read-context tools:
   - [ ] `get_pr`
   - [ ] `get_pr_diff`
@@ -510,20 +510,20 @@ Implement a local MCP server bound to `127.0.0.1:<ephemeral-port>` and expose po
   - [ ] `write_pr_summary`
   - [ ] `read_repo_learnings`
   - [ ] `write_repo_learnings`
-- [ ] Implement input schema validation for every tool.
-- [ ] Implement output schema validation for every tool.
-- [ ] Sanitize errors before exposing them to the model.
+- [x] Implement input schema validation for every tool.
+- [x] Implement output schema validation for every tool.
+- [x] Sanitize errors before exposing them to the model.
 - [ ] Add duplicate avoidance helper for bot comments using hidden markers.
 
 ### Tests
 
-- [ ] MCP server starts and stops cleanly.
-- [ ] Tool input schema failures are rejected.
-- [ ] Tool output schema failures are caught.
-- [ ] Policy-denied tool calls produce sanitized `PolicyDeniedError` output.
-- [ ] Fake-agent can call read-only tools successfully.
+- [x] MCP server starts and stops cleanly.
+- [x] Tool input schema failures are rejected.
+- [x] Tool output schema failures are caught.
+- [x] Policy-denied tool calls produce sanitized `PolicyDeniedError` output.
+- [x] Fake-agent can call read-only tools successfully.
 - [ ] Write tools fail under read-only/fork policy.
-- [ ] Audit records are produced and redacted.
+- [x] Audit records are produced and redacted.
 
 ### Validation commands
 
