@@ -4,10 +4,10 @@
 - Continue `reviewbot` after the Milestone 0 scaffold toward Milestone 1 GitHub event core and runtime policy.
 
 ## Current status
-- Milestone 0 scaffold is implemented and checked off in `PLAN-reviewbot-implementation.md`.
-- The repo now has TypeScript/Bun project metadata, `action.yml`, compiled `dist/index.js`, package folders, docs stubs, sample config, and focused tests.
-- Decision HTML artifacts were reconciled into canonical docs and removed. `decisions-reviewbot-spec.html` is tracked as deleted; `decisions-reviewbot-build-start.html` was untracked and is gone.
-- `SPEC.md` still has a pre-existing unexplained `Test` line near the top; it was intentionally left untouched.
+- Milestone 0 scaffold is implemented and committed to `master`.
+- All changes were pushed to `origin/master` as 7 atomic conventional commits.
+- The repo has TypeScript/Bun project metadata, `action.yml`, compiled `dist/index.js`, package folders, docs stubs, sample config, and focused tests.
+- `decisions-reviewbot-spec.html` was removed.
 
 ## Key context
 - Build target: TypeScript, Bun, ESLint, Prettier, `tsup` targeting Node 24.
@@ -25,14 +25,6 @@
 - `packages/action/src/*` — GitHub Action entry/main/input/summary shell.
 - `packages/cli/src/index.ts` — command stubs and config validation.
 - `dist/index.js` — built action output.
-
-## Validation
-- `bun install` — passed, no changes after lockfile creation.
-- `bun run typecheck` — passed.
-- `bun run lint` — passed.
-- `bun test` — passed, 12 tests.
-- `bun run build` — passed, produced `dist/index.js`.
-- `bun packages/cli/src/index.ts config validate reviewbot.sample.toml` — passed.
 
 ## Next steps
 1. Start Milestone 1 in `PLAN-reviewbot-implementation.md`: normalized GitHub events, actor permission derivation, runtime policy construction, and workflow summaries without invoking agents.
