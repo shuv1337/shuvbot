@@ -4,6 +4,7 @@
 **Primary shape:** Pullfrog-style GitHub Action / agent bridge  
 **Review discipline:** Warden-style skills, gates, findings, and inline reviews  
 **Last updated:** 2026-05-14
+Test
 
 ---
 
@@ -868,11 +869,11 @@ maxGapLines = 30
 maxContextFiles = 50
 
 [memory]
-enabled = true
+enabled = false
 backend = "github" # github | file | api | disabled
-learnings = true
+learnings = false
 prSummaries = true
-# Repo learnings default remains unresolved. This example opts in explicitly.
+# Repo learnings are disabled by default. Opt in explicitly before reading or writing them.
 
 [commands]
 prefix = "@reviewbot"
@@ -1759,7 +1760,7 @@ For v1:
 
 - Use workflow summaries and artifacts for run records.
 - Store PR summary as an updatable bot comment with a hidden marker.
-- Store repo learnings only if explicitly enabled.
+- Store repo learnings only if explicitly enabled. The default is disabled.
 - Avoid hidden mutable state unless it is easy to inspect.
 
 ### 16.4 Hidden Comment Marker
@@ -2679,10 +2680,17 @@ These decisions pin down the first implementation pass.
 6. Pre-v1.0 agent drivers beyond Claude Code: support `codex-cli`.
 7. v0.1 review scope: ship one built-in `code-review` skill with thresholds, inline comments, and review body.
 8. Release tag strategy: publish semver tags plus moving `v0` / `v1` tags.
+9. Repo learnings default: disabled by default; read/write only when `[memory].learnings = true`.
+10. First implementation scope: Milestone 0 plus the policy skeleton and default permission matrix tests.
+11. Package tooling: Bun test, ESLint, and Prettier.
+12. Action bundler: `tsup` targeting Node 24.
+13. MCP implementation: use the official MCP TypeScript SDK while keeping reviewbot's internal tool contracts stable.
+14. Restricted shell sandbox: use Docker when available and fail closed when the sandbox is unavailable.
+15. Initial model aliases: start with minimal Claude aliases, `claude/sonnet` and `claude/opus`; allow direct model IDs as overrides.
+16. v0.1 posting default: inline review comments plus a review summary.
+17. First docs scope: create stubs for all required docs with clearly marked incomplete sections.
 
-Remaining open question:
-
-1. Repo learnings default: needs more discussion. Options remain branch-backed files, hidden GitHub comments, or disabled by default.
+Remaining open question: none before starting the first scaffold.
 
 ---
 
