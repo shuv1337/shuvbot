@@ -4,7 +4,7 @@
 - Continue `reviewbot` toward Milestone 2 (MCP tool server and safe tool execution).
 
 ## Current status
-- `master` is pushed to `origin/master` at `b466101` (`docs: refresh reviewbot handoff`); the MCP foundation landed in `212c14d`.
+- `master` is pushed to `origin/master`; the MCP foundation landed in `212c14d`.
 - GitHub issue queue is empty as of 2026-05-18.
 - Milestones 0 and 1 remain complete in `PLAN-reviewbot-implementation.md`.
 - The first Milestone 2 slice is complete:
