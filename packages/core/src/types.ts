@@ -1,5 +1,16 @@
-export const MODES = ["review", "run", "fix", "ci-repair", "explain"] as const;
+export const MODES = ["auto", "review", "implement", "fix-ci", "triage", "release-notes"] as const;
 export type ReviewbotMode = (typeof MODES)[number];
+
+export type ActorPermission = "none" | "read" | "triage" | "write" | "maintain" | "admin";
+
+export const ACTOR_PERMISSIONS: readonly ActorPermission[] = [
+  "none",
+  "read",
+  "triage",
+  "write",
+  "maintain",
+  "admin"
+] as const;
 
 export const AGENTS = ["claude-code", "anthropic-sdk", "openai", "codex-cli", "aider"] as const;
 export type AgentId = (typeof AGENTS)[number];
