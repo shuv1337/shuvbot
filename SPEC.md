@@ -4,7 +4,6 @@
 **Primary shape:** Pullfrog-style GitHub Action / agent bridge  
 **Review discipline:** Warden-style skills, gates, findings, and inline reviews  
 **Last updated:** 2026-05-14
-Test
 
 ---
 
