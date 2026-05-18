@@ -1,0 +1,24 @@
+agent = "claude-code"
+model = "claude/sonnet"
+mode = "review"
+timeout = "1h"
+activity_timeout = "5m"
+fail_on = "high"
+report_on = "medium"
+min_confidence = "medium"
+shell = "restricted"
+push = "restricted"
+
+[paths]
+include = ["**/*.ts", "**/*.tsx"]
+ignore = ["dist/**", "node_modules/**"]
+
+[memory]
+enabled = false
+backend = "github"
+learnings = false
+pr_summaries = true
+
+[telemetry]
+enabled = false
+endpoint = ""

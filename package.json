@@ -1,0 +1,30 @@
+{
+  "name": "reviewbot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "reviewbot": "./packages/cli/src/index.ts"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "bun test",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "smol-toml": "^1.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@types/bun": "^1.2.13",
+    "@types/node": "^22.15.19",
+    "eslint": "^9.27.0",
+    "prettier": "^3.5.3",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
+  }
+}
