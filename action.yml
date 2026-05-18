@@ -1,0 +1,43 @@
+name: reviewbot
+description: GitHub-native code review and coding-agent bot
+author: reviewbot
+inputs:
+  prompt:
+    description: Prompt or task text for standalone and mention-driven runs.
+    required: false
+  mode:
+    description: Run mode.
+    required: false
+  config:
+    description: Path to reviewbot TOML config.
+    required: false
+  model:
+    description: Model alias or direct model ID.
+    required: false
+  agent:
+    description: Agent driver ID.
+    required: false
+  timeout:
+    description: Total run timeout.
+    required: false
+  activity_timeout:
+    description: Agent activity timeout.
+    required: false
+  cwd:
+    description: Working directory for repo operations.
+    required: false
+  push:
+    description: Push permission level.
+    required: false
+  shell:
+    description: Shell permission level.
+    required: false
+  output_schema:
+    description: JSON schema for structured standalone output.
+    required: false
+  token:
+    description: GitHub token.
+    required: false
+runs:
+  using: node24
+  main: dist/index.js
