@@ -68,5 +68,37 @@ describe("parseCommand", () => {
     const command = findCommandInEvent(event);
     expect(command?.command).toBe("review");
     expect(command?.source).toBe("issue_comment");
+    expect(command?.actor).toBe("alice");
+  });
+
+  test("preserves source for write-capable review comments", () => {
+    const event = normalizeEvent({
+      eventName: "pull_request_review_comment",
+      payload: {
+        action: "created",
+        repository: {
+          owner: { login: "acme" },
+          name: "widget",
+          full_name: "acme/widget",
+          private: false
+        },
+        sender: { login: "maintainer" },
+        pull_request: {
+          number: 1,
+          title: "t",
+          body: "",
+          state: "open",
+          draft: false,
+          user: { login: "alice" },
+          head: { ref: "topic", sha: "1", repo: { full_name: "acme/widget" } },
+          base: { ref: "main", sha: "0", repo: { full_name: "acme/widget" } }
+        },
+        comment: { id: 1, body: "@reviewbot implement this", user: { login: "maintainer" } }
+      }
+    });
+    const command = findCommandInEvent(event);
+    expect(command?.command).toBe("implement");
+    expect(command?.source).toBe("review_comment");
+    expect(command?.actor).toBe("maintainer");
   });
 });

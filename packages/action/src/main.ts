@@ -28,6 +28,8 @@ import { MODES, type ReviewbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
 import { createFakeReviewAgent, runReview } from "../../core/src/review-runner.ts";
 import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
+import { runImplement } from "../../core/src/implement-runner.ts";
+import { createOrFastForwardReviewbotBranch } from "../../github/src/branches.ts";
 
 export async function main(): Promise<void> {
   const logger = new RunLogger();
@@ -173,6 +175,46 @@ export async function main(): Promise<void> {
     return;
   }
 
+  if (mode === "implement" && command && event && policy) {
+    const implementation = await runImplement({
+      cwd: inputs.cwd ?? process.cwd(),
+      runId: withPolicy.runId,
+      command,
+      policy,
+      startPoint: triggerSha(event),
+      prepareBranch: createOrFastForwardReviewbotBranch,
+      agent: {
+        async run() {
+          return {
+            workDone: ["Prepared reviewbot implementation branch and validated implement-mode policy."],
+            filesChanged: [],
+            commandsRun: [],
+            checks: [],
+            commits: [],
+            followUps: ["Real agent patch execution is handled by the implementation driver path."]
+          };
+        }
+      }
+    });
+    withPolicy = {
+      ...withPolicy,
+      implementation: {
+        requestedTask: implementation.requestedTask,
+        branch: implementation.branch,
+        commandsRun: implementation.commandsRun,
+        checks: implementation.checks,
+        commits: implementation.commits
+      }
+    };
+    core.setOutput("summary", implementation.summary);
+    core.setOutput(
+      "result",
+      JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
+    );
+    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+    return;
+  }
+
   core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
   await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
 }
@@ -204,6 +246,15 @@ function fallbackActor(login: string): ActorContext {
     isFork: false,
     isPrivateRepo: false
   };
+}
+
+function triggerSha(event: BotEvent): string {
+  if (event.kind === "pull_request") return event.pullRequest.headSha;
+  if (event.kind === "workflow_dispatch" && typeof event.raw === "object" && event.raw !== null) {
+    const ref = (event.raw as Record<string, unknown>).ref;
+    if (typeof ref === "string" && ref.length > 0) return ref;
+  }
+  return "HEAD";
 }
 
 async function readEventPayload(): Promise<unknown> {

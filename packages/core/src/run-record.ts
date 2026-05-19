@@ -44,6 +44,13 @@ export interface RunRecord {
   findings?: ReviewFinding[];
   postedComments?: number;
   contextManifestPath?: string;
+  implementation?: {
+    requestedTask: string;
+    branch: string;
+    commandsRun: string[];
+    checks: string[];
+    commits: string[];
+  };
   filesConsidered: string[];
   filesIgnored: string[];
   errors: Array<{ class: string; message: string }>;

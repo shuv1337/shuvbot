@@ -132,27 +132,29 @@ export const gitFetchTool: ToolSpec<GitFetchInput, Record<string, unknown>> = {
 
 export const gitCommitTool: ToolSpec<GitCommitInput, Record<string, unknown>> = {
   name: "git_commit",
-  description: "Validate a reviewbot commit request. Actual write execution is deferred to implementation mode.",
+  description: "Create a reviewbot commit after validating commit-message policy.",
   inputSchema: GIT_COMMIT_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
-  handler(input, context) {
+  async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
     assertReviewbotCommitMessage(input.message);
-    return { accepted: true, executed: false, reason: "git write execution is deferred to implementation mode" };
+    const result = await runGit(context, ["commit", "-am", input.message]);
+    return { accepted: true, executed: true, stdout: result.stdout, stderr: result.stderr };
   }
 };
 
 export const pushBranchTool: ToolSpec<BranchInput, Record<string, unknown>> = {
   name: "push_branch",
-  description: "Validate a reviewbot branch push request. Actual push execution is deferred to implementation mode.",
+  description: "Push a reviewbot branch to origin.",
   inputSchema: BRANCH_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
-  handler(input, context) {
+  async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
     assertReviewbotBranch(input.branch);
-    return { accepted: true, executed: false, branch: input.branch };
+    const result = await runGit(context, ["push", "origin", `${input.branch}:${input.branch}`]);
+    return { accepted: true, executed: true, branch: input.branch, stdout: result.stdout, stderr: result.stderr };
   }
 };
 
@@ -170,32 +172,59 @@ export const pushTagsTool: ToolSpec<EmptyInput, Record<string, unknown>> = {
 
 export const deleteBranchTool: ToolSpec<BranchInput, Record<string, unknown>> = {
   name: "delete_branch",
-  description: "Validate a reviewbot branch delete request. Actual deletion is deferred to implementation mode.",
+  description: "Delete a local reviewbot branch.",
   inputSchema: BRANCH_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
-  handler(input, context) {
+  async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
     assertReviewbotBranch(input.branch);
-    return { accepted: true, executed: false, branch: input.branch };
+    const result = await runGit(context, ["branch", "-D", input.branch]);
+    return { accepted: true, executed: true, branch: input.branch, stdout: result.stdout, stderr: result.stderr };
   }
 };
 
 export const createPullRequestTool: ToolSpec<CreatePullRequestInput, Record<string, unknown>> = {
   name: "create_pull_request",
-  description: "Validate a reviewbot pull request creation request. Actual creation is deferred to implementation mode.",
+  description: "Create a pull request from a reviewbot branch.",
   inputSchema: CREATE_PR_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { canCreatePr: true },
-  handler(input, context) {
+  async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
     assertReviewbotBranch(input.branch);
+    if (!context.client || !context.repo) throw new ToolExecutionError("create_pull_request requires GitHub client and repo context");
+    const existing = await context.client.request("GET /repos/{owner}/{repo}/pulls", {
+      params: {
+        owner: context.repo.owner,
+        repo: context.repo.name,
+        head: `${context.repo.owner}:${input.branch}`,
+        state: "open",
+        per_page: 1
+      }
+    });
+    const existingPr = Array.isArray(existing.data) ? asRecord(existing.data[0]) : {};
+    const response = typeof existingPr.number === "number"
+      ? await context.client.request("PATCH /repos/{owner}/{repo}/pulls/{pull_number}", {
+          params: { owner: context.repo.owner, repo: context.repo.name, pull_number: existingPr.number },
+          body: { title: input.title, body: input.body }
+        })
+      : await context.client.request("POST /repos/{owner}/{repo}/pulls", {
+          params: { owner: context.repo.owner, repo: context.repo.name },
+          body: {
+            head: input.branch,
+            base: input.base ?? "main",
+            title: input.title,
+            body: input.body
+          }
+        });
     return {
       accepted: true,
-      executed: false,
+      executed: true,
       branch: input.branch,
       title: input.title,
-      base: input.base ?? "default"
+      base: input.base ?? "main",
+      pullRequest: response.data
     };
   }
 };
@@ -241,4 +270,8 @@ function assertReviewbotCommitMessage(message: string): void {
   for (const required of ["Requested-by:", "Run-id:", "Mode:"]) {
     if (!message.includes(required)) throw new ToolExecutionError(`git commit message missing ${required}`);
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

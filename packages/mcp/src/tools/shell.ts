@@ -1,5 +1,16 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { assertDockerSandboxAvailable, filterShellEnv } from "./shell-sandbox.ts";
+import {
+  assertDockerSandboxAvailable,
+  buildDockerShellInvocation,
+  filterShellEnv,
+  killTrackedBackgroundProcess,
+  validateShellCommand
+} from "./shell-sandbox.ts";
+import { requireCwd } from "./shared.ts";
+
+const execFileAsync = promisify(execFile);
 
 interface RunShellInput {
   command: string;
@@ -41,14 +52,39 @@ export const runShellTool: ToolSpec<RunShellInput, Record<string, unknown>> = {
   inputSchema: RUN_SHELL_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { shell: "restricted" },
-  handler(_input) {
-    const dockerPath = process.env.REVIEWBOT_DOCKER_PATH;
-    assertDockerSandboxAvailable(dockerPath ? { dockerPath } : {});
-    return {
-      executed: false,
-      env: filterShellEnv(process.env),
-      reason: "Docker sandbox command execution is not enabled in this scaffold"
+  async handler(input, context) {
+    const shellPolicy: { command: string; allowCommands?: readonly string[]; denyCommands?: readonly string[] } = {
+      command: input.command
     };
+    if (context.shellSandbox?.allowCommands !== undefined) shellPolicy.allowCommands = context.shellSandbox.allowCommands;
+    if (context.shellSandbox?.denyCommands !== undefined) shellPolicy.denyCommands = context.shellSandbox.denyCommands;
+    validateShellCommand(shellPolicy);
+    const dockerPath = process.env.REVIEWBOT_DOCKER_PATH;
+    const docker = assertDockerSandboxAvailable(dockerPath ? { dockerPath } : {});
+    const env = filterShellEnv(process.env);
+    const invocation = buildDockerShellInvocation({
+      dockerPath: docker,
+      cwd: requireCwd(context),
+      command: input.command,
+      env
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 3_600_000);
+    try {
+      const result = await execFileAsync(invocation.file, invocation.args, {
+        signal: controller.signal,
+        maxBuffer: 1024 * 1024
+      });
+      return {
+        executed: true,
+        invocation,
+        env,
+        stdout: result.stdout,
+        stderr: result.stderr
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 };
 
@@ -59,10 +95,11 @@ export const killBackgroundProcessTool: ToolSpec<KillBackgroundProcessInput, Rec
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { shell: "restricted" },
   handler(input) {
+    const killed = killTrackedBackgroundProcess(input.processId);
     return {
       processId: input.processId,
-      killed: false,
-      reason: "background process tracking is not active until the shell sandbox is implemented"
+      killed,
+      reason: killed ? "background process aborted" : "background process was not tracked"
     };
   }
 };

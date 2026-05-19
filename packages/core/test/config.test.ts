@@ -16,6 +16,10 @@ min_confidence = "high"
 shell = "restricted"
 push = "disabled"
 
+[shell_sandbox]
+allow_commands = ["bun", "git"]
+deny_commands = ["sudo"]
+
 [paths]
 include = ["packages/**/*.ts"]
 ignore = ["dist/**"]
@@ -32,6 +36,8 @@ pr_summaries = true
     expect(config.failOn).toBe("critical");
     expect(config.failCheck).toBe(true);
     expect(config.requestChanges).toBe(true);
+    expect(config.shellSandbox.allowCommands).toEqual(["bun", "git"]);
+    expect(config.shellSandbox.denyCommands).toEqual(["sudo"]);
     expect(config.paths.include).toEqual(["packages/**/*.ts"]);
     expect(config.memory.learnings).toBe(false);
   });

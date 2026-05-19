@@ -68,6 +68,27 @@ export async function writeWorkflowSummary(record: RunRecord): Promise<void> {
         )
       ]);
   }
+  if (record.implementation) {
+    summary
+      .addHeading("Implementation", 2)
+      .addTable([
+        [
+          { data: "Field", header: true },
+          { data: "Value", header: true }
+        ],
+        ["Requested task", record.implementation.requestedTask],
+        ["Branch", record.implementation.branch]
+      ]);
+    if (record.implementation.commandsRun.length > 0) {
+      summary.addHeading("Commands run", 3).addList(record.implementation.commandsRun);
+    }
+    if (record.implementation.checks.length > 0) {
+      summary.addHeading("Checks", 3).addList(record.implementation.checks);
+    }
+    if (record.implementation.commits.length > 0) {
+      summary.addHeading("Commits", 3).addList(record.implementation.commits);
+    }
+  }
   if (record.errors.length > 0) {
     summary
       .addHeading("Errors", 2)

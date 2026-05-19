@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -8,6 +8,7 @@ import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
 import { AuditLog } from "../src/audit.ts";
 import { executeTool, type ToolContext } from "../src/tool-spec.ts";
+import type { GitHubClient } from "../../github/src/octokit.ts";
 import { createPullRequestTool, gitCommitTool, gitDiffTool, gitStatusTool, pushBranchTool } from "../src/tools/git.ts";
 import { killBackgroundProcessTool, runShellTool } from "../src/tools/shell.ts";
 import { readPrSummaryTool, readRepoLearningsTool, writePrSummaryTool, writeRepoLearningsTool } from "../src/tools/memory.ts";
@@ -32,7 +33,16 @@ describe("git, shell, and memory MCP tools", () => {
   });
 
   test("git write contracts enforce policy, actor permission, branch prefix, and commit template", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-git-write-"));
+    await execFileAsync("git", ["init", "-b", "main"], { cwd });
+    await execFileAsync("git", ["config", "user.email", "reviewbot@example.com"], { cwd });
+    await execFileAsync("git", ["config", "user.name", "reviewbot"], { cwd });
+    await writeFile(join(cwd, "a.txt"), "hello\n");
+    await execFileAsync("git", ["add", "a.txt"], { cwd });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd });
+    await writeFile(join(cwd, "a.txt"), "hello\nworld\n");
     const toolContext = context({
+      cwd,
       policy: defaultRuntimePolicy({
         actor: "maintainer",
         actorPermission: "write",
@@ -45,22 +55,52 @@ describe("git, shell, and memory MCP tools", () => {
 
     await expect(executeTool(gitCommitTool, { message }, toolContext)).resolves.toMatchObject({
       accepted: true,
-      executed: false
+      executed: true
     });
     await expect(executeTool(pushBranchTool, { branch: "feature/nope" }, toolContext)).rejects.toThrow(
       "must start with reviewbot/"
     );
-    await expect(executeTool(pushBranchTool, { branch: "reviewbot/test" }, toolContext)).resolves.toMatchObject({
-      accepted: true,
-      branch: "reviewbot/test"
-    });
+    await expect(executeTool(pushBranchTool, { branch: "reviewbot/test" }, toolContext)).rejects.toThrow();
     await expect(
       executeTool(
         createPullRequestTool,
         { branch: "reviewbot/test", title: "Test", body: "Body", base: "main" },
-        toolContext
+        context({
+          cwd,
+          policy: toolContext.policy,
+          client: {
+            async request(route: string) {
+              if (route.startsWith("GET ")) return { status: 200, headers: {}, data: [] };
+              return { status: 201, headers: {}, data: { number: 1, html_url: "https://example.test/pr/1" } };
+            }
+          } as GitHubClient,
+          repo: { owner: "octo", name: "repo" }
+        })
       )
     ).resolves.toMatchObject({ accepted: true, branch: "reviewbot/test" });
+    const routes: string[] = [];
+    await expect(
+      executeTool(
+        createPullRequestTool,
+        { branch: "reviewbot/test", title: "Updated", body: "Body", base: "main" },
+        context({
+          cwd,
+          policy: toolContext.policy,
+          client: {
+            async request(route: string) {
+              routes.push(route);
+              if (route.startsWith("GET ")) return { status: 200, headers: {}, data: [{ number: 2 }] };
+              return { status: 200, headers: {}, data: { number: 2, title: "Updated" } };
+            }
+          } as GitHubClient,
+          repo: { owner: "octo", name: "repo" }
+        })
+      )
+    ).resolves.toMatchObject({ accepted: true, branch: "reviewbot/test" });
+    expect(routes).toEqual([
+      "GET /repos/{owner}/{repo}/pulls",
+      "PATCH /repos/{owner}/{repo}/pulls/{pull_number}"
+    ]);
 
     await expect(executeTool(gitCommitTool, { message: "bad" }, toolContext)).rejects.toThrow(
       "must start with reviewbot:"
@@ -89,7 +129,12 @@ describe("git, shell, and memory MCP tools", () => {
   });
 
   test("shell tools require shell policy and fail closed until sandbox implementation", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-shell-"));
+    const fakeDocker = join(cwd, "docker");
+    await writeFile(fakeDocker, "#!/bin/sh\necho docker-called \"$@\"\n");
+    await chmod(fakeDocker, 0o755);
     const allowedContext = context({
+      cwd,
       policy: {
         ...defaultRuntimePolicy({
           actor: "maintainer",
@@ -104,6 +149,17 @@ describe("git, shell, and memory MCP tools", () => {
     await expect(executeTool(runShellTool, { command: "echo hi" }, allowedContext)).rejects.toThrow(
       "restricted shell requires Docker"
     );
+    const previousDockerPath = process.env.REVIEWBOT_DOCKER_PATH;
+    process.env.REVIEWBOT_DOCKER_PATH = fakeDocker;
+    try {
+      await expect(executeTool(runShellTool, { command: "echo hi" }, allowedContext)).resolves.toMatchObject({
+        executed: true,
+        stdout: expect.stringContaining("docker-called")
+      });
+    } finally {
+      if (previousDockerPath === undefined) delete process.env.REVIEWBOT_DOCKER_PATH;
+      else process.env.REVIEWBOT_DOCKER_PATH = previousDockerPath;
+    }
     await expect(
       executeTool(killBackgroundProcessTool, { processId: "proc-1" }, allowedContext)
     ).resolves.toMatchObject({
@@ -145,7 +201,12 @@ describe("git, shell, and memory MCP tools", () => {
   });
 });
 
-function context(input: { cwd?: string; policy?: ReturnType<typeof defaultRuntimePolicy> }): ToolContext {
+function context(input: {
+  cwd?: string;
+  policy?: ReturnType<typeof defaultRuntimePolicy>;
+  client?: ToolContext["client"];
+  repo?: ToolContext["repo"];
+}): ToolContext {
   const redactor = new DefaultRedactor();
   const toolContext: ToolContext = {
     runId: "run-1",
@@ -164,5 +225,7 @@ function context(input: { cwd?: string; policy?: ReturnType<typeof defaultRuntim
     audit: new AuditLog(redactor)
   };
   if (input.cwd !== undefined) toolContext.cwd = input.cwd;
+  if (input.client !== undefined) toolContext.client = input.client;
+  if (input.repo !== undefined) toolContext.repo = input.repo;
   return toolContext;
 }

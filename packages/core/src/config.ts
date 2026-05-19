@@ -28,6 +28,10 @@ export interface ReviewbotConfig {
   minConfidence: Confidence;
   shell: PermissionLevel;
   push: PermissionLevel;
+  shellSandbox: {
+    allowCommands: string[];
+    denyCommands: string[];
+  };
   paths: {
     include: string[];
     ignore: string[];
@@ -53,6 +57,10 @@ export const DEFAULT_CONFIG: ReviewbotConfig = {
   minConfidence: "medium",
   shell: "restricted",
   push: "restricted",
+  shellSandbox: {
+    allowCommands: [],
+    denyCommands: ["sudo", "su", "docker", "podman"]
+  },
   paths: {
     include: ["**/*"],
     ignore: []
@@ -83,6 +91,8 @@ const TOP_LEVEL_KEYS = new Set([
   "minConfidence",
   "min_confidence",
   "shell",
+  "shellSandbox",
+  "shell_sandbox",
   "push",
   "paths",
   "memory",
@@ -133,6 +143,21 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
   );
   config.shell = enumValue(raw.shell, PERMISSION_LEVELS, "shell", config.shell);
   config.push = enumValue(raw.push, PERMISSION_LEVELS, "push", config.push);
+
+  const shellSandboxRaw = raw.shellSandbox ?? raw.shell_sandbox;
+  if (shellSandboxRaw !== undefined) {
+    const shellSandbox = assertRecord(shellSandboxRaw, "shell_sandbox");
+    config.shellSandbox.allowCommands = stringList(
+      shellSandbox.allowCommands ?? shellSandbox.allow_commands,
+      "shell_sandbox.allow_commands",
+      config.shellSandbox.allowCommands
+    );
+    config.shellSandbox.denyCommands = stringList(
+      shellSandbox.denyCommands ?? shellSandbox.deny_commands,
+      "shell_sandbox.deny_commands",
+      config.shellSandbox.denyCommands
+    );
+  }
 
   if (raw.paths !== undefined) {
     const paths = assertRecord(raw.paths, "paths");
@@ -201,6 +226,14 @@ function globList(value: unknown, field: string, fallback: string[]): string[] {
     throw new ConfigError(`${field} must be an array of glob strings.`);
   }
   for (const glob of value) validateGlob(glob, field);
+  return [...value];
+}
+
+function stringList(value: unknown, field: string, fallback: string[]): string[] {
+  if (value === undefined) return fallback;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.trim().length === 0)) {
+    throw new ConfigError(`${field} must be an array of non-empty strings.`);
+  }
   return [...value];
 }
 

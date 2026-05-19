@@ -80,6 +80,10 @@ var DEFAULT_CONFIG = {
   minConfidence: "medium",
   shell: "restricted",
   push: "restricted",
+  shellSandbox: {
+    allowCommands: [],
+    denyCommands: ["sudo", "su", "docker", "podman"]
+  },
   paths: {
     include: ["**/*"],
     ignore: []
@@ -109,6 +113,8 @@ var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "minConfidence",
   "min_confidence",
   "shell",
+  "shellSandbox",
+  "shell_sandbox",
   "push",
   "paths",
   "memory",
@@ -155,6 +161,20 @@ function normalizeConfig(raw) {
   );
   config.shell = enumValue(raw.shell, PERMISSION_LEVELS, "shell", config.shell);
   config.push = enumValue(raw.push, PERMISSION_LEVELS, "push", config.push);
+  const shellSandboxRaw = raw.shellSandbox ?? raw.shell_sandbox;
+  if (shellSandboxRaw !== void 0) {
+    const shellSandbox = assertRecord(shellSandboxRaw, "shell_sandbox");
+    config.shellSandbox.allowCommands = stringList(
+      shellSandbox.allowCommands ?? shellSandbox.allow_commands,
+      "shell_sandbox.allow_commands",
+      config.shellSandbox.allowCommands
+    );
+    config.shellSandbox.denyCommands = stringList(
+      shellSandbox.denyCommands ?? shellSandbox.deny_commands,
+      "shell_sandbox.deny_commands",
+      config.shellSandbox.denyCommands
+    );
+  }
   if (raw.paths !== void 0) {
     const paths = assertRecord(raw.paths, "paths");
     config.paths.include = globList(paths.include, "paths.include", config.paths.include);
@@ -210,6 +230,13 @@ function globList(value, field, fallback) {
     throw new ConfigError(`${field} must be an array of glob strings.`);
   }
   for (const glob of value) validateGlob(glob, field);
+  return [...value];
+}
+function stringList(value, field, fallback) {
+  if (value === void 0) return fallback;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.trim().length === 0)) {
+    throw new ConfigError(`${field} must be an array of non-empty strings.`);
+  }
   return [...value];
 }
 function validateGlob(glob, field) {
@@ -410,6 +437,25 @@ async function writeWorkflowSummary(record) {
         (call) => [call.name, String(call.durationMs), call.status]
       )
     ]);
+  }
+  if (record.implementation) {
+    summary2.addHeading("Implementation", 2).addTable([
+      [
+        { data: "Field", header: true },
+        { data: "Value", header: true }
+      ],
+      ["Requested task", record.implementation.requestedTask],
+      ["Branch", record.implementation.branch]
+    ]);
+    if (record.implementation.commandsRun.length > 0) {
+      summary2.addHeading("Commands run", 3).addList(record.implementation.commandsRun);
+    }
+    if (record.implementation.checks.length > 0) {
+      summary2.addHeading("Checks", 3).addList(record.implementation.checks);
+    }
+    if (record.implementation.commits.length > 0) {
+      summary2.addHeading("Commits", 3).addList(record.implementation.commits);
+    }
   }
   if (record.errors.length > 0) {
     summary2.addHeading("Errors", 2).addTable([
@@ -1159,11 +1205,11 @@ ${input.content}`;
 import { mkdir as mkdir2, writeFile as writeFile2 } from "fs/promises";
 import { join as join2 } from "path";
 function buildContextManifest(sections) {
-  const entries = sections.map((section) => ({
-    id: section.id,
-    title: section.title,
-    bytes: Buffer.byteLength(section.content, "utf8"),
-    untrusted: section.untrusted
+  const entries = sections.map((section2) => ({
+    id: section2.id,
+    title: section2.title,
+    bytes: Buffer.byteLength(section2.content, "utf8"),
+    untrusted: section2.untrusted
   }));
   return {
     sections: entries,
@@ -1251,7 +1297,7 @@ function assembleReviewContext(input) {
   return {
     sections,
     manifest: buildContextManifest(sections),
-    prompt: sections.map((section) => labelContextBlock(section)).join("\n\n")
+    prompt: sections.map((section2) => labelContextBlock(section2)).join("\n\n")
   };
 }
 async function readOptional(path) {
@@ -1710,6 +1756,89 @@ function stringValue2(value) {
   return typeof value === "string" ? value : "";
 }
 
+// packages/core/src/final-summary.ts
+function formatFinalSummary(input) {
+  return [
+    "## reviewbot summary",
+    "",
+    `Requested task: ${input.requestedTask}`,
+    "",
+    section("Work done", input.workDone),
+    section("Files changed", input.filesChanged),
+    section("Commands run", input.commandsRun),
+    section("Checks", input.checks),
+    section("Commits", input.commits),
+    section("Follow-ups", input.followUps)
+  ].join("\n");
+}
+function section(title, values) {
+  const body = values.length > 0 ? values.map((value) => `- ${value}`).join("\n") : "- None";
+  return `### ${title}
+${body}
+`;
+}
+
+// packages/github/src/branches.ts
+import { createHash } from "crypto";
+import { execFile } from "child_process";
+import { promisify } from "util";
+var execFileAsync = promisify(execFile);
+function deriveReviewbotBranch(input) {
+  const slug = slugify(`${input.mode}-${input.requestedBy}-${input.task}`);
+  const digest = createHash("sha256").update(input.runId).digest("hex").slice(0, 8);
+  return `reviewbot/${slug.slice(0, 48)}-${digest}`;
+}
+function assertReviewbotBranchName(branch) {
+  if (!branch.startsWith("reviewbot/") || branch.length <= "reviewbot/".length || branch.includes("..")) {
+    throw new Error("branch must be under reviewbot/");
+  }
+}
+async function createOrFastForwardReviewbotBranch(input) {
+  assertReviewbotBranchName(input.branch);
+  const run = input.exec ?? ((file, args, options) => execFileAsync(file, args, options));
+  await run("git", ["fetch", "--no-tags", "origin", input.startPoint], { cwd: input.cwd });
+  await run("git", ["checkout", "-B", input.branch, "FETCH_HEAD"], { cwd: input.cwd });
+  return { branch: input.branch, startPoint: input.startPoint };
+}
+function slugify(value) {
+  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "task";
+}
+
+// packages/core/src/implement-runner.ts
+async function runImplement(input) {
+  if (input.policy.push === "disabled" || input.policy.shell === "disabled" || !input.policy.canCreatePr) {
+    throw new Error("implement mode requires trusted push, shell, and create-pr policy");
+  }
+  const branch = deriveReviewbotBranch({
+    mode: "implement",
+    runId: input.runId,
+    requestedBy: input.command.actor,
+    task: input.command.args || input.command.command
+  });
+  await input.prepareBranch({ cwd: input.cwd, branch, startPoint: input.startPoint });
+  const result = await input.agent.run({ task: input.command.args, branch });
+  const commandsRun = result.commandsRun ?? [];
+  const checks = result.checks ?? [];
+  const commits = result.commits ?? [];
+  return {
+    branch,
+    requestedTask: input.command.args,
+    commandsRun,
+    checks,
+    commits,
+    summary: formatFinalSummary({
+      requestedTask: input.command.args,
+      workDone: result.workDone ?? [],
+      filesChanged: result.filesChanged ?? [],
+      commandsRun,
+      checks,
+      commits,
+      followUps: result.followUps ?? []
+    })
+  };
+}
+
 // packages/action/src/main.ts
 async function main() {
   const logger = new RunLogger();
@@ -1840,6 +1969,45 @@ async function main() {
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
     return;
   }
+  if (mode === "implement" && command && event && policy) {
+    const implementation = await runImplement({
+      cwd: inputs.cwd ?? process.cwd(),
+      runId: withPolicy.runId,
+      command,
+      policy,
+      startPoint: triggerSha(event),
+      prepareBranch: createOrFastForwardReviewbotBranch,
+      agent: {
+        async run() {
+          return {
+            workDone: ["Prepared reviewbot implementation branch and validated implement-mode policy."],
+            filesChanged: [],
+            commandsRun: [],
+            checks: [],
+            commits: [],
+            followUps: ["Real agent patch execution is handled by the implementation driver path."]
+          };
+        }
+      }
+    });
+    withPolicy = {
+      ...withPolicy,
+      implementation: {
+        requestedTask: implementation.requestedTask,
+        branch: implementation.branch,
+        commandsRun: implementation.commandsRun,
+        checks: implementation.checks,
+        commits: implementation.commits
+      }
+    };
+    core3.setOutput("summary", implementation.summary);
+    core3.setOutput(
+      "result",
+      JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
+    );
+    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+    return;
+  }
   core3.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
   await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
 }
@@ -1863,6 +2031,14 @@ function fallbackActor(login) {
     isFork: false,
     isPrivateRepo: false
   };
+}
+function triggerSha(event) {
+  if (event.kind === "pull_request") return event.pullRequest.headSha;
+  if (event.kind === "workflow_dispatch" && typeof event.raw === "object" && event.raw !== null) {
+    const ref = event.raw.ref;
+    if (typeof ref === "string" && ref.length > 0) return ref;
+  }
+  return "HEAD";
 }
 async function readEventPayload() {
   const path = process.env.GITHUB_EVENT_PATH;

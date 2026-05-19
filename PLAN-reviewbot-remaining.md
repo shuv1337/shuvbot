@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun run typecheck`, focused review tests, `bun test`, `bun run lint`, and `bun run build` green; 110 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 117 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -528,33 +528,33 @@ Allow trusted maintainers/collaborators to invoke `implement` (and other write-c
 
 ### Tasks
 
-- [ ] Finalize command parser behavior in mention events; ensure command source is preserved through the pipeline.
+- [x] Finalize command parser behavior in mention events; ensure command source is preserved through the pipeline.
 - [x] `packages/action/src/progress.ts` (new):
   - [x] Create one progress comment for mention/manual runs.
   - [x] Update at most every 10–15 s (debounced); replace on completion; keep on failure.
 - [x] `packages/github/src/branches.ts` (new):
   - [x] Always derive `reviewbot/<slug>` from the run; reject any branch outside the `reviewbot/` prefix in git tools.
-  - [ ] Create or fast-forward bot branch off the trigger commit.
-- [ ] Restricted shell sandbox in `packages/mcp/src/tools/shell.ts`:
+  - [x] Create or fast-forward bot branch off the trigger commit.
+- [x] Restricted shell sandbox in `packages/mcp/src/tools/shell.ts`:
   - [x] Docker by default when available; fail closed otherwise.
   - [x] Allowlisted env vars only; secrets stripped unless explicitly permitted by policy.
-  - [ ] Command allow/deny lists from config.
-  - [ ] Tree-kill on timeout.
-  - [ ] Background process tracking via `kill_background_process`.
-- [ ] Complete git write tools: `git_commit`, `push_branch`, `create_pull_request` with commit-message template from SPEC §13.2.
+  - [x] Command allow/deny lists from config.
+  - [x] Tree-kill on timeout.
+  - [x] Background process tracking via `kill_background_process`.
+- [x] Complete git write tools: `git_commit`, `push_branch`, `create_pull_request` with commit-message template from SPEC §13.2.
 - [x] Final summary content: requested task, work done, files changed, commands run, checks passed/failed, commits pushed, follow-ups.
-- [ ] Workflow summary updates for implement mode (include shell commands and commits).
+- [x] Workflow summary updates for implement mode (include shell commands and commits).
 
 ### Tests
 
-- [ ] Non-trusted actor cannot trigger write-capable mode.
-- [ ] Fork PR mention is denied push/shell/secrets even when policy elsewhere allows it.
-- [ ] Maintainer mention gets restricted shell/push as configured.
+- [x] Non-trusted actor cannot trigger write-capable mode.
+- [x] Fork PR mention is denied push/shell/secrets even when policy elsewhere allows it.
+- [x] Maintainer mention gets restricted shell/push as configured.
 - [x] Progress comment is debounced; updates capped at the configured rate.
 - [x] Bot branch naming collision avoidance.
 - [x] Sandbox: secrets stripped from child env unless explicitly allowed.
-- [ ] Git writes denied when push policy is disabled.
-- [ ] Commit message contains `reviewbot: …`, `Requested-by`, `Run-id`, `Mode`.
+- [x] Git writes denied when push policy is disabled.
+- [x] Commit message contains `reviewbot: …`, `Requested-by`, `Run-id`, `Mode`.
 
 ### Validation commands
 
@@ -566,9 +566,9 @@ bun run build
 
 ### Completion criteria
 
-- [ ] `@reviewbot implement …` fixture flow runs end-to-end with a fake agent and produces a final summary.
-- [ ] Implementation path cannot bypass `reviewbot/*` branch policy or shell sandbox.
-- [ ] Final summaries are clear, non-chatty, and free of secrets.
+- [x] `@reviewbot implement …` fixture flow runs end-to-end with a fake agent and produces a final summary.
+- [x] Implementation path cannot bypass `reviewbot/*` branch policy or shell sandbox.
+- [x] Final summaries are clear, non-chatty, and free of secrets.
 
 ### Suggested commit split
 

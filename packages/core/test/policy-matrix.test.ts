@@ -126,6 +126,18 @@ describe("buildRuntimePolicy matrix", () => {
     expect(policy.canCreatePr).toBe(true);
   });
 
+  test("fork PR mention denies shell, push, and secrets for implement mode", () => {
+    const policy = buildRuntimePolicy({
+      event: makeIssueComment(),
+      mode: "implement",
+      actor: { login: "alice", actorPermission: "write", isFork: true, isPrivateRepo: true },
+      configCaps: RESTRICTED_CAPS
+    });
+    expect(policy.shell).toBe("disabled");
+    expect(policy.push).toBe("disabled");
+    expect(policy.canReadSecrets).toBe(false);
+  });
+
   test("maintainer mention gets restricted shell/push by default", () => {
     const policy = buildRuntimePolicy({
       event: makeIssueComment(),

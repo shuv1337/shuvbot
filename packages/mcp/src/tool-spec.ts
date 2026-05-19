@@ -44,6 +44,10 @@ export interface ToolContext {
   state?: ReviewbotStatePlaceholder;
   outputs?: ToolOutputSink;
   now?: () => number;
+  shellSandbox?: {
+    allowCommands?: readonly string[];
+    denyCommands?: readonly string[];
+  };
 }
 
 export interface ToolOutputSink {
