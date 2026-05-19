@@ -4,6 +4,7 @@ import { ConfigError } from "../../core/src/errors.ts";
 import { runDoctor } from "./doctor.ts";
 import { runClaudeSetupToken } from "./auth/claude-setup-token.ts";
 import { runClaudeImport } from "./auth/claude-import.ts";
+import { runLocalReview } from "./local-review.ts";
 
 const [, , ...args] = process.argv;
 
@@ -19,7 +20,15 @@ async function run(): Promise<void> {
   }
 
   if (command === "init") return stub("reviewbot init");
-  if (command === "review") return stub("reviewbot review");
+  if (command === "review") {
+    await runLocalReview({
+      cwd: process.cwd(),
+      base: optionValue(args, "--base") ?? "main",
+      head: optionValue(args, "--head") ?? "HEAD",
+      stdout: process.stdout
+    });
+    return;
+  }
   if (command === "run") return stub("reviewbot run");
   if (command === "doctor") {
     await runDoctor({ stdout: process.stdout });
@@ -73,6 +82,11 @@ function parseRepoSecretArgs(values: string[]): { repo?: string; secret?: string
     }
   }
   return result;
+}
+
+function optionValue(values: string[], name: string): string | undefined {
+  const index = values.indexOf(name);
+  return index >= 0 ? values[index + 1] : undefined;
 }
 
 run().catch((error: unknown) => {

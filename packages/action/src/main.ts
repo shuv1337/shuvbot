@@ -8,7 +8,9 @@ import {
   createRunRecord,
   recordPolicy
 } from "../../core/src/run-record.ts";
+import type { RunRecord } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
+import { writeReviewArtifacts } from "./artifacts.ts";
 import {
   isSupportedEventName,
   normalizeEvent,
@@ -23,6 +25,9 @@ import {
 } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
 import { MODES, type ReviewbotMode } from "../../core/src/types.ts";
+import { fetchPullRequestDiff } from "../../github/src/diff.ts";
+import { createFakeReviewAgent, runReview } from "../../core/src/review-runner.ts";
+import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
 
 export async function main(): Promise<void> {
   const logger = new RunLogger();
@@ -77,9 +82,10 @@ export async function main(): Promise<void> {
     ...(eventAction ? { eventAction } : {})
   });
 
-  let withPolicy = record;
+  let withPolicy: RunRecord = record;
+  let policy: ReturnType<typeof buildRuntimePolicy> | undefined;
   if (event) {
-    const policy = buildRuntimePolicy({
+    policy = buildRuntimePolicy({
       event,
       mode,
       actor,
@@ -106,15 +112,60 @@ export async function main(): Promise<void> {
     modeReason: resolved.reason
   });
 
-  core.setOutput(
-    "result",
-    JSON.stringify({
-      runId: withPolicy.runId,
-      status: "initialized",
-      mode,
-      trigger: withPolicy.trigger
-    })
-  );
+  if (mode === "review" && event?.kind === "pull_request" && client && policy) {
+    const repo = { owner: event.repo.owner, name: event.repo.name };
+    const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
+    const filesResponse = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
+      params: { owner: repo.owner, repo: repo.name, pull_number: event.pullRequest.number, per_page: 100 }
+    });
+    const review = await runReview({
+      cwd: inputs.cwd ?? process.cwd(),
+      repo: event.repo.fullName,
+      event,
+      diff: diff.raw,
+      files: Array.isArray(filesResponse.data) ? filesResponse.data : [],
+      config,
+      policy,
+      agent: createFakeReviewAgent(parsePromptFindings(inputs.prompt))
+    });
+    let postedComments = 0;
+    if (policy.canReview) {
+      const posted = await postReview({
+        client,
+        repo,
+        pullNumber: event.pullRequest.number,
+        body: buildReviewSummary(review.pipeline.summaryFindings),
+        event: "COMMENT",
+        comments: review.pipeline.inlineFindings
+          .filter((finding) => finding.inline)
+          .map((finding) => ({
+            path: finding.inline!.path,
+            position: finding.inline!.position,
+            body: finding.body,
+            markerKey: finding.markerKey
+          }))
+      });
+      postedComments = posted.postedComments;
+    }
+    withPolicy = {
+      ...withPolicy,
+      findings: review.findings,
+      postedComments
+    };
+    const artifacts = await writeReviewArtifacts({
+      runRecord: withPolicy,
+      findings: review.findings,
+      contextManifest: review.context.manifest
+    });
+    withPolicy = { ...withPolicy, contextManifestPath: artifacts.contextManifestPath };
+    core.setOutput("review_findings", JSON.stringify(review.findings));
+    core.setOutput("summary", buildReviewSummary(review.pipeline.summaryFindings));
+    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "reviewed", mode, findings: review.findings.length }));
+    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+    return;
+  }
+
+  core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
   await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
 }
 
@@ -158,4 +209,18 @@ async function readEventPayload(): Promise<unknown> {
   }
 }
 
+function parsePromptFindings(prompt: string | undefined): unknown[] {
+  if (!prompt) return [];
+  try {
+    const parsed = JSON.parse(prompt);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildReviewSummary(findings: Parameters<typeof fallbackToSummary>[0][]): string {
+  if (findings.length === 0) return "reviewbot found no summary-only findings.";
+  return findings.map((finding) => fallbackToSummary(finding)).join("\n");
+}
 

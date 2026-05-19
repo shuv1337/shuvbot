@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun test` green, 64 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, focused review tests, `bun test`, `bun run lint`, and `bun run build` green; 101 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -358,17 +358,17 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 
 #### Diff and context
 
-- [ ] `packages/github/src/diff.ts`:
+- [x] `packages/github/src/diff.ts`:
   - [x] `fetchPullRequestDiff(client, pr)` — returns raw diff and parsed hunks via a simple unified-diff parser.
   - [x] `mapDiffPositions(hunks)` — produces a `Map<string, DiffPosition[]>` keyed by path.
   - [x] `isCommentableLine(positions, path, line)` — used by review tool.
-- [ ] `packages/core/src/context/assembler.ts`:
-  - [ ] `assembleReviewContext({ event, repo, diff, files, repoInstructions, prSummary?, learnings? })` returning labeled L0–L10 sections.
-  - [ ] `loadRepoInstructions(cwd)` scanning for `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`.
-- [ ] `packages/core/src/context/labels.ts`:
-  - [ ] Wrap untrusted blocks with explicit instruction headers (SPEC §15.3).
-- [ ] `packages/core/src/context/manifest.ts`:
-  - [ ] Emit `reviewbot-context-manifest.json` listing every section, byte size, and untrusted flag.
+- [x] `packages/core/src/context/assembler.ts`:
+  - [x] `assembleReviewContext({ event, repo, diff, files, repoInstructions, prSummary?, learnings? })` returning labeled L0–L10 sections.
+  - [x] `loadRepoInstructions(cwd)` scanning for `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`.
+- [x] `packages/core/src/context/labels.ts`:
+  - [x] Wrap untrusted blocks with explicit instruction headers (SPEC §15.3).
+- [x] `packages/core/src/context/manifest.ts`:
+  - [x] Emit `reviewbot-context-manifest.json` listing every section, byte size, and untrusted flag.
 
 #### Review schema and pipeline
 
@@ -382,39 +382,39 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
     - dedupe by `(path, lineRange, skill, normalizedTitle)`
     - map to diff positions; flag fallback when inline mapping fails
     - assign hidden marker IDs
-- [ ] `packages/github/src/reviews.ts`:
-  - [ ] `postReview(client, pr, body, comments, event)` honoring policy and event selection.
-  - [ ] `fallbackToSummary(finding)` when inline mapping fails.
-  - [ ] `dedupePreviousFindings(existingComments, newFindings)` via hidden markers.
+- [x] `packages/github/src/reviews.ts`:
+  - [x] `postReview(client, pr, body, comments, event)` honoring policy and event selection.
+  - [x] `fallbackToSummary(finding)` when inline mapping fails.
+  - [x] `dedupePreviousFindings(existingComments, newFindings)` via hidden markers.
 
 #### Skill registry (single skill for MVP)
 
-- [ ] `packages/core/src/skills/index.ts` — registry stub for v0.1.
-- [ ] `packages/core/src/skills/code-review.ts` — built-in skill prompt + path filters (default `**/*`).
+- [x] `packages/core/src/skills/index.ts` — registry stub for v0.1.
+- [x] `packages/core/src/skills/code-review.ts` — built-in skill prompt + path filters (default `**/*`).
 
 #### Run record + artifacts
 
-- [ ] `packages/action/src/artifacts.ts`:
-  - [ ] Write `reviewbot-run.json`, `reviewbot-findings.json`, `reviewbot-context-manifest.json` to `${RUNNER_TEMP}/reviewbot/` and upload via `actions/upload-artifact` syntax in example workflow (not done in code — just files on disk).
-- [ ] Extend `RunRecord` with `findings`, `postedComments`, and `contextManifestPath` (already structurally allowed).
+- [x] `packages/action/src/artifacts.ts`:
+  - [x] Write `reviewbot-run.json`, `reviewbot-findings.json`, `reviewbot-context-manifest.json` to `${RUNNER_TEMP}/reviewbot/` and upload via `actions/upload-artifact` syntax in example workflow (not done in code — just files on disk).
+- [x] Extend `RunRecord` with `findings`, `postedComments`, and `contextManifestPath` (already structurally allowed).
 
 #### CLI
 
-- [ ] `packages/cli/src/local-review.ts`:
-  - [ ] Run `review` mode against a local repo using `--base`/`--head`.
-  - [ ] Print findings to stdout; optionally write findings JSON.
+- [x] `packages/cli/src/local-review.ts`:
+  - [x] Run `review` mode against a local repo using `--base`/`--head`.
+  - [x] Print findings to stdout; optionally write findings JSON.
 
 ### Tests
 
 - [x] Diff parser maps added/modified/deleted lines correctly across small and multi-hunk fixtures.
-- [ ] Diff position mapping rejects out-of-range line comments.
+- [x] Diff position mapping rejects out-of-range line comments.
 - [x] Pipeline drops findings below `minConfidence`/`reportOn` thresholds.
 - [x] `maxInlineFindings` and `maxFindings` budgets enforced; overflow folded into summary.
 - [x] Dedupe merges findings with same `(path, lineRange, skill, normalizedTitle)`.
 - [x] High-severity finding without inline mapping falls back to summary, never dropped silently.
-- [ ] Review mode under fork policy never tries to push or comment beyond review.
-- [ ] Hidden markers prevent reposting identical findings on a synchronize event.
-- [ ] Context manifest lists every section with byte sizes and `untrusted` flags.
+- [x] Review mode under fork policy never tries to push or comment beyond review.
+- [x] Hidden markers prevent reposting identical findings on a synchronize event.
+- [x] Context manifest lists every section with byte sizes and `untrusted` flags.
 
 ### Validation commands
 
@@ -428,10 +428,10 @@ bun run build
 
 ### Completion criteria
 
-- [ ] A PR fixture can be reviewed end-to-end with a fake agent.
-- [ ] Inline comments only attempted for valid diff positions.
-- [ ] All three run artifacts emitted on disk; paths recorded in `RunRecord`.
-- [ ] Action sets `review_findings` and `summary` outputs.
+- [x] A PR fixture can be reviewed end-to-end with a fake agent.
+- [x] Inline comments only attempted for valid diff positions.
+- [x] All three run artifacts emitted on disk; paths recorded in `RunRecord`.
+- [x] Action sets `review_findings` and `summary` outputs.
 
 ### Suggested commit split
 

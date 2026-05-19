@@ -1,5 +1,6 @@
 import type { AgentId, ReviewbotMode } from "./types.ts";
 import type { RuntimePolicy } from "./policy.ts";
+import type { ReviewFinding } from "./review-schema.ts";
 
 export interface ToolCallSummary {
   name: string;
@@ -40,6 +41,9 @@ export interface RunRecord {
   timings: Record<string, number>;
   toolCalls: ToolCallSummary[];
   toolAudit?: ToolAuditRunSummary;
+  findings?: ReviewFinding[];
+  postedComments?: number;
+  contextManifestPath?: string;
   filesConsidered: string[];
   filesIgnored: string[];
   errors: Array<{ class: string; message: string }>;
