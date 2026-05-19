@@ -11,7 +11,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 0: scaffold, config parser, redaction, policy skeleton, CLI stubs, docs stubs, `dist/index.js`. Done.
 - Milestone 1: normalized `BotEvent` types, command parser, mode resolution, runtime policy builder with the SPEC §9.2 matrix, expanded workflow summary, envelope validator, minimal `GitHubClient`. Done.
 - Milestone 2 is partially complete: `@modelcontextprotocol/sdk` is installed, `packages/mcp/src/tool-spec.ts` has schema validation, policy gating, redacted audit records, and tests; `packages/mcp/src/server.ts` starts a stateless Streamable HTTP MCP server on `127.0.0.1:0` and has client-driven lifecycle tests.
-- Milestone 2 is not complete: concrete MCP tool handlers under `packages/mcp/src/tools/` are placeholders; read/write/git/shell/memory/output tools and hidden-marker dedupe are still unimplemented.
+- Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
 - Latest validation during this refresh: `bun test` green, 64 tests passing.
@@ -82,7 +82,7 @@ packages/
       shell.ts                   [placeholder]
       output.ts                  [placeholder]
       labels.ts                  [placeholder]
-      memory.ts                  [placeholder]
+      memory.ts                  [conservative stub]
       files.ts                   [placeholder]
   agents/src/                    [Milestone 3 onward — foundation partial]
     driver.ts                    [partial]
@@ -186,14 +186,14 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Git/shell/memory tools (`packages/mcp/src/tools/git.ts`, `shell.ts`, `memory.ts`)
 
-- [ ] `git_status`, `git_diff`, `git_fetch` — read-only, require `canReadChecks` or similar lightweight check.
-- [ ] `git_commit` — requires `push >= restricted` and `actorPermission >= write`. Enforces `reviewbot:` commit prefix template.
-- [ ] `push_branch`, `push_tags` — require `push >= restricted`. Branch name must match `reviewbot/*`.
-- [ ] `delete_branch` — requires `push >= restricted` and branch matches `reviewbot/*`.
-- [ ] `create_pull_request` — requires `canCreatePr`. Bot-branch only.
-- [ ] `run_shell` — requires `shell >= restricted`. Stub for full sandbox arrives in Milestone 6.
-- [ ] `kill_background_process` — pairs with `run_shell`.
-- [ ] Memory tools (`read_pr_summary`, `write_pr_summary`, `read_repo_learnings`, `write_repo_learnings`) — return `null`/no-op until Milestone 8 unless `memory.enabled` and a backend exists.
+- [x] `git_status`, `git_diff`, `git_fetch` — read-only, require `canReadChecks` or similar lightweight check.
+- [x] `git_commit` — requires `push >= restricted` and `actorPermission >= write`. Enforces `reviewbot:` commit prefix template.
+- [x] `push_branch`, `push_tags` — require `push >= restricted`. Branch name must match `reviewbot/*`; tag push fails closed in v0 conservative tooling.
+- [x] `delete_branch` — requires `push >= restricted` and branch matches `reviewbot/*`.
+- [x] `create_pull_request` — requires `canCreatePr`. Bot-branch only.
+- [x] `run_shell` — requires `shell >= restricted`. Stub fails closed until full sandbox arrives in Milestone 6.
+- [x] `kill_background_process` — pairs with `run_shell`.
+- [x] Memory tools (`read_pr_summary`, `write_pr_summary`, `read_repo_learnings`, `write_repo_learnings`) — return `null`/no-op until Milestone 8 unless `memory.enabled` and a backend exists.
 
 #### Hidden markers and dedupe
 
