@@ -22,6 +22,8 @@ export interface ReviewbotConfig {
   timeout: string;
   activityTimeout: string;
   failOn: Severity;
+  failCheck: boolean;
+  requestChanges: boolean;
   reportOn: Severity;
   minConfidence: Confidence;
   shell: PermissionLevel;
@@ -45,6 +47,8 @@ export const DEFAULT_CONFIG: ReviewbotConfig = {
   timeout: "1h",
   activityTimeout: "5m",
   failOn: "high",
+  failCheck: false,
+  requestChanges: false,
   reportOn: "medium",
   minConfidence: "medium",
   shell: "restricted",
@@ -70,6 +74,10 @@ const TOP_LEVEL_KEYS = new Set([
   "activity_timeout",
   "failOn",
   "fail_on",
+  "failCheck",
+  "fail_check",
+  "requestChanges",
+  "request_changes",
   "reportOn",
   "report_on",
   "minConfidence",
@@ -110,6 +118,12 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
     config.activityTimeout
   );
   config.failOn = enumValue(raw.failOn ?? raw.fail_on, SEVERITIES, "fail_on", config.failOn);
+  config.failCheck = booleanValue(raw.failCheck ?? raw.fail_check, "fail_check", config.failCheck);
+  config.requestChanges = booleanValue(
+    raw.requestChanges ?? raw.request_changes,
+    "request_changes",
+    config.requestChanges
+  );
   config.reportOn = enumValue(raw.reportOn ?? raw.report_on, SEVERITIES, "report_on", config.reportOn);
   config.minConfidence = enumValue(
     raw.minConfidence ?? raw.min_confidence,

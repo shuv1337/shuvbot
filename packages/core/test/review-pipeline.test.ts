@@ -57,6 +57,49 @@ describe("review schema and pipeline", () => {
     expect(result.summaryFindings[0]?.fallbackReason).toContain("not commentable");
     expect(result.dropped.map((entry) => entry.reason)).toEqual(["duplicate", "below reportOn severity"]);
   });
+
+  test("verification, calibration, noise filters, suggested fixes, and gates are enforced", () => {
+    const positions = mapDiffPositions(
+      parseUnifiedDiff(`diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1 +1 @@
+-const token = "";
++const token = process.env.TOKEN;`)
+    );
+    const candidates = [
+      finding("verified", "src/a.ts", 1, "high", "high", "Security bug"),
+      finding("unverified", "src/a.ts", 1, "high", "high", "Missing guard"),
+      { ...finding("speculative", "src/a.ts", 1, "high", "high", "Could crash"), body: "Maybe a bug" },
+      { ...finding("style", "src/a.ts", 1, "high", "high", "Style nit"), tags: ["style"] },
+      { ...finding("fix", "src/a.ts", 1, "high", "high", "Bad fix"), startLine: 1, endLine: 20, suggestedFix: "replacement" }
+    ];
+
+    const result = runReviewPipeline({
+      candidates,
+      diffPositions: positions,
+      verifiedFindingIds: new Set(["verified", "speculative", "style", "fix"]),
+      config: {
+        minConfidence: "medium",
+        reportOn: ["critical", "high", "medium"],
+        failOn: "high",
+        maxFindings: 10,
+        maxInlineFindings: 10,
+        requestChanges: true,
+        failCheck: true
+      }
+    });
+
+    expect(result.findings.map((entry) => entry.id)).toEqual(["verified", "speculative"]);
+    expect(result.findings.find((entry) => entry.id === "speculative")?.severity).toBe("medium");
+    expect(result.dropped.map((entry) => entry.reason)).toEqual([
+      "not verified",
+      "noise filter",
+      "invalid suggested fix"
+    ]);
+    expect(result.reviewEvent).toBe("REQUEST_CHANGES");
+    expect(result.failCheck).toBe(true);
+  });
 });
 
 function finding(
@@ -68,13 +111,14 @@ function finding(
   title: string
 ) {
   return {
-    id,
-    skill: "code-review",
-    title,
-    body: "Body",
-    severity,
-    confidence,
-    path,
-    line
+      id,
+      skill: "code-review",
+      title,
+      body: "Body",
+      severity,
+      confidence,
+      path,
+      line,
+      tags: ["correctness"]
   };
 }

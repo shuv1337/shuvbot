@@ -9,6 +9,8 @@ agent = "claude-code"
 model = "claude/opus"
 mode = "review"
 fail_on = "critical"
+fail_check = true
+request_changes = true
 report_on = "low"
 min_confidence = "high"
 shell = "restricted"
@@ -28,6 +30,8 @@ pr_summaries = true
     expect(config.agent).toBe("claude-code");
     expect(config.model).toBe("claude/opus");
     expect(config.failOn).toBe("critical");
+    expect(config.failCheck).toBe(true);
+    expect(config.requestChanges).toBe(true);
     expect(config.paths.include).toEqual(["packages/**/*.ts"]);
     expect(config.memory.learnings).toBe(false);
   });

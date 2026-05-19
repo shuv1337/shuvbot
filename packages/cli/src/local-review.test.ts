@@ -41,7 +41,8 @@ describe("local review CLI", () => {
           severity: "medium",
           confidence: "high",
           path: "a.ts",
-          line: 1
+          line: 1,
+          tags: ["correctness"]
         }
       ]
     });

@@ -135,7 +135,7 @@ export async function main(): Promise<void> {
         repo,
         pullNumber: event.pullRequest.number,
         body: buildReviewSummary(review.pipeline.summaryFindings),
-        event: "COMMENT",
+        event: review.pipeline.reviewEvent,
         comments: review.pipeline.inlineFindings
           .filter((finding) => finding.inline)
           .map((finding) => ({
@@ -160,7 +160,15 @@ export async function main(): Promise<void> {
     withPolicy = { ...withPolicy, contextManifestPath: artifacts.contextManifestPath };
     core.setOutput("review_findings", JSON.stringify(review.findings));
     core.setOutput("summary", buildReviewSummary(review.pipeline.summaryFindings));
-    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "reviewed", mode, findings: review.findings.length }));
+    core.setOutput(
+      "result",
+      JSON.stringify({
+        runId: withPolicy.runId,
+        status: review.pipeline.failCheck ? "failed" : "reviewed",
+        mode,
+        findings: review.findings.length
+      })
+    );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
     return;
   }
@@ -223,4 +231,3 @@ function buildReviewSummary(findings: Parameters<typeof fallbackToSummary>[0][])
   if (findings.length === 0) return "reviewbot found no summary-only findings.";
   return findings.map((finding) => fallbackToSummary(finding)).join("\n");
 }
-

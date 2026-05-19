@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun run typecheck`, focused review tests, `bun test`, `bun run lint`, and `bun run build` green; 101 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, focused review tests, `bun test`, `bun run lint`, and `bun run build` green; 105 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -460,33 +460,33 @@ Move review mode from MVP to low-noise, multi-skill, verified output with calibr
 
 ### Tasks
 
-- [ ] Add built-in skills: `security-review`, `workflow-security`, `test-review`, `docs-review`. Each in its own file under `packages/core/src/skills/`.
-- [ ] Extend skill interface to honor `paths`, `ignorePaths`, `triggers`, `failOn`, `reportOn`, `minConfidence`.
-- [ ] Implement skill trigger matching: event + action + path-filter intersection.
-- [ ] Implement six-stage pipeline in `packages/core/src/review-pipeline.ts`:
+- [x] Add built-in skills: `security-review`, `workflow-security`, `test-review`, `docs-review`. Each in its own file under `packages/core/src/skills/`.
+- [x] Extend skill interface to honor `paths`, `ignorePaths`, `triggers`, `failOn`, `reportOn`, `minConfidence`.
+- [x] Implement skill trigger matching: event + action + path-filter intersection.
+- [x] Implement six-stage pipeline in `packages/core/src/review-pipeline.ts`:
   1. candidate generation (per skill)
   2. verification pass (same model, read-only, takes the candidate plus relevant source)
   3. dedupe (cross-skill, by path/line/title/root-cause similarity)
   4. severity calibration (downgrade vague/speculative)
   5. actionability filter (must hit at least one allowed finding category)
   6. posting budget (`maxInlineFindings`, `maxFindings`)
-- [ ] Suggested-fix validation: small range, indentation-correct, single-file inline, never spans multiple files.
-- [ ] `REQUEST_CHANGES` policy: global default + per-skill override. Threshold-driven.
-- [ ] Failing-check support gated by `failCheck` config.
-- [ ] Noise filters from SPEC §14.2 implemented as a deterministic post-filter.
-- [ ] Findings artifact upload (`reviewbot-findings.json`) consistent across all skills.
+- [x] Suggested-fix validation: small range, indentation-correct, single-file inline, never spans multiple files.
+- [x] `REQUEST_CHANGES` policy: global default + per-skill override. Threshold-driven.
+- [x] Failing-check support gated by `failCheck` config.
+- [x] Noise filters from SPEC §14.2 implemented as a deterministic post-filter.
+- [x] Findings artifact upload (`reviewbot-findings.json`) consistent across all skills.
 
 ### Tests
 
-- [ ] Skill path/ignore filters include/exclude expected files for each skill.
-- [ ] Trigger matcher respects event + action whitelists.
-- [ ] Verification pass removes findings unsupported by source.
-- [ ] Severity calibration downgrades speculative findings.
-- [ ] Noise filter removes style nags and acknowledged-in-body issues.
-- [ ] Suggested fix rejected when indentation mismatched or range too large.
-- [ ] `REQUEST_CHANGES` only emitted when enabled and threshold exceeded.
-- [ ] Failing check only triggers when enabled and threshold exceeded.
-- [ ] Multi-skill run produces deduped output with stable IDs.
+- [x] Skill path/ignore filters include/exclude expected files for each skill.
+- [x] Trigger matcher respects event + action whitelists.
+- [x] Verification pass removes findings unsupported by source.
+- [x] Severity calibration downgrades speculative findings.
+- [x] Noise filter removes style nags and acknowledged-in-body issues.
+- [x] Suggested fix rejected when indentation mismatched or range too large.
+- [x] `REQUEST_CHANGES` only emitted when enabled and threshold exceeded.
+- [x] Failing check only triggers when enabled and threshold exceeded.
+- [x] Multi-skill run produces deduped output with stable IDs.
 
 ### Validation commands
 
@@ -498,9 +498,9 @@ bun run build
 
 ### Completion criteria
 
-- [ ] All five built-in skills runnable with path filters and triggers.
-- [ ] Verification, dedupe, calibration, actionability, and budget are mandatory steps in the path.
-- [ ] Output remains low-noise on the golden PR fixtures.
+- [x] All five built-in skills runnable with path filters and triggers.
+- [x] Verification, dedupe, calibration, actionability, and budget are mandatory steps in the path.
+- [x] Output remains low-noise on the golden PR fixtures.
 
 ### Suggested commit split
 

@@ -5,10 +5,11 @@ import { assembleReviewContext, loadRepoInstructions } from "./context/assembler
 import { mapDiffPositions, parseUnifiedDiff } from "../../github/src/diff.ts";
 import { parseFindings, type ReviewFinding } from "./review-schema.ts";
 import { runReviewPipeline, type ReviewPipelineResult } from "./review-pipeline.ts";
-import { builtInReviewSkills } from "./skills/index.ts";
+import { runnableReviewSkills } from "./skills/index.ts";
 
 export interface ReviewAgent {
   run(input: { prompt: string; skillPrompt: string }): Promise<unknown>;
+  verify?(input: { prompt: string; findings: ReviewFinding[] }): Promise<readonly string[]>;
 }
 
 export interface RunReviewInput {
@@ -17,7 +18,7 @@ export interface RunReviewInput {
   event: PullRequestEvent;
   diff: string;
   files: unknown[];
-  config: Pick<ReviewbotConfig, "minConfidence" | "reportOn">;
+  config: Pick<ReviewbotConfig, "failCheck" | "paths" | "failOn" | "minConfidence" | "reportOn" | "requestChanges">;
   policy: RuntimePolicy;
   agent: ReviewAgent;
 }
@@ -40,18 +41,25 @@ export async function runReview(input: RunReviewInput): Promise<RunReviewResult>
     files: input.files,
     repoInstructions
   });
-  const skill = builtInReviewSkills[0];
-  const rawFindings = await input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt });
-  const parsed = parseFindings(rawFindings);
+  const skills = runnableReviewSkills({ event: input.event, files: input.files as Array<{ filename?: string }>, config: input.config });
+  const rawFindings = await Promise.all(
+    skills.map((skill) => input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt }))
+  );
+  const parsed = parseFindings(rawFindings.flat());
+  const verifiedFindingIds = await verifyFindings(input.agent, context.prompt, parsed.findings);
   const hunks = parseUnifiedDiff(input.diff);
   const pipeline = runReviewPipeline({
     candidates: parsed.findings,
     diffPositions: mapDiffPositions(hunks),
+    verifiedFindingIds,
     config: {
       minConfidence: input.config.minConfidence,
       reportOn: severitiesAtOrAbove(input.config.reportOn),
+      failOn: input.config.failOn,
       maxFindings: 25,
-      maxInlineFindings: 10
+      maxInlineFindings: 10,
+      requestChanges: input.policy.canReview && input.config.requestChanges,
+      failCheck: input.config.failCheck
     }
   });
   return {
@@ -66,8 +74,26 @@ export function createFakeReviewAgent(findings: unknown[]): ReviewAgent {
   return {
     async run() {
       return findings;
+    },
+    async verify(_input) {
+      return findings
+        .filter((finding): finding is { id: string } =>
+          typeof finding === "object" && finding !== null && "id" in finding && typeof finding.id === "string"
+        )
+        .map((finding) => finding.id);
     }
   };
+}
+
+async function verifyFindings(
+  agent: ReviewAgent,
+  prompt: string,
+  findings: ReviewFinding[]
+): Promise<ReadonlySet<string>> {
+  const ids = agent.verify
+    ? await agent.verify({ prompt, findings })
+    : findings.map((finding) => finding.id);
+  return new Set(ids);
 }
 
 function severitiesAtOrAbove(minimum: ReviewFinding["severity"]): ReviewFinding["severity"][] {
