@@ -4,7 +4,7 @@ import type { RuntimePolicy } from "../../core/src/policy.ts";
 import type { ReviewbotMode } from "../../core/src/types.ts";
 import type { RunLogger } from "../../core/src/observability.ts";
 import type { GitHubClient } from "../../github/src/octokit.ts";
-import type { ReviewbotStatePlaceholder } from "../../core/src/state.ts";
+import type { StateConfig } from "../../core/src/state.ts";
 import { createToolAuditRecord, type ToolAuditRecord, type ToolAuditSink } from "./audit.ts";
 
 export type { ToolAuditRecord, ToolAuditSink, ToolAuditSnapshot, ToolAuditSummary } from "./audit.ts";
@@ -41,7 +41,7 @@ export interface ToolContext {
   redactor: Redactor;
   audit: ToolAuditSink;
   logger?: RunLogger;
-  state?: ReviewbotStatePlaceholder;
+  state?: StateConfig;
   outputs?: ToolOutputSink;
   now?: () => number;
   shellSandbox?: {

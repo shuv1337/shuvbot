@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 121 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 125 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -656,22 +656,22 @@ Optional, GitHub-native state for PR summaries and (opt-in) repo learnings. No m
 
 ### Tasks
 
-- [ ] `packages/core/src/state.ts`:
-  - [ ] `StateStore` interface (SPEC §16.1).
-  - [ ] `MemoryStateStore` for tests.
-  - [ ] `GitHubStateStore` using hidden bot comments (`<!-- reviewbot:pr-summary:v1:… -->`) and workflow artifacts.
-  - [ ] `FileStateStore` under `.reviewbot/state/` for local CLI use.
-  - [ ] `ApiStateStore` interface stub for future hosted backend.
-- [ ] Memory tools (`packages/mcp/src/tools/memory.ts`) read/write through the state store, respecting `memory.enabled` and `memory.learnings`.
-- [ ] All persisted state passes through the redactor before write.
-- [ ] Update `RunRecord.putRun` path to optionally persist via the configured backend.
+- [x] `packages/core/src/state.ts`:
+  - [x] `StateStore` interface (SPEC §16.1).
+  - [x] `MemoryStateStore` for tests.
+  - [x] `GitHubStateStore` using hidden bot comments (`<!-- reviewbot:pr-summary:v1:… -->`) and workflow artifacts.
+  - [x] `FileStateStore` under `.reviewbot/state/` for local CLI use.
+  - [x] `ApiStateStore` interface stub for future hosted backend.
+- [x] Memory tools (`packages/mcp/src/tools/memory.ts`) read/write through the state store, respecting `memory.enabled` and `memory.learnings`.
+- [x] All persisted state passes through the redactor before write.
+- [x] Update `RunRecord.putRun` path to optionally persist via the configured backend.
 
 ### Tests
 
-- [ ] PR summary hidden comment created/updated idempotently across runs.
-- [ ] Repo learnings never read/written unless `memory.learnings = true`.
-- [ ] File backend writes only under `.reviewbot/state/`.
-- [ ] No secret value appears in any persisted record.
+- [x] PR summary hidden comment created/updated idempotently across runs.
+- [x] Repo learnings never read/written unless `memory.learnings = true`.
+- [x] File backend writes only under `.reviewbot/state/`.
+- [x] No secret value appears in any persisted record.
 
 ### Validation commands
 
@@ -683,8 +683,8 @@ bun run build
 
 ### Completion criteria
 
-- [ ] Memory features are optional and off unless configured.
-- [ ] Backend behavior covered by tests; state inspection straightforward.
+- [x] Memory features are optional and off unless configured.
+- [x] Backend behavior covered by tests; state inspection straightforward.
 
 ### Suggested commit split
 

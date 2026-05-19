@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { describe, expect, test } from "bun:test";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
+import { MemoryStateStore } from "../../core/src/state.ts";
 import { AuditLog } from "../src/audit.ts";
 import { executeTool, type ToolContext } from "../src/tool-spec.ts";
 import type { GitHubClient } from "../../github/src/octokit.ts";
@@ -199,6 +200,33 @@ describe("git, shell, and memory MCP tools", () => {
       enabled: false
     });
   });
+
+  test("memory tools route through enabled state store and gate learnings opt-in", async () => {
+    const store = new MemoryStateStore();
+    const toolContext = context({ state: { enabled: true, learnings: false, store } });
+    await expect(executeTool(writePrSummaryTool, { pullNumber: 1, summary: "summary" }, toolContext)).resolves.toMatchObject({
+      written: true,
+      enabled: true
+    });
+    await expect(executeTool(readPrSummaryTool, { pullNumber: 1 }, toolContext)).resolves.toMatchObject({
+      summary: "summary",
+      enabled: true
+    });
+    await expect(executeTool(writeRepoLearningsTool, { learnings: "learn" }, toolContext)).resolves.toMatchObject({
+      written: false,
+      enabled: false
+    });
+
+    const learningContext = context({ state: { enabled: true, learnings: true, store } });
+    await expect(executeTool(writeRepoLearningsTool, { learnings: "learn" }, learningContext)).resolves.toMatchObject({
+      written: true,
+      enabled: true
+    });
+    await expect(executeTool(readRepoLearningsTool, {}, learningContext)).resolves.toMatchObject({
+      learnings: "learn",
+      enabled: true
+    });
+  });
 });
 
 function context(input: {
@@ -206,6 +234,7 @@ function context(input: {
   policy?: ReturnType<typeof defaultRuntimePolicy>;
   client?: ToolContext["client"];
   repo?: ToolContext["repo"];
+  state?: ToolContext["state"];
 }): ToolContext {
   const redactor = new DefaultRedactor();
   const toolContext: ToolContext = {
@@ -227,5 +256,6 @@ function context(input: {
   if (input.cwd !== undefined) toolContext.cwd = input.cwd;
   if (input.client !== undefined) toolContext.client = input.client;
   if (input.repo !== undefined) toolContext.repo = input.repo;
+  if (input.state !== undefined) toolContext.state = input.state;
   return toolContext;
 }

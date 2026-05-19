@@ -64,12 +64,13 @@ export const readPrSummaryTool: ToolSpec<PrSummaryInput, Record<string, unknown>
   description: "Read a persisted PR summary when memory is configured. Defaults to null.",
   inputSchema: PR_SUMMARY_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
-  handler(input, context) {
+  async handler(input, context) {
+    const store = context.state?.enabled ? context.state.store : undefined;
     return {
       pullNumber: input.pullNumber,
-      summary: null,
-      enabled: context.state !== undefined,
-      reason: "state backends are not implemented yet"
+      summary: store ? await store.readPrSummary(input.pullNumber) : null,
+      enabled: Boolean(store),
+      reason: store ? "ok" : "state backend is disabled"
     };
   }
 };
@@ -79,12 +80,14 @@ export const writePrSummaryTool: ToolSpec<WritePrSummaryInput, Record<string, un
   description: "Persist a PR summary when memory is configured. Defaults to no-op.",
   inputSchema: WRITE_PR_SUMMARY_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
-  handler(input, context) {
+  async handler(input, context) {
+    const store = context.state?.enabled ? context.state.store : undefined;
+    if (store) await store.writePrSummary(input.pullNumber, context.redactor.redactString(input.summary));
     return {
       pullNumber: input.pullNumber,
-      written: false,
-      enabled: context.state !== undefined,
-      reason: "state backends are not implemented yet"
+      written: Boolean(store),
+      enabled: Boolean(store),
+      reason: store ? "ok" : "state backend is disabled"
     };
   }
 };
@@ -94,12 +97,14 @@ export const readRepoLearningsTool: ToolSpec<RepoLearningsInput, Record<string, 
   description: "Read opt-in repo learnings. Defaults to null.",
   inputSchema: REPO_LEARNINGS_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
-  handler(input) {
+  async handler(input, context) {
+    const store = context.state?.enabled && context.state.learnings ? context.state.store : undefined;
+    const namespace = input.namespace ?? "default";
     return {
-      namespace: input.namespace ?? "default",
-      learnings: null,
-      enabled: false,
-      reason: "repo learnings are disabled by default"
+      namespace,
+      learnings: store ? await store.readRepoLearnings(namespace) : null,
+      enabled: Boolean(store),
+      reason: store ? "ok" : "repo learnings are disabled by default"
     };
   }
 };
@@ -109,12 +114,15 @@ export const writeRepoLearningsTool: ToolSpec<WriteRepoLearningsInput, Record<st
   description: "Write opt-in repo learnings. Defaults to no-op.",
   inputSchema: WRITE_REPO_LEARNINGS_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
-  handler(input) {
+  async handler(input, context) {
+    const store = context.state?.enabled && context.state.learnings ? context.state.store : undefined;
+    const namespace = input.namespace ?? "default";
+    if (store) await store.writeRepoLearnings(namespace, context.redactor.redactString(input.learnings));
     return {
-      namespace: input.namespace ?? "default",
-      written: false,
-      enabled: false,
-      reason: "repo learnings are disabled by default"
+      namespace,
+      written: Boolean(store),
+      enabled: Boolean(store),
+      reason: store ? "ok" : "repo learnings are disabled by default"
     };
   }
 };
