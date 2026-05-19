@@ -1,7 +1,13 @@
-import { PolicyDeniedError, StructuredOutputError } from "../../core/src/errors.ts";
+import { PolicyDeniedError, ReviewbotError, StructuredOutputError } from "../../core/src/errors.ts";
 import type { Redactor } from "../../core/src/redaction.ts";
 import type { RuntimePolicy } from "../../core/src/policy.ts";
 import type { ReviewbotMode } from "../../core/src/types.ts";
+import type { RunLogger } from "../../core/src/observability.ts";
+import type { GitHubClient } from "../../github/src/octokit.ts";
+import type { ReviewbotStatePlaceholder } from "../../core/src/state.ts";
+import { createToolAuditRecord, type ToolAuditRecord, type ToolAuditSink } from "./audit.ts";
+
+export type { ToolAuditRecord, ToolAuditSink, ToolAuditSnapshot, ToolAuditSummary } from "./audit.ts";
 
 export type ToolSchema =
   | { type: "object"; required?: readonly string[]; properties: Record<string, ToolSchema>; additionalProperties?: boolean }
@@ -22,12 +28,20 @@ export interface ToolSpec<Input, Output> {
 }
 
 export interface ToolContext {
+  repo?: {
+    owner: string;
+    name: string;
+  };
   runId: string;
   actor: string;
   mode: ReviewbotMode;
   policy: RuntimePolicy;
+  client?: GitHubClient;
+  cwd?: string;
   redactor: Redactor;
   audit: ToolAuditSink;
+  logger?: RunLogger;
+  state?: ReviewbotStatePlaceholder;
   now?: () => number;
 }
 
@@ -45,29 +59,12 @@ export interface ToolPolicyRequirement {
   canUpdatePullRequest?: true;
 }
 
-export interface ToolAuditRecord {
-  runId: string;
-  toolName: string;
-  actor: string;
-  mode: ReviewbotMode;
-  sanitizedInput: unknown;
-  sanitizedOutput?: unknown;
-  sanitizedError?: string;
-  durationMs: number;
-  policyDecision: "allowed" | "denied";
-}
-
-export interface ToolAuditSink {
-  record(record: ToolAuditRecord): void | Promise<void>;
-}
-
 export async function executeTool<Input, Output>(
   spec: ToolSpec<Input, Output>,
   rawInput: unknown,
   context: ToolContext
 ): Promise<Output> {
   const startedAt = context.now?.() ?? Date.now();
-  const sanitizedInput = context.redactor.redact(rawInput);
   let policyDecision: ToolAuditRecord["policyDecision"] = "allowed";
 
   try {
@@ -75,29 +72,35 @@ export async function executeTool<Input, Output>(
     assertToolPolicy(spec, context.policy);
     const output = await spec.handler(input, context);
     validateToolOutput(spec, output);
-    await context.audit.record({
+    await context.audit.record(createToolAuditRecord({
       runId: context.runId,
       toolName: spec.name,
       actor: context.actor,
       mode: context.mode,
-      sanitizedInput,
-      sanitizedOutput: context.redactor.redact(output),
+      status: "success",
       durationMs: elapsedMs(startedAt, context),
-      policyDecision
-    });
+      policyDecision,
+      input: rawInput,
+      output
+    }, context.redactor));
     return output;
   } catch (error) {
     if (error instanceof PolicyDeniedError) policyDecision = "denied";
-    await context.audit.record({
+    const recordInput = {
       runId: context.runId,
       toolName: spec.name,
       actor: context.actor,
       mode: context.mode,
-      sanitizedInput,
-      sanitizedError: sanitizeError(error, context.redactor),
+      status: "failure",
       durationMs: elapsedMs(startedAt, context),
-      policyDecision
-    });
+      policyDecision,
+      input: rawInput,
+      error
+    } as const;
+    await context.audit.record(createToolAuditRecord(
+      error instanceof ReviewbotError ? { ...recordInput, errorCode: error.code } : recordInput,
+      context.redactor
+    ));
     throw error;
   }
 }
@@ -206,11 +209,6 @@ function validateNumberSchema(
 function allowsLevel(actual: RuntimePolicy["shell"], required: "restricted" | "enabled"): boolean {
   if (required === "restricted") return actual === "restricted" || actual === "enabled";
   return actual === "enabled";
-}
-
-function sanitizeError(error: unknown, redactor: Redactor): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return redactor.redactString(message);
 }
 
 function elapsedMs(startedAt: number, context: ToolContext): number {

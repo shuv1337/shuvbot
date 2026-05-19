@@ -7,6 +7,23 @@ export interface ToolCallSummary {
   status: "success" | "failure";
 }
 
+export interface ToolAuditRunSummary {
+  total: number;
+  succeeded: number;
+  failed: number;
+  denied: number;
+  totalDurationMs: number;
+  byTool: Record<string, ToolAuditRunToolSummary>;
+}
+
+export interface ToolAuditRunToolSummary {
+  total: number;
+  succeeded: number;
+  failed: number;
+  denied: number;
+  totalDurationMs: number;
+}
+
 export interface RunRecord {
   runId: string;
   repo?: string;
@@ -22,6 +39,7 @@ export interface RunRecord {
   status: "running" | "success" | "failure";
   timings: Record<string, number>;
   toolCalls: ToolCallSummary[];
+  toolAudit?: ToolAuditRunSummary;
   filesConsidered: string[];
   filesIgnored: string[];
   errors: Array<{ class: string; message: string }>;
@@ -96,6 +114,31 @@ export function completeRunRecord(record: RunRecord, status: "success" | "failur
 
 export function recordPolicy(record: RunRecord, policy: RuntimePolicy): RunRecord {
   return { ...record, policy: summarizePolicy(policy) };
+}
+
+export function recordToolAudit(record: RunRecord, audit: ToolAuditRunSummary): RunRecord {
+  return {
+    ...record,
+    toolAudit: {
+      total: audit.total,
+      succeeded: audit.succeeded,
+      failed: audit.failed,
+      denied: audit.denied,
+      totalDurationMs: audit.totalDurationMs,
+      byTool: Object.fromEntries(
+        Object.entries(audit.byTool).map(([toolName, summary]) => [
+          toolName,
+          {
+            total: summary.total,
+            succeeded: summary.succeeded,
+            failed: summary.failed,
+            denied: summary.denied,
+            totalDurationMs: summary.totalDurationMs
+          }
+        ])
+      )
+    }
+  };
 }
 
 export function summarizePolicy(policy: RuntimePolicy): PolicySummary {

@@ -50,10 +50,13 @@ describe("tool spec execution", () => {
       toolName: "echo",
       actor: "maintainer",
       mode: "review",
+      status: "success",
       sanitizedInput: { value: "ok" },
       sanitizedOutput: { value: "ok" },
       policyDecision: "allowed"
     });
+    expect(audit[0]?.inputDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(audit[0]?.outputDigest).toMatch(/^[a-f0-9]{64}$/);
   });
 
   test("rejects invalid tool input before handler execution", async () => {
@@ -103,6 +106,8 @@ describe("tool spec execution", () => {
     );
     expect(audit[0]).toMatchObject({
       toolName: "write_comment",
+      status: "failure",
+      errorCode: "POLICY_DENIED",
       policyDecision: "denied"
     });
   });
@@ -123,6 +128,7 @@ describe("tool spec execution", () => {
     expect(audit[0]?.sanitizedInput).toEqual({ value: "[REDACTED]" });
     expect(audit[0]?.sanitizedError).toContain("CLAUDE_CODE_OAUTH_TOKEN=[REDACTED]");
     expect(audit[0]?.sanitizedError).not.toContain("secret-token-value");
+    expect(audit[0]?.status).toBe("failure");
   });
 });
 

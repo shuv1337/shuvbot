@@ -6,12 +6,15 @@ Detailed implementation plan for everything still ahead of `reviewbot` after Mil
 
 The original spec lives in `SPEC.md`. The historical task-by-task plan lives in `PLAN-reviewbot-implementation.md`. This file expands on the remaining milestones with concrete files, signatures, tests, and commit shapes so an autonomous agent (or human) can pick up any milestone and execute it without re-deriving structure.
 
-## Starting State (as of this plan)
+## Starting State (refreshed 2026-05-18)
 
 - Milestone 0: scaffold, config parser, redaction, policy skeleton, CLI stubs, docs stubs, `dist/index.js`. Done.
-- Milestone 1: normalized `BotEvent` types, command parser, mode resolution, runtime policy builder with the SPEC §9.2 matrix, expanded workflow summary, envelope validator, minimal `GitHubClient`. Done. 57 tests passing.
-- Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/ (empty)`, `agents/ (stubs)`, `cli/`, `evals/ (empty)`, `docs/ (stubs)`.
-- `bun run typecheck`, `bun run lint`, `bun test`, `bun run build` all green.
+- Milestone 1: normalized `BotEvent` types, command parser, mode resolution, runtime policy builder with the SPEC §9.2 matrix, expanded workflow summary, envelope validator, minimal `GitHubClient`. Done.
+- Milestone 2 is partially complete: `@modelcontextprotocol/sdk` is installed, `packages/mcp/src/tool-spec.ts` has schema validation, policy gating, redacted audit records, and tests; `packages/mcp/src/server.ts` starts a stateless Streamable HTTP MCP server on `127.0.0.1:0` and has client-driven lifecycle tests.
+- Milestone 2 is not complete: concrete MCP tool handlers under `packages/mcp/src/tools/` are placeholders; read/write/git/shell/memory/output tools and hidden-marker dedupe are still unimplemented.
+- Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
+- Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
+- Latest validation during this refresh: `bun test` green, 64 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -46,7 +49,7 @@ packages/
     commands.ts
     modes.ts
     policy.ts
-    review-schema.ts             [Milestone 4 — currently empty placeholder]
+    review-schema.ts             [Milestone 4 — interface exists; pipeline still missing]
     state.ts                     [Milestone 8]
     time.ts
     redaction.ts
@@ -65,39 +68,39 @@ packages/
     checks.ts                    [Milestone 7]
     permissions.ts
     artifacts.ts                 [Milestone 4/9]
-  mcp/src/                       [Milestone 2]
-    server.ts
-    tool-spec.ts
-    audit.ts
+  mcp/src/                       [Milestone 2 — foundation partial]
+    server.ts                    [partial]
+    tool-spec.ts                 [partial]
+    audit.ts                     [done]
     tools/
-      pr.ts
-      issue.ts
-      comment.ts
-      review.ts
-      checks.ts
-      git.ts
-      shell.ts
-      output.ts
-      labels.ts
-      memory.ts
-      files.ts
-  agents/src/                    [Milestone 3 onward]
-    driver.ts
-    auth.ts
-    claude-code.ts
+      pr.ts                      [placeholder]
+      issue.ts                   [placeholder]
+      comment.ts                 [placeholder]
+      review.ts                  [placeholder]
+      checks.ts                  [placeholder]
+      git.ts                     [placeholder]
+      shell.ts                   [placeholder]
+      output.ts                  [placeholder]
+      labels.ts                  [placeholder]
+      memory.ts                  [placeholder]
+      files.ts                   [placeholder]
+  agents/src/                    [Milestone 3 onward — foundation partial]
+    driver.ts                    [partial]
+    auth.ts                      [placeholder]
+    claude-code.ts               [placeholder]
     anthropic-sdk.ts
     openai.ts
     codex-cli.ts
     aider.ts
-    model-registry.ts
+    model-registry.ts            [partial]
   cli/src/
     index.ts
-    init.ts                      [Milestone 4]
-    local-review.ts              [Milestone 4]
-    replay.ts                    [Milestone 9]
-    doctor.ts                    [Milestone 3]
-    auth/claude-setup-token.ts   [Milestone 3]
-    auth/claude-import.ts        [Milestone 3]
+    init.ts                      [Milestone 4 — placeholder]
+    local-review.ts              [Milestone 4 — placeholder]
+    replay.ts                    [Milestone 9 — placeholder]
+    doctor.ts                    [Milestone 3 — placeholder]
+    auth/claude-setup-token.ts   [Milestone 3 — missing]
+    auth/claude-import.ts        [Milestone 3 — missing]
   evals/                         [Milestone 9]
     fixtures/
     cases/
@@ -112,14 +115,18 @@ docs/                            [all milestones]
 
 ## Milestone 2 — MCP Tool Server and Safe Tool Execution
 
+### Current status
+
+Partial. The execution substrate exists and is tested, but the tool catalog is still placeholder-only. The next Milestone 2 batch should focus on concrete tools and a standalone audit module, not on redoing server lifecycle or generic schema validation.
+
 ### Goal
 
 Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy-enforced read, write, git, shell, memory, and output tools. The server must be drivable by a fake agent end-to-end before any real agent is wired up.
 
 ### Dependencies
 
-- Add `@modelcontextprotocol/sdk` as a dependency.
-- Add a JSON schema validator (recommend `ajv` since handlers and structured outputs both need it).
+- [x] Add `@modelcontextprotocol/sdk` as a dependency.
+- [ ] Add a JSON schema validator if the current hand-rolled `ToolSchema` validator becomes insufficient. Current implementation uses internal schema validation plus Zod conversion for MCP registration, not Ajv.
 - Keep `bun-types` in dev deps; no Bun-only APIs in MCP server code (Node 24 must run it after bundling).
 
 ### Pre-flight
@@ -132,27 +139,30 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Core scaffolding
 
-- [ ] `packages/mcp/src/tool-spec.ts`:
-  - [ ] `ToolPolicyRequirement` union: `"read"`, `"comment"`, `"review"`, `"label"`, `"check-read"`, `"update-pr"`, `"update-issue"`, `"git-write"`, `"git-push"`, `"shell"`, `"memory-read"`, `"memory-write"`, `"output"`.
-  - [ ] `ToolContext` carrying `repo`, `runId`, `policy`, `client`, `cwd`, `redactor`, `audit`, `logger`, `state`.
-  - [ ] `ToolSpec<Input, Output>` with JSON Schema input/output and a `handler` returning `Output`.
-  - [ ] `defineTool` helper that validates input via Ajv, calls policy check, runs handler, validates output, and reports via audit log.
-  - [ ] `policyAllows(requirement, policy)` mapping requirements to `RuntimePolicy` flags. Deny by default.
-  - [ ] Error types: `ToolValidationError`, `ToolOutputError`, plus reuse `PolicyDeniedError`.
+- [x] `packages/mcp/src/tool-spec.ts`:
+  - [x] `ToolPolicyRequirement` implemented as structured runtime-policy requirements (`shell`, `push`, `canComment`, `canReview`, etc.).
+  - [x] `ToolContext` carries `runId`, actor/mode, `policy`, `redactor`, and `audit`.
+  - [x] Extend `ToolContext` with `repo`, `client`, `cwd`, `logger`, and `state` before concrete tools land.
+  - [x] `ToolSpec<Input, Output>` with input/output schemas and a `handler` returning `Output`.
+  - [x] `executeTool` validates input, calls policy checks, runs handler, validates output, and records audit entries.
+  - [x] Runtime-policy mapping denies by default for configured requirements.
+  - [ ] Add dedicated `ToolValidationError` and `ToolOutputError` if `StructuredOutputError` is too broad for tool-boundary diagnostics.
 
-- [ ] `packages/mcp/src/audit.ts`:
-  - [ ] `AuditLog` API: `record({ tool, status, durationMs, inputDigest, outputDigest, policyDecision, error? })`.
-  - [ ] Use `Redactor` from `packages/core/src/redaction.ts` for inputs and errors before recording.
-  - [ ] Append to a per-run in-memory buffer; provide `snapshot()` for the run record.
+- [x] `packages/mcp/src/audit.ts`:
+  - [x] `AuditLog` API records tool status, duration, sanitized input/output digests, policy decision, sanitized errors, and stable error codes.
+  - [x] Use `Redactor` from `packages/core/src/redaction.ts` for inputs and errors before recording.
+  - [x] Append to a per-run in-memory buffer; provide `snapshot()` for run-record attachment.
+  - [x] Migrate or wrap the current `ToolAuditSink`/`ToolAuditRecord` in `tool-spec.ts` so existing tests keep their behavior.
 
-- [ ] `packages/mcp/src/server.ts`:
-  - [ ] Build MCP server using the official TypeScript SDK and bind to `127.0.0.1:0` (let OS pick port).
-  - [ ] Register every tool from `tools/` automatically.
-  - [ ] Expose `start()`, `stop()`, and `connectionInfo()` returning `{ url, port }`.
-  - [ ] Hard-deny external network access by binding to `127.0.0.1` and ignoring `HOST`/`PORT` envs.
+- [x] `packages/mcp/src/server.ts`:
+  - [x] Build MCP server using the official TypeScript SDK and bind to `127.0.0.1:0` (let OS pick port).
+  - [ ] Register every real tool from `tools/` automatically after handlers replace placeholders.
+  - [ ] Keep or adapt the current `startReviewbotMcpServer(...).close()` API; add `connectionInfo()` only if callers need the exact `{ url, port }` shape.
+  - [x] Hard-deny external network access by binding to `127.0.0.1` and ignoring `HOST`/`PORT` envs.
 
 #### Read-context tools (`packages/mcp/src/tools/pr.ts`, `issue.ts`, `files.ts`, `checks.ts`)
 
+- [ ] Replace placeholder exports in `packages/mcp/src/tools/*.ts` with real tool specs.
 - [ ] `get_pr` — returns SPEC `PullRequestSummary` plus `mergeable`, `mergeStateStatus`, `labels`.
 - [ ] `get_pr_diff` — fetches diff via `application/vnd.github.v3.diff`. Optional `maxBytes` truncates with a tail marker.
 - [ ] `get_pr_files` — paginates `/pulls/{n}/files`. Returns minimal file objects: `filename`, `status`, `additions`, `deletions`, `patch`.
@@ -192,14 +202,14 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 ### Tests
 
-- [ ] Server lifecycle: starts, returns port, stops cleanly without leaking handles.
-- [ ] Tool input validation rejects malformed payloads.
-- [ ] Tool output validation catches schema violations.
-- [ ] Policy denial paths return sanitized `PolicyDeniedError` without leaking input details.
+- [x] Server lifecycle: starts, returns port, stops cleanly without leaking handles.
+- [x] Tool input validation rejects malformed payloads.
+- [x] Tool output validation catches schema violations.
+- [x] Policy denial paths return sanitized `PolicyDeniedError` without leaking input details.
 - [ ] Fake-agent driver (defined inline in tests) can read PR data via `get_pr` and `get_pr_diff` using a mocked `GitHubClient`.
 - [ ] Write tools refuse under fork policy / `read` actor.
 - [ ] `create_pull_request_review` rejects `event: "APPROVE"` regardless of policy.
-- [ ] Audit log captures input/output digests and is redacted.
+- [x] Audit log captures input/output digests and is redacted, including snapshot coverage.
 - [ ] Hidden-marker dedupe prevents duplicate comments across invocations.
 
 ### Validation commands
@@ -214,21 +224,22 @@ bun run build
 ### Completion criteria
 
 - [ ] All defined tools registered, schema-validated, and policy-gated.
-- [ ] Server binds to `127.0.0.1:0`, never to a public interface.
+- [x] Server binds to `127.0.0.1:0`, never to a public interface.
 - [ ] Fake agent can drive a read-only review workflow end-to-end using the MCP server.
-- [ ] Run record includes audit entries for every tool call.
+- [x] Run record can attach an audit summary for tool calls.
 
 ### Suggested commit split
 
-1. `chore(deps): add @modelcontextprotocol/sdk and ajv`
-2. `feat(mcp): tool spec, audit log, policy gating`
-3. `feat(mcp): MCP server lifecycle on loopback`
-4. `feat(mcp): read-context tools (pr, issue, files, checks)`
-5. `feat(mcp): write tools with dedupe markers`
-6. `feat(mcp): git/shell/memory tool stubs gated by policy`
-7. `test(mcp): server lifecycle, validation, policy denial, fake-agent`
-8. `docs: MCP tool catalog stub`
-9. `chore(build): regenerate dist/index.js`
+1. Done: `chore(deps): add @modelcontextprotocol/sdk`
+2. Done/partial: `feat(mcp): tool spec, audit hook, policy gating`
+3. Done: `feat(mcp): MCP server lifecycle on loopback`
+4. Next: `feat(mcp): audit log snapshots and context expansion`
+5. Next: `feat(mcp): read-context tools (pr, issue, files, checks)`
+6. Next: `feat(mcp): write tools with dedupe markers`
+7. Next: `feat(mcp): git/shell/memory tool stubs gated by policy`
+8. Next: `test(mcp): concrete tools, policy denial, fake-agent`
+9. Next: `docs: MCP tool catalog stub`
+10. Final for milestone: `chore(build): regenerate dist/index.js`
 
 ### Risks / decisions
 
@@ -239,6 +250,10 @@ bun run build
 ---
 
 ## Milestone 3 — Claude Code Driver and Setup-Token Auth
+
+### Current status
+
+Partial scaffold only. Do not redo the existing `AgentDriver` interface or model-alias baseline unless the SPEC contract requires a small widening; focus on auth resolution, real process execution, CLI auth helpers, doctor checks, and leak tests.
 
 ### Goal
 
@@ -253,12 +268,13 @@ Wire the primary `claude-code` agent driver with `CLAUDE_CODE_OAUTH_TOKEN` (pref
 
 #### Agent driver substrate
 
-- [ ] `packages/agents/src/driver.ts` — implement the SPEC §11.1 interface plus `AgentRunInput`/`AgentRunResult`. Re-export from an `index.ts` barrel.
+- [x] `packages/agents/src/driver.ts` — initial SPEC §11.1-style interface plus `AgentRunInput`/`AgentRunResult`.
+- [ ] Add `packages/agents/src/index.ts` barrel export.
 - [ ] `packages/agents/src/auth.ts`:
   - [ ] `resolveClaudeAuth(env)` matching SPEC §6.4 exactly.
   - [ ] Generic `resolveAuthFor(driverId, env)` for future providers.
   - [ ] `maskSecret(value, label)` that calls `core.setSecret` when running in GitHub Actions.
-- [ ] `packages/agents/src/model-registry.ts` — already minimal; expand to expose `resolveModel(aliasOrId, supports?)` returning a `ResolvedModel` with provider + concrete model.
+- [ ] `packages/agents/src/model-registry.ts` — minimal Claude aliases exist; expand to expose `resolveModel(aliasOrId, supports?)` returning a `ResolvedModel` with provider + concrete model.
 - [ ] `packages/agents/src/claude-code.ts`:
   - [ ] Detect `claude` CLI in PATH; surface clear `AuthError` if missing.
   - [ ] Spawn with sanitized env: only auth env that the driver requires.
@@ -276,7 +292,7 @@ Wire the primary `claude-code` agent driver with `CLAUDE_CODE_OAUTH_TOKEN` (pref
 - [ ] `packages/cli/src/auth/claude-import.ts`:
   - [ ] Read token from stdin (single line).
   - [ ] Mask and optionally store via `gh secret set`.
-- [ ] Wire both into `packages/cli/src/index.ts` (already routed as stubs).
+- [ ] Wire both into `packages/cli/src/index.ts`; routes currently exist only as stubs and target files are missing.
 
 #### Doctor
 
@@ -886,7 +902,7 @@ Cut after Milestone 9.
 ## Open Questions / Decisions to Revisit
 
 - **Octokit dependency.** Adopt `@octokit/request` (+ paginator) for real API calls when MCP read tools land. Keep `GitHubClient` as the wrapper to preserve test ergonomics.
-- **MCP SDK version pin.** Decide before Milestone 2 commits land; track in `package.json` with `^` only after confidence in stability.
+- **MCP SDK version pin.** Current dependency is `@modelcontextprotocol/sdk@^1.29.0`. Before v0.1, decide whether to pin exactly for action reproducibility or keep `^` for SDK patch uptake.
 - **Prompt versioning.** Once skills land, decide on a per-skill prompt version (e.g., `code-review@v1`) recorded in findings for downstream calibration.
 - **Eval result storage.** Decide whether to commit golden eval outputs or treat them as opt-in fixtures fetched at run time. Recommendation: commit small golden snapshots; fetch large ones on demand.
 
