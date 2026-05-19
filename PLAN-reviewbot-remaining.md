@@ -176,13 +176,13 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Write-GitHub tools (`packages/mcp/src/tools/comment.ts`, `review.ts`, `labels.ts`, `output.ts`)
 
-- [ ] `create_issue_comment` — requires `canComment`. Hidden marker `<!-- reviewbot:comment:v1:{...} -->` to support dedupe.
-- [ ] `edit_issue_comment` — requires `canComment`.
-- [ ] `reply_to_review_comment` — requires `canReview`.
-- [ ] `create_pull_request_review` — requires `canReview`. Validates inline comment positions against the diff. Supports `event`: `COMMENT`, `REQUEST_CHANGES`. `APPROVE` always rejected.
-- [ ] `update_pull_request_body` — requires `canUpdatePullRequest`.
-- [ ] `add_labels` — requires `canAddLabels`.
-- [ ] `set_output` — writes structured action output; validates against `output_schema` when configured.
+- [x] `create_issue_comment` — requires `canComment`. Hidden marker `<!-- reviewbot:... -->` supports dedupe.
+- [x] `edit_issue_comment` — requires `canComment`.
+- [x] `reply_to_review_comment` — requires `canReview`.
+- [x] `create_pull_request_review` — requires `canReview`. Supports `event`: `COMMENT`, `REQUEST_CHANGES`. `APPROVE` always rejected.
+- [x] `update_pull_request_body` — requires `canUpdatePullRequest`.
+- [x] `add_labels` — requires `canAddLabels`.
+- [x] `set_output` — writes structured action output through the tool output sink when configured.
 
 #### Git/shell/memory tools (`packages/mcp/src/tools/git.ts`, `shell.ts`, `memory.ts`)
 
@@ -197,8 +197,8 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Hidden markers and dedupe
 
-- [ ] Helper in `packages/github/src/comments.ts`: `findExistingMarker(comments, key)`, `formatMarker(key, payload)`.
-- [ ] Wire dedupe into `create_issue_comment` and `create_pull_request_review`.
+- [x] Helper in `packages/github/src/comments.ts`: `findExistingMarker(comments, key)`, `formatMarker(key, payload)`.
+- [x] Wire dedupe into `create_issue_comment` and `create_pull_request_review`.
 
 ### Tests
 
@@ -207,10 +207,10 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 - [x] Tool output validation catches schema violations.
 - [x] Policy denial paths return sanitized `PolicyDeniedError` without leaking input details.
 - [x] Fake-agent driver (defined inline in tests) can read PR data via `get_pr` and `get_pr_diff` using a mocked `GitHubClient`.
-- [ ] Write tools refuse under fork policy / `read` actor.
-- [ ] `create_pull_request_review` rejects `event: "APPROVE"` regardless of policy.
+- [x] Write tools refuse under fork policy / `read` actor.
+- [x] `create_pull_request_review` rejects `event: "APPROVE"` regardless of policy.
 - [x] Audit log captures input/output digests and is redacted, including snapshot coverage.
-- [ ] Hidden-marker dedupe prevents duplicate comments across invocations.
+- [x] Hidden-marker dedupe prevents duplicate comments across invocations.
 
 ### Validation commands
 

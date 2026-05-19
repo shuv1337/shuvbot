@@ -42,7 +42,12 @@ export interface ToolContext {
   audit: ToolAuditSink;
   logger?: RunLogger;
   state?: ReviewbotStatePlaceholder;
+  outputs?: ToolOutputSink;
   now?: () => number;
+}
+
+export interface ToolOutputSink {
+  set(name: string, value: unknown): void | Promise<void>;
 }
 
 export interface ToolPolicyRequirement {
