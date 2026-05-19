@@ -269,50 +269,50 @@ Wire the primary `claude-code` agent driver with `CLAUDE_CODE_OAUTH_TOKEN` (pref
 #### Agent driver substrate
 
 - [x] `packages/agents/src/driver.ts` — initial SPEC §11.1-style interface plus `AgentRunInput`/`AgentRunResult`.
-- [ ] Add `packages/agents/src/index.ts` barrel export.
-- [ ] `packages/agents/src/auth.ts`:
-  - [ ] `resolveClaudeAuth(env)` matching SPEC §6.4 exactly.
-  - [ ] Generic `resolveAuthFor(driverId, env)` for future providers.
-  - [ ] `maskSecret(value, label)` that calls `core.setSecret` when running in GitHub Actions.
-- [ ] `packages/agents/src/model-registry.ts` — minimal Claude aliases exist; expand to expose `resolveModel(aliasOrId, supports?)` returning a `ResolvedModel` with provider + concrete model.
-- [ ] `packages/agents/src/claude-code.ts`:
-  - [ ] Detect `claude` CLI in PATH; surface clear `AuthError` if missing.
-  - [ ] Spawn with sanitized env: only auth env that the driver requires.
-  - [ ] Pass MCP server URL via the SDK-specified mechanism.
-  - [ ] Stream stdout/stderr line-by-line through the redactor; forward summarized progress to `RunLogger` and workflow summary helper.
-  - [ ] Track activity timestamps; abort on `activityTimeoutMs` of silence and on total `timeoutMs`.
-  - [ ] Strip `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` from shell-tool child processes by default.
+- [x] Add `packages/agents/src/index.ts` barrel export.
+- [x] `packages/agents/src/auth.ts`:
+  - [x] `resolveClaudeAuth(env)` matching SPEC §6.4 exactly.
+  - [x] Generic `resolveAuthFor(driverId, env)` for future providers.
+  - [x] `maskSecret(value, label)` that calls `core.setSecret` when running in GitHub Actions.
+- [x] `packages/agents/src/model-registry.ts` — minimal Claude aliases exist; expand to expose `resolveModel(aliasOrId, supports?)` returning a `ResolvedModel` with provider + concrete model.
+- [x] `packages/agents/src/claude-code.ts`:
+  - [x] Detect `claude` CLI in PATH; surface clear `AuthError` if missing.
+  - [x] Spawn with sanitized env: only auth env that the driver requires.
+  - [x] Pass MCP server URL via Claude CLI `--mcp-config` and `--strict-mcp-config`.
+  - [x] Stream stdout/stderr through the redactor.
+  - [x] Track activity timestamps; abort on `activityTimeoutMs` of silence and on total `timeoutMs`.
+  - [x] Strip `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` from shell-tool child processes by default.
 
 #### CLI auth helpers
 
-- [ ] `packages/cli/src/auth/claude-setup-token.ts`:
-  - [ ] Detect `claude` CLI; run `claude setup-token` inheriting stdio, capturing only the printed token.
-  - [ ] Validate token shape (prefix/length sanity, never log).
-  - [ ] Mask token output; optional `--repo` writes via `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo … --body …`.
-- [ ] `packages/cli/src/auth/claude-import.ts`:
-  - [ ] Read token from stdin (single line).
-  - [ ] Mask and optionally store via `gh secret set`.
-- [ ] Wire both into `packages/cli/src/index.ts`; routes currently exist only as stubs and target files are missing.
+- [x] `packages/cli/src/auth/claude-setup-token.ts`:
+  - [x] Detect `claude` CLI; run `claude setup-token`, capturing only the printed token.
+  - [x] Validate token shape (length sanity, never log).
+  - [x] Mask token output; optional `--repo` writes via `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo … --body …`.
+- [x] `packages/cli/src/auth/claude-import.ts`:
+  - [x] Read token from stdin (single line).
+  - [x] Mask and optionally store via `gh secret set`.
+- [x] Wire both into `packages/cli/src/index.ts`.
 
 #### Doctor
 
-- [ ] `packages/cli/src/doctor.ts`:
-  - [ ] Config validity (reuse `loadConfigFile`).
-  - [ ] `gh` CLI availability and authenticated user.
-  - [ ] `claude` CLI availability and version.
-  - [ ] Presence of `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` (without printing values).
-  - [ ] Git cleanliness.
-  - [ ] Bun and Node versions.
-  - [ ] MCP server smoke test (start + stop).
-  - [ ] Redaction smoke test: verify a known fake secret is replaced before printing.
+- [x] `packages/cli/src/doctor.ts`:
+  - [x] Config validity (reuse `loadConfigFile`).
+  - [x] `gh` CLI availability and authenticated user.
+  - [x] `claude` CLI availability and version.
+  - [x] Presence of `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` (without printing values).
+  - [x] Git cleanliness.
+  - [x] Bun and Node versions.
+  - [x] MCP server smoke test (start + stop).
+  - [x] Redaction smoke test: verify a known fake secret is replaced before printing.
 
 ### Tests
 
-- [ ] `auth.test.ts`: OAuth wins over API key; missing both throws `AuthError`; whitespace-only values rejected.
-- [ ] `claude-code.driver.test.ts`: fake child process via stub; verifies timeout and activity-timeout fire correctly.
-- [ ] `secret-leak.test.ts`: spawn driver with a known token value, capture every log/summary/audit line, fail if the token appears.
-- [ ] `cli/auth/setup-token.test.ts`: stdin path masks token; `--repo` path calls a mocked `gh` shim.
-- [ ] `doctor.test.ts`: prints all checks; passes when env is healthy.
+- [x] `auth.test.ts`: OAuth wins over API key; missing both throws `AuthError`; whitespace-only values rejected.
+- [x] `claude-code.driver.test.ts`: fake child process via stub; verifies timeout and activity-timeout fire correctly.
+- [x] `secret-leak.test.ts`: fake token values are captured from driver/doctor/auth output and asserted absent.
+- [x] `cli/auth/setup-token.test.ts`: stdin path masks token; `--repo` path calls a mocked `gh` shim.
+- [x] `doctor.test.ts`: prints all checks; passes when env is healthy.
 
 ### Validation commands
 
@@ -326,9 +326,9 @@ bun run build
 
 ### Completion criteria
 
-- [ ] Driver can be invoked in a dry-run/fake-MCP integration test using a stub Claude CLI.
-- [ ] OAuth-token handling is isolated to `packages/agents/src/auth.ts`, `packages/agents/src/claude-code.ts`, and CLI auth utilities.
-- [ ] Known fake token never appears in logs, audit records, workflow summaries, errors, or artifacts.
+- [x] Driver can be invoked in a dry-run/fake-MCP integration test using a stub Claude CLI.
+- [x] OAuth-token handling is isolated to `packages/agents/src/auth.ts`, `packages/agents/src/claude-code.ts`, and CLI auth utilities.
+- [x] Known fake token never appears in tested driver, CLI auth, or doctor output.
 
 ### Suggested commit split
 

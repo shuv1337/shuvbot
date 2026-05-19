@@ -6,10 +6,19 @@ export interface AgentContext {
 
 export interface AgentRunInput {
   prompt: string;
+  systemPrompt?: string;
+  mcpServerUrl?: string;
+  cwd: string;
+  model?: string;
+  timeoutMs: number;
+  activityTimeoutMs: number;
+  env: Record<string, string | undefined>;
 }
 
 export interface AgentRunResult {
-  summary: string;
+  success: boolean;
+  output?: string;
+  error?: string;
 }
 
 export interface AgentDriver {

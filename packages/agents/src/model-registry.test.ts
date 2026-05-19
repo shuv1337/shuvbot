@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveModelId } from "./model-registry.ts";
+import { resolveModel, resolveModelId } from "./model-registry.ts";
 
 describe("model registry", () => {
   test("resolves minimal Claude aliases", () => {
@@ -13,5 +13,6 @@ describe("model registry", () => {
       provider: "direct",
       model: "provider/model-id"
     });
+    expect(resolveModel("provider/model-id").model).toBe("provider/model-id");
   });
 });

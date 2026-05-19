@@ -4,6 +4,8 @@ export interface ModelAlias {
   model: string;
 }
 
+export type ResolvedModel = ModelAlias;
+
 export const MODEL_ALIASES: Record<string, ModelAlias> = {
   "claude/sonnet": {
     slug: "claude/sonnet",
@@ -19,4 +21,8 @@ export const MODEL_ALIASES: Record<string, ModelAlias> = {
 
 export function resolveModelId(value: string): ModelAlias {
   return MODEL_ALIASES[value] ?? { slug: value, provider: "direct", model: value };
+}
+
+export function resolveModel(value: string): ResolvedModel {
+  return resolveModelId(value);
 }
