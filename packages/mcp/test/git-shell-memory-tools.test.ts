@@ -102,7 +102,7 @@ describe("git, shell, and memory MCP tools", () => {
       }
     });
     await expect(executeTool(runShellTool, { command: "echo hi" }, allowedContext)).rejects.toThrow(
-      "disabled until the restricted shell sandbox is implemented"
+      "restricted shell requires Docker"
     );
     await expect(
       executeTool(killBackgroundProcessTool, { processId: "proc-1" }, allowedContext)

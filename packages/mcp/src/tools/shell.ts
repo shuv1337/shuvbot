@@ -1,5 +1,5 @@
-import { ToolExecutionError } from "../../../core/src/errors.ts";
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
+import { assertDockerSandboxAvailable, filterShellEnv } from "./shell-sandbox.ts";
 
 interface RunShellInput {
   command: string;
@@ -37,12 +37,18 @@ const ANY_OBJECT_SCHEMA = {
 
 export const runShellTool: ToolSpec<RunShellInput, Record<string, unknown>> = {
   name: "run_shell",
-  description: "Represent restricted shell execution. Fails closed until the sandbox lands.",
+  description: "Represent restricted shell execution through a Docker sandbox. Fails closed when Docker is unavailable.",
   inputSchema: RUN_SHELL_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { shell: "restricted" },
-  handler() {
-    throw new ToolExecutionError("run_shell is disabled until the restricted shell sandbox is implemented");
+  handler(_input) {
+    const dockerPath = process.env.REVIEWBOT_DOCKER_PATH;
+    assertDockerSandboxAvailable(dockerPath ? { dockerPath } : {});
+    return {
+      executed: false,
+      env: filterShellEnv(process.env),
+      reason: "Docker sandbox command execution is not enabled in this scaffold"
+    };
   }
 };
 

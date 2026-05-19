@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
 import type { ActorPermission } from "../../../core/src/policy.ts";
+import { assertReviewbotBranchName } from "../../../github/src/branches.ts";
 import type { ToolContext, ToolSchema, ToolSpec } from "../tool-spec.ts";
 import { requireCwd } from "./shared.ts";
 
@@ -226,7 +227,9 @@ function assertWriteActor(actorPermission: ActorPermission): void {
 }
 
 function assertReviewbotBranch(branch: string): void {
-  if (!branch.startsWith("reviewbot/")) {
+  try {
+    assertReviewbotBranchName(branch);
+  } catch {
     throw new ToolExecutionError("git write branch must start with reviewbot/");
   }
 }
