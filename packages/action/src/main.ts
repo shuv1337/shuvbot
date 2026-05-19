@@ -30,6 +30,9 @@ import { createFakeReviewAgent, runReview } from "../../core/src/review-runner.t
 import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
 import { runImplement } from "../../core/src/implement-runner.ts";
 import { createOrFastForwardReviewbotBranch } from "../../github/src/branches.ts";
+import { parseDurationMs, runFixCiLoop } from "../../core/src/fix-ci.ts";
+import { fetchCheckLog, findFailedCheckRuns } from "../../github/src/checks.ts";
+import { DefaultRedactor } from "../../core/src/redaction.ts";
 
 export async function main(): Promise<void> {
   const logger = new RunLogger();
@@ -212,6 +215,36 @@ export async function main(): Promise<void> {
       JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+    return;
+  }
+
+  if (mode === "fix-ci" && event?.kind === "workflow_run" && client && policy) {
+    const repo = { owner: event.repo.owner, name: event.repo.name };
+    const failedRuns = await findFailedCheckRuns(client, repo, event.headSha);
+    const redactor = new DefaultRedactor();
+    const logs = await Promise.all(
+      failedRuns.map((run) => fetchCheckLog({ client, repo, runId: run.id, maxBytes: 16_384, redactor }))
+    );
+    const fix = await runFixCiLoop({
+      policy,
+      logs,
+      maxAttempts: config.fixCi.maxAttempts,
+      maxRuntimeMs: parseDurationMs(config.fixCi.maxRuntime),
+      now: () => Date.now(),
+      agent: {
+        async run() {
+          return {
+            summary: "Diagnosed failed checks; real patch execution is handled by the implementation driver path.",
+            commandsRun: [],
+            checks: failedRuns.map((run) => `${run.name}: ${run.conclusion}`),
+            commits: []
+          };
+        }
+      }
+    });
+    core.setOutput("summary", fix.summary);
+    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: fix.status, mode, attempts: fix.attempts }));
+    await writeWorkflowSummary(completeRunRecord(withPolicy, fix.status === "completed" ? "success" : "failure"));
     return;
   }
 

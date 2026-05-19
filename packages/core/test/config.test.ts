@@ -20,6 +20,11 @@ push = "disabled"
 allow_commands = ["bun", "git"]
 deny_commands = ["sudo"]
 
+[fix_ci]
+max_attempts = 2
+max_runtime = "30m"
+rerun_checks = false
+
 [paths]
 include = ["packages/**/*.ts"]
 ignore = ["dist/**"]
@@ -38,6 +43,7 @@ pr_summaries = true
     expect(config.requestChanges).toBe(true);
     expect(config.shellSandbox.allowCommands).toEqual(["bun", "git"]);
     expect(config.shellSandbox.denyCommands).toEqual(["sudo"]);
+    expect(config.fixCi).toEqual({ maxAttempts: 2, maxRuntime: "30m", rerunChecks: false });
     expect(config.paths.include).toEqual(["packages/**/*.ts"]);
     expect(config.memory.learnings).toBe(false);
   });

@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 117 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 121 tests passing.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -595,31 +595,31 @@ Diagnose failed checks, patch, validate locally when allowed, push fixes to `rev
 
 ### Tasks
 
-- [ ] `packages/github/src/checks.ts`:
-  - [ ] `findFailedCheckRuns(client, ref)`.
-  - [ ] `fetchCheckLog(client, runId, maxBytes)` with compression/truncation.
-- [ ] Treat all check log content as untrusted (label in context assembly).
-- [ ] `packages/core/src/fix-ci.ts`:
-  - [ ] `summarizeFailures(logs)` prompt template.
-  - [ ] `runFixCiLoop({ policy, config, maxAttempts, maxRuntime })` orchestrating: diagnose → patch → tests (if allowed) → commit → push → re-check.
-- [ ] Config block:
+- [x] `packages/github/src/checks.ts`:
+  - [x] `findFailedCheckRuns(client, ref)`.
+  - [x] `fetchCheckLog(client, runId, maxBytes)` with compression/truncation.
+- [x] Treat all check log content as untrusted (label in context assembly).
+- [x] `packages/core/src/fix-ci.ts`:
+  - [x] `summarizeFailures(logs)` prompt template.
+  - [x] `runFixCiLoop({ policy, config, maxAttempts, maxRuntime })` orchestrating: diagnose → patch → tests (if allowed) → commit → push → re-check.
+- [x] Config block:
   ```toml
   [fixCi]
   maxAttempts = 3
   maxRuntime = "90m"
   rerunChecks = true
   ```
-- [ ] Enforce attempt and runtime budgets; on exhaustion, post a structured summary of what was tried.
-- [ ] Only commit/push to `reviewbot/*` branches.
+- [x] Enforce attempt and runtime budgets; on exhaustion, post a structured summary of what was tried.
+- [x] Only commit/push to `reviewbot/*` branches.
 
 ### Tests
 
-- [ ] Failed check logs fetched, truncated, and redacted.
-- [ ] Log content cannot mutate runtime policy.
-- [ ] Attempt budget enforced.
-- [ ] Runtime budget enforced.
-- [ ] Exhaustion summary includes attempted fixes and useful next steps.
-- [ ] Push remains disabled for fork/untrusted contexts.
+- [x] Failed check logs fetched, truncated, and redacted.
+- [x] Log content cannot mutate runtime policy.
+- [x] Attempt budget enforced.
+- [x] Runtime budget enforced.
+- [x] Exhaustion summary includes attempted fixes and useful next steps.
+- [x] Push remains disabled for fork/untrusted contexts.
 
 ### Validation commands
 
@@ -631,8 +631,8 @@ bun run build
 
 ### Completion criteria
 
-- [ ] `fix-ci` runs against a fixture set with a fake agent and emits a structured summary.
-- [ ] Budgets covered by tests.
+- [x] `fix-ci` runs against a fixture set with a fake agent and emits a structured summary.
+- [x] Budgets covered by tests.
 
 ### Suggested commit split
 

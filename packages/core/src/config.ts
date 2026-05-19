@@ -32,6 +32,11 @@ export interface ReviewbotConfig {
     allowCommands: string[];
     denyCommands: string[];
   };
+  fixCi: {
+    maxAttempts: number;
+    maxRuntime: string;
+    rerunChecks: boolean;
+  };
   paths: {
     include: string[];
     ignore: string[];
@@ -60,6 +65,11 @@ export const DEFAULT_CONFIG: ReviewbotConfig = {
   shellSandbox: {
     allowCommands: [],
     denyCommands: ["sudo", "su", "docker", "podman"]
+  },
+  fixCi: {
+    maxAttempts: 3,
+    maxRuntime: "90m",
+    rerunChecks: true
   },
   paths: {
     include: ["**/*"],
@@ -93,6 +103,8 @@ const TOP_LEVEL_KEYS = new Set([
   "shell",
   "shellSandbox",
   "shell_sandbox",
+  "fixCi",
+  "fix_ci",
   "push",
   "paths",
   "memory",
@@ -165,6 +177,14 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
     config.paths.ignore = globList(paths.ignore, "paths.ignore", config.paths.ignore);
   }
 
+  const fixCiRaw = raw.fixCi ?? raw.fix_ci;
+  if (fixCiRaw !== undefined) {
+    const fixCi = assertRecord(fixCiRaw, "fix_ci");
+    config.fixCi.maxAttempts = integerValue(fixCi.maxAttempts ?? fixCi.max_attempts, "fix_ci.max_attempts", config.fixCi.maxAttempts);
+    config.fixCi.maxRuntime = stringValue(fixCi.maxRuntime ?? fixCi.max_runtime, "fix_ci.max_runtime", config.fixCi.maxRuntime);
+    config.fixCi.rerunChecks = booleanValue(fixCi.rerunChecks ?? fixCi.rerun_checks, "fix_ci.rerun_checks", config.fixCi.rerunChecks);
+  }
+
   if (raw.memory !== undefined) {
     const memory = assertRecord(raw.memory, "memory");
     config.memory.enabled = booleanValue(memory.enabled, "memory.enabled", config.memory.enabled);
@@ -218,6 +238,12 @@ function booleanValue(value: unknown, field: string, fallback: boolean): boolean
   if (value === undefined) return fallback;
   if (typeof value === "boolean") return value;
   throw new ConfigError(`${field} must be a boolean.`);
+}
+
+function integerValue(value: unknown, field: string, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  throw new ConfigError(`${field} must be a positive integer.`);
 }
 
 function globList(value: unknown, field: string, fallback: string[]): string[] {
