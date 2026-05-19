@@ -359,9 +359,9 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 #### Diff and context
 
 - [ ] `packages/github/src/diff.ts`:
-  - [ ] `fetchPullRequestDiff(client, pr)` — returns raw diff and parsed hunks via a simple unified-diff parser.
-  - [ ] `mapDiffPositions(hunks)` — produces a `Map<string, DiffPosition[]>` keyed by path.
-  - [ ] `isCommentableLine(positions, path, line)` — used by review tool.
+  - [x] `fetchPullRequestDiff(client, pr)` — returns raw diff and parsed hunks via a simple unified-diff parser.
+  - [x] `mapDiffPositions(hunks)` — produces a `Map<string, DiffPosition[]>` keyed by path.
+  - [x] `isCommentableLine(positions, path, line)` — used by review tool.
 - [ ] `packages/core/src/context/assembler.ts`:
   - [ ] `assembleReviewContext({ event, repo, diff, files, repoInstructions, prSummary?, learnings? })` returning labeled L0–L10 sections.
   - [ ] `loadRepoInstructions(cwd)` scanning for `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`.
@@ -373,10 +373,10 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 #### Review schema and pipeline
 
 - [ ] `packages/core/src/review-schema.ts`:
-  - [ ] `ReviewFinding` type (SPEC §13.1) plus Ajv schema constant.
-  - [ ] `parseFindings(raw)` returning `{ findings: ReviewFinding[]; errors: string[] }`.
+  - [x] `ReviewFinding` type (SPEC §13.1) plus validation helper.
+  - [x] `parseFindings(raw)` returning `{ findings: ReviewFinding[]; errors: string[] }`.
 - [ ] `packages/core/src/review-pipeline.ts`:
-  - [ ] `runReviewPipeline({ candidates, policy, config, diffPositions })`:
+  - [x] `runReviewPipeline({ candidates, policy, config, diffPositions })`:
     - parse + validate
     - apply `minConfidence`, `reportOn`, `maxFindings`, `maxInlineFindings`
     - dedupe by `(path, lineRange, skill, normalizedTitle)`
@@ -406,12 +406,12 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 
 ### Tests
 
-- [ ] Diff parser maps added/modified/deleted lines correctly across small and multi-hunk fixtures.
+- [x] Diff parser maps added/modified/deleted lines correctly across small and multi-hunk fixtures.
 - [ ] Diff position mapping rejects out-of-range line comments.
-- [ ] Pipeline drops findings below `minConfidence`/`reportOn` thresholds.
-- [ ] `maxInlineFindings` and `maxFindings` budgets enforced; overflow folded into summary.
-- [ ] Dedupe merges findings with same `(path, lineRange, skill, normalizedTitle)`.
-- [ ] High-severity finding without inline mapping falls back to summary, never dropped silently.
+- [x] Pipeline drops findings below `minConfidence`/`reportOn` thresholds.
+- [x] `maxInlineFindings` and `maxFindings` budgets enforced; overflow folded into summary.
+- [x] Dedupe merges findings with same `(path, lineRange, skill, normalizedTitle)`.
+- [x] High-severity finding without inline mapping falls back to summary, never dropped silently.
 - [ ] Review mode under fork policy never tries to push or comment beyond review.
 - [ ] Hidden markers prevent reposting identical findings on a synchronize event.
 - [ ] Context manifest lists every section with byte sizes and `untrusted` flags.
