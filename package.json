@@ -11,6 +11,7 @@
     "test": "bun test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "evals": "bun packages/evals/src/harness.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

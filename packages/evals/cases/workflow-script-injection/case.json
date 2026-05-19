@@ -1,0 +1,1 @@
+{"id":"workflow-script-injection","expected":["workflow-security"],"description":"Detect untrusted workflow script execution."}

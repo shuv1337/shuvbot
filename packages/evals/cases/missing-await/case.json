@@ -1,0 +1,1 @@
+{"id":"missing-await","expected":["code-review"],"description":"Detect missing await on a promise."}

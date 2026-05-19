@@ -1,0 +1,1 @@
+{"id":"command-injection","expected":["security-review"],"description":"Detect command injection."}

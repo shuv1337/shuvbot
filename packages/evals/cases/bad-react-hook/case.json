@@ -1,0 +1,1 @@
+{"id":"bad-react-hook","expected":["code-review"],"description":"Detect React hook misuse."}

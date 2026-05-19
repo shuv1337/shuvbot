@@ -1,0 +1,1 @@
+{"id":"incorrect-permission-check","expected":["security-review"],"description":"Detect incorrect permission logic."}

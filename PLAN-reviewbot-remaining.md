@@ -14,7 +14,7 @@ The original spec lives in `SPEC.md`. The historical task-by-task plan lives in 
 - Milestone 2 tool surfaces are implemented through conservative git/shell/memory stubs; concrete review pipeline integration remains ahead.
 - Milestone 3 is partially scaffolded: agent driver interfaces, minimal Claude model aliases, CLI command routing stubs, and placeholder agent modules exist. Auth resolution, setup-token/import helpers, real Claude Code process execution, doctor checks, and secret-leak tests remain open.
 - Repo layout under `packages/`: `action/`, `core/`, `github/`, `mcp/`, `agents/`, `cli/`, `evals/`. User-facing docs currently live at repo-level `docs/`.
-- Latest validation during this refresh: `bun run typecheck`, `bun test`, `bun run lint`, and `bun run build` green; 125 tests passing.
+- Latest validation during this refresh: `bun run typecheck`, `bun run lint`, `bun test`, `bun run build`, and `bun run evals` green; 127 tests passing and evals 17/17.
 
 ## Cross-Cutting Invariants (do not regress)
 
@@ -711,41 +711,41 @@ Secure v0 release with prompt-injection tests, fork-PR fixtures, eval cases, com
 
 #### Fixtures and evals
 
-- [ ] `fixtures/events/`:
-  - [ ] `pull_request.opened.json`
-  - [ ] `pull_request.synchronize.json`
-  - [ ] `issue_comment.mention.json`
-  - [ ] `review_comment.mention.json`
-  - [ ] `workflow_dispatch.json`
-  - [ ] `check_suite.completed.failed.json`
-  - [ ] `workflow_run.completed.failure.json`
-- [ ] `packages/evals/src/harness.ts` + `replay-github-event.ts` + `score.ts`.
-- [ ] `packages/evals/cases/`:
-  - [ ] `security-sql-injection/`
-  - [ ] `workflow-script-injection/`
-  - [ ] `broken-test/`
-  - [ ] `missing-await/`
-  - [ ] `bad-react-hook/`
-  - [ ] `unsafe-regex/`
-  - [ ] `incorrect-permission-check/`
-  - [ ] `path-traversal/`
-  - [ ] `command-injection/`
-  - [ ] `overbroad-github-token/`
-- [ ] `EvalScore` (SPEC §26.5) implemented and reported in summary tables.
-- [ ] `bun run evals` script wired in `package.json`.
+- [x] `fixtures/events/`:
+  - [x] `pull_request.opened.json`
+  - [x] `pull_request.synchronize.json`
+  - [x] `issue_comment.mention.json`
+  - [x] `review_comment.mention.json`
+  - [x] `workflow_dispatch.json`
+  - [x] `check_suite.completed.failed.json`
+  - [x] `workflow_run.completed.failure.json`
+- [x] `packages/evals/src/harness.ts` + `replay-github-event.ts` + `score.ts`.
+- [x] `packages/evals/cases/`:
+  - [x] `security-sql-injection/`
+  - [x] `workflow-script-injection/`
+  - [x] `broken-test/`
+  - [x] `missing-await/`
+  - [x] `bad-react-hook/`
+  - [x] `unsafe-regex/`
+  - [x] `incorrect-permission-check/`
+  - [x] `path-traversal/`
+  - [x] `command-injection/`
+  - [x] `overbroad-github-token/`
+- [x] `EvalScore` (SPEC §26.5) implemented and reported in summary tables.
+- [x] `bun run evals` script wired in `package.json`.
 
 #### Red-team tests
 
-- [ ] PR/issue/comment bodies that attempt prompt injection (SPEC §26.6).
-- [ ] Assertions:
-  - [ ] No secrets surfaced in any output.
-  - [ ] Policy unchanged.
-  - [ ] No shell/push escalation.
-  - [ ] No approval.
+- [x] PR/issue/comment bodies that attempt prompt injection (SPEC §26.6).
+- [x] Assertions:
+  - [x] No secrets surfaced in any output.
+  - [x] Policy unchanged.
+  - [x] No shell/push escalation.
+  - [x] No approval.
 
 #### CLI
 
-- [ ] `packages/cli/src/replay.ts` — replay any fixture against the local runtime in `--dry-run` mode.
+- [x] `packages/cli/src/replay.ts` — replay any fixture against the local runtime in `--dry-run` mode.
 
 #### Docs and examples
 

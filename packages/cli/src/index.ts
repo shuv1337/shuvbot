@@ -5,6 +5,7 @@ import { runDoctor } from "./doctor.ts";
 import { runClaudeSetupToken } from "./auth/claude-setup-token.ts";
 import { runClaudeImport } from "./auth/claude-import.ts";
 import { runLocalReview } from "./local-review.ts";
+import { runReplay } from "./replay.ts";
 
 const [, , ...args] = process.argv;
 
@@ -34,7 +35,12 @@ async function run(): Promise<void> {
     await runDoctor({ stdout: process.stdout });
     return;
   }
-  if (command === "replay") return stub("reviewbot replay");
+  if (command === "replay") {
+    const fixture = optionValue(args, "--fixture") ?? args[1];
+    if (!fixture) throw new ConfigError("reviewbot replay requires --fixture <path>.");
+    await runReplay({ fixture, dryRun: args.includes("--dry-run"), stdout: process.stdout });
+    return;
+  }
   if (command === "auth" && subcommand === "claude" && args[2] === "setup-token") {
     runClaudeSetupToken({ ...parseRepoSecretArgs(args.slice(3)), stdout: process.stdout });
     return;

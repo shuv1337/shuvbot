@@ -1,0 +1,1 @@
+{"id":"unsafe-regex","expected":["security-review"],"description":"Detect catastrophic backtracking risk."}

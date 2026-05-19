@@ -1,0 +1,1 @@
+{"id":"path-traversal","expected":["security-review"],"description":"Detect path traversal."}
