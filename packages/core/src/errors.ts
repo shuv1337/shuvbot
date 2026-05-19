@@ -56,3 +56,9 @@ export class ReviewPostingError extends ReviewbotError {
     super(message, "REVIEW_POSTING_ERROR", options);
   }
 }
+
+export class ToolExecutionError extends ReviewbotError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, "TOOL_EXECUTION_ERROR", options);
+  }
+}

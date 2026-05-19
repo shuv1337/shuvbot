@@ -4,6 +4,8 @@ export interface GitHubRequestOptions {
   method?: GitHubMethod;
   params?: Record<string, unknown>;
   body?: unknown;
+  headers?: Record<string, string>;
+  responseType?: "json" | "text";
 }
 
 export interface GitHubResponse<T = unknown> {
@@ -33,22 +35,24 @@ export function createGitHubClient(input: CreateGitHubClientInput): GitHubClient
     async request<T = unknown>(route: string, options: GitHubRequestOptions = {}): Promise<GitHubResponse<T>> {
       const { method, path } = parseRoute(route, options.method ?? "GET");
       const url = applyParams(`${baseUrl}${path}`, options.params, method === "GET" ? "query" : "path");
+      const headers: Record<string, string> = {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${input.token}`,
+        "user-agent": userAgent,
+        "x-github-api-version": "2022-11-28",
+        ...options.headers
+      };
       const init: RequestInit = {
         method,
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${input.token}`,
-          "user-agent": userAgent,
-          "x-github-api-version": "2022-11-28"
-        }
+        headers
       };
       if (options.body !== undefined && method !== "GET") {
-        (init.headers as Record<string, string>)["content-type"] = "application/json";
+        headers["content-type"] = "application/json";
         init.body = JSON.stringify(options.body);
       }
       const response = await fetchImpl(url, init);
       const text = await response.text();
-      const data = text.length > 0 ? (JSON.parse(text) as T) : ({} as T);
+      const data = (options.responseType === "text" ? text : text.length > 0 ? JSON.parse(text) : {}) as T;
       if (!response.ok) {
         const message =
           data && typeof data === "object" && "message" in (data as Record<string, unknown>)

@@ -162,17 +162,17 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Read-context tools (`packages/mcp/src/tools/pr.ts`, `issue.ts`, `files.ts`, `checks.ts`)
 
-- [ ] Replace placeholder exports in `packages/mcp/src/tools/*.ts` with real tool specs.
-- [ ] `get_pr` — returns SPEC `PullRequestSummary` plus `mergeable`, `mergeStateStatus`, `labels`.
-- [ ] `get_pr_diff` — fetches diff via `application/vnd.github.v3.diff`. Optional `maxBytes` truncates with a tail marker.
-- [ ] `get_pr_files` — paginates `/pulls/{n}/files`. Returns minimal file objects: `filename`, `status`, `additions`, `deletions`, `patch`.
-- [ ] `get_issue` — issue title/body/state/labels.
-- [ ] `get_issue_comments` — paginated comments.
-- [ ] `get_review_comments` — paginated review comments with `position` data.
-- [ ] `get_check_runs` — paginated check runs for a ref.
-- [ ] `get_check_logs` — downloads check-run logs (gated by `canReadChecks`).
-- [ ] `search_repo` — wraps GitHub `search/code`. Bounded result count.
-- [ ] `read_file` — checks out path inside `cwd`, returns up to N bytes. Refuses paths escaping `cwd`.
+- [x] Replace placeholder exports in read-context `packages/mcp/src/tools/*.ts` with real tool specs.
+- [x] `get_pr` — returns SPEC `PullRequestSummary` plus `mergeable`, `mergeStateStatus`, `labels`.
+- [x] `get_pr_diff` — fetches diff via `application/vnd.github.v3.diff`. Optional `maxBytes` truncates with a tail marker.
+- [x] `get_pr_files` — paginates `/pulls/{n}/files`. Returns minimal file objects: `filename`, `status`, `additions`, `deletions`, `patch`.
+- [x] `get_issue` — issue title/body/state/labels.
+- [x] `get_issue_comments` — paginated comments.
+- [x] `get_review_comments` — paginated review comments with `position` data.
+- [x] `get_check_runs` — paginated check runs for a ref.
+- [x] `get_check_logs` — downloads check-run logs (gated by `canReadChecks`).
+- [x] `search_repo` — wraps GitHub `search/code`. Bounded result count.
+- [x] `read_file` — checks out path inside `cwd`, returns up to N bytes. Refuses paths escaping `cwd`.
 
 #### Write-GitHub tools (`packages/mcp/src/tools/comment.ts`, `review.ts`, `labels.ts`, `output.ts`)
 
@@ -206,7 +206,7 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 - [x] Tool input validation rejects malformed payloads.
 - [x] Tool output validation catches schema violations.
 - [x] Policy denial paths return sanitized `PolicyDeniedError` without leaking input details.
-- [ ] Fake-agent driver (defined inline in tests) can read PR data via `get_pr` and `get_pr_diff` using a mocked `GitHubClient`.
+- [x] Fake-agent driver (defined inline in tests) can read PR data via `get_pr` and `get_pr_diff` using a mocked `GitHubClient`.
 - [ ] Write tools refuse under fork policy / `read` actor.
 - [ ] `create_pull_request_review` rejects `event: "APPROVE"` regardless of policy.
 - [x] Audit log captures input/output digests and is redacted, including snapshot coverage.

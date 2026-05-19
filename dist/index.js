@@ -971,22 +971,24 @@ function createGitHubClient(input) {
     async request(route, options = {}) {
       const { method, path } = parseRoute(route, options.method ?? "GET");
       const url = applyParams(`${baseUrl}${path}`, options.params, method === "GET" ? "query" : "path");
+      const headers = {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${input.token}`,
+        "user-agent": userAgent,
+        "x-github-api-version": "2022-11-28",
+        ...options.headers
+      };
       const init = {
         method,
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${input.token}`,
-          "user-agent": userAgent,
-          "x-github-api-version": "2022-11-28"
-        }
+        headers
       };
       if (options.body !== void 0 && method !== "GET") {
-        init.headers["content-type"] = "application/json";
+        headers["content-type"] = "application/json";
         init.body = JSON.stringify(options.body);
       }
       const response = await fetchImpl(url, init);
       const text = await response.text();
-      const data = text.length > 0 ? JSON.parse(text) : {};
+      const data = options.responseType === "text" ? text : text.length > 0 ? JSON.parse(text) : {};
       if (!response.ok) {
         const message = data && typeof data === "object" && "message" in data ? String(data.message) : response.statusText;
         throw new GitHubRequestError(`GitHub request failed (${response.status}): ${message}`, response.status, data);
