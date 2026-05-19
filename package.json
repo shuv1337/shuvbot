@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "release": "bun scripts/release.ts",
     "test": "bun test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

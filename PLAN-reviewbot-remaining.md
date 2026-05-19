@@ -749,22 +749,22 @@ Secure v0 release with prompt-injection tests, fork-PR fixtures, eval cases, com
 
 #### Docs and examples
 
-- [ ] Fully populate:
-  - [ ] `README.md` with secure quickstart and badge-ready snippet.
-  - [ ] `docs/config.md` — TOML reference and resolution order.
-  - [ ] `docs/security.md` — policy, fork PR, secrets, sandbox, `pull_request_target` guidance.
-  - [ ] `docs/workflows.md` — automatic review, mention bot, structured output, CI repair.
-  - [ ] `docs/commands.md` — command list and mapping.
-  - [ ] `docs/claude-token.md` — `claude setup-token` lifecycle.
-  - [ ] `docs/troubleshooting.md` — auth, perm, mapping, output failures.
-- [ ] Every workflow example uses explicit job-level `permissions` and pins third-party actions.
-- [ ] Add SHA-pinned variants of example workflows under `docs/workflows.md`.
+- [x] Fully populate:
+  - [x] `README.md` with secure quickstart and badge-ready snippet.
+  - [x] `docs/config.md` — TOML reference and resolution order.
+  - [x] `docs/security.md` — policy, fork PR, secrets, sandbox, `pull_request_target` guidance.
+  - [x] `docs/workflows.md` — automatic review, mention bot, structured output, CI repair.
+  - [x] `docs/commands.md` — command list and mapping.
+  - [x] `docs/claude-token.md` — `claude setup-token` lifecycle.
+  - [x] `docs/troubleshooting.md` — auth, perm, mapping, output failures.
+- [x] Every workflow example uses explicit job-level `permissions` and pins third-party actions.
+- [x] Add SHA-pinned variants of example workflows under `docs/workflows.md`.
 
 #### Release engineering
 
-- [ ] Release checklist automation script (`scripts/release.ts`) that verifies build/test/typecheck/lint, regenerates `dist/index.js`, and prints a checklist.
-- [ ] Tag plan: `v0.1.0`, moving `v0`; reserve `v1` for future.
-- [ ] Optional SBOM via `bun audit` placeholder.
+- [x] Release checklist automation script (`scripts/release.ts`) that verifies build/test/typecheck/lint, regenerates `dist/index.js`, and prints a checklist.
+- [x] Tag plan: `v0.1.0`, moving `v0`; reserve `v1` for future.
+- [x] Optional SBOM via `bun audit` placeholder.
 
 ### Validation commands
 
@@ -779,12 +779,12 @@ bun run evals   # after harness lands
 
 ### Completion criteria
 
-- [ ] Build, typecheck, lint, tests all green.
-- [ ] Evals pass or regressions accepted explicitly.
-- [ ] Redaction tests pass.
-- [ ] Fork-PR policy tests pass.
-- [ ] `action.yml` points to a fresh compiled `dist/index.js`.
-- [ ] Docs cover config, security, workflows, commands, Claude token, troubleshooting.
+- [x] Build, typecheck, lint, tests all green.
+- [x] Evals pass or regressions accepted explicitly.
+- [x] Redaction tests pass.
+- [x] Fork-PR policy tests pass.
+- [x] `action.yml` points to a fresh compiled `dist/index.js`.
+- [x] Docs cover config, security, workflows, commands, Claude token, troubleshooting.
 
 ### Suggested commit split
 
