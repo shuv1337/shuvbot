@@ -2662,7 +2662,7 @@ var STREAMABLE_HTTP_STATELESS_OPTIONS = {
 
 // packages/mcp/src/tools/shared.ts
 import { readFile as readFile3 } from "fs/promises";
-import { resolve, relative as relative2, isAbsolute } from "path";
+import { resolve, relative as relative2, isAbsolute, sep, basename } from "path";
 function requireClient(context) {
   if (!context.client) throw new ToolExecutionError("MCP tool requires a GitHub client");
   return context.client;
@@ -2693,6 +2693,7 @@ async function readWorkspaceFile(context, filePath, maxBytes) {
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
     throw new ToolExecutionError("read_file path escapes the workspace");
   }
+  assertWorkspaceReadAllowed(relativePath);
   const content = await readFile3(resolved, "utf8");
   const bounded = boundedString(content, maxBytes);
   return {
@@ -2701,6 +2702,14 @@ async function readWorkspaceFile(context, filePath, maxBytes) {
     truncated: bounded.truncated,
     bytes: bounded.bytes
   };
+}
+function assertWorkspaceReadAllowed(relativePath) {
+  const segments = relativePath.split(sep).filter(Boolean);
+  const fileName = basename(relativePath).toLowerCase();
+  const lowerSegments = segments.map((segment) => segment.toLowerCase());
+  if (lowerSegments.includes(".git") || lowerSegments.includes(".aws") || lowerSegments.includes(".ssh") || fileName === ".env" || fileName.startsWith(".env.") || fileName === ".npmrc" || fileName === ".netrc" || fileName.includes("credentials")) {
+    throw new ToolExecutionError(`read_file refuses credential-bearing path: ${relativePath}`);
+  }
 }
 function asRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};

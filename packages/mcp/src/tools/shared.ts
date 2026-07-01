@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve, relative, isAbsolute } from "node:path";
+import { resolve, relative, isAbsolute, sep, basename } from "node:path";
 import type { GitHubClient } from "../../../github/src/octokit.ts";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
 import type { ToolContext, ToolSchema } from "../tool-spec.ts";
@@ -58,6 +58,7 @@ export async function readWorkspaceFile(
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
     throw new ToolExecutionError("read_file path escapes the workspace");
   }
+  assertWorkspaceReadAllowed(relativePath);
   const content = await readFile(resolved, "utf8");
   const bounded = boundedString(content, maxBytes);
   return {
@@ -66,6 +67,24 @@ export async function readWorkspaceFile(
     truncated: bounded.truncated,
     bytes: bounded.bytes
   };
+}
+
+function assertWorkspaceReadAllowed(relativePath: string): void {
+  const segments = relativePath.split(sep).filter(Boolean);
+  const fileName = basename(relativePath).toLowerCase();
+  const lowerSegments = segments.map((segment) => segment.toLowerCase());
+  if (
+    lowerSegments.includes(".git") ||
+    lowerSegments.includes(".aws") ||
+    lowerSegments.includes(".ssh") ||
+    fileName === ".env" ||
+    fileName.startsWith(".env.") ||
+    fileName === ".npmrc" ||
+    fileName === ".netrc" ||
+    fileName.includes("credentials")
+  ) {
+    throw new ToolExecutionError(`read_file refuses credential-bearing path: ${relativePath}`);
+  }
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {

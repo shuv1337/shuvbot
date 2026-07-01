@@ -163,6 +163,28 @@ describe("read-context MCP tools", () => {
     );
   });
 
+  test("read_file refuses credential-bearing workspace paths", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-mcp-"));
+    await mkdir(join(cwd, ".git"));
+    await mkdir(join(cwd, "src"));
+    await writeFile(join(cwd, ".git", "config"), "token");
+    await writeFile(join(cwd, ".env"), "SECRET=value");
+    await writeFile(join(cwd, "src", "a.txt"), "hello world");
+    const toolContext = context({ cwd });
+
+    await expect(executeTool(readFileTool, { path: ".git/config" }, toolContext)).rejects.toThrow(
+      "credential-bearing path"
+    );
+    await expect(executeTool(readFileTool, { path: ".env" }, toolContext)).rejects.toThrow(
+      "credential-bearing path"
+    );
+    await expect(executeTool(readFileTool, { path: "src/a.txt" }, toolContext)).resolves.toMatchObject({
+      path: "src/a.txt",
+      content: "hello world",
+      truncated: false
+    });
+  });
+
   test("check log access is policy gated", async () => {
     const deniedContext = context({
       client: new MockGitHubClient({}),
