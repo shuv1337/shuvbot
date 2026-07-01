@@ -52,17 +52,21 @@ describe("createDriverReviewAgent", () => {
     expect(capturedSystemPrompt).toContain("security-review");
   });
 
-  test("returns no findings when the driver run fails", async () => {
+  test("throws when the driver run fails", async () => {
+    const logger = new RunLogger();
     const agent = createDriverReviewAgent({
       ...BASE_OPTIONS,
-      driver: fakeDriver(() => ({ success: false, error: "boom" }))
+      driver: fakeDriver(() => ({ success: false, error: "boom" })),
+      logger
     });
 
-    const findings = await agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" });
-    expect(findings).toEqual([]);
+    await expect(agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })).rejects.toThrow("boom");
+    expect(logger.snapshot()).toContainEqual(
+      expect.objectContaining({ level: "warn", event: "review.skill_failed", data: { skillId: "code-review", error: "boom" } })
+    );
   });
 
-  test("returns no findings when the driver throws", async () => {
+  test("throws when the driver throws", async () => {
     const agent = createDriverReviewAgent({
       ...BASE_OPTIONS,
       driver: {
@@ -76,8 +80,7 @@ describe("createDriverReviewAgent", () => {
       }
     });
 
-    const findings = await agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" });
-    expect(findings).toEqual([]);
+    await expect(agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })).rejects.toThrow("spawn failed");
   });
 
   test("verify keeps only ids returned by the driver", async () => {

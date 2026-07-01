@@ -42,9 +42,14 @@ export async function runReview(input: RunReviewInput): Promise<RunReviewResult>
     repoInstructions
   });
   const skills = runnableReviewSkills({ event: input.event, files: input.files as Array<{ filename?: string }>, config: input.config });
-  const rawFindings = await Promise.all(
+  const skillResults = await Promise.allSettled(
     skills.map((skill) => input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt, skillId: skill.id }))
   );
+  const failedSkills = skillResults.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (skills.length > 0 && failedSkills.length === skills.length) {
+    throw new Error(`All review skills failed: ${failedSkills.map((result) => errorMessage(result.reason)).join("; ")}`);
+  }
+  const rawFindings = skillResults.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
   const parsed = parseFindings(rawFindings.flat());
   const verifiedFindingIds = await verifyFindings(input.agent, context.prompt, parsed.findings);
   const hunks = parseUnifiedDiff(input.diff);
@@ -99,4 +104,8 @@ async function verifyFindings(
 function severitiesAtOrAbove(minimum: ReviewFinding["severity"]): ReviewFinding["severity"][] {
   const index = SEVERITY_ORDER.indexOf(minimum);
   return SEVERITY_ORDER.slice(0, index + 1);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
