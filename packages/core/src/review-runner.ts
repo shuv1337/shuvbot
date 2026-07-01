@@ -8,7 +8,7 @@ import { runReviewPipeline, type ReviewPipelineResult } from "./review-pipeline.
 import { runnableReviewSkills } from "./skills/index.ts";
 
 export interface ReviewAgent {
-  run(input: { prompt: string; skillPrompt: string }): Promise<unknown>;
+  run(input: { prompt: string; skillPrompt: string; skillId: string }): Promise<unknown>;
   verify?(input: { prompt: string; findings: ReviewFinding[] }): Promise<readonly string[]>;
 }
 
@@ -43,7 +43,7 @@ export async function runReview(input: RunReviewInput): Promise<RunReviewResult>
   });
   const skills = runnableReviewSkills({ event: input.event, files: input.files as Array<{ filename?: string }>, config: input.config });
   const rawFindings = await Promise.all(
-    skills.map((skill) => input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt }))
+    skills.map((skill) => input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt, skillId: skill.id }))
   );
   const parsed = parseFindings(rawFindings.flat());
   const verifiedFindingIds = await verifyFindings(input.agent, context.prompt, parsed.findings);
