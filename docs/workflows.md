@@ -65,6 +65,17 @@ steps:
       token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+## Standalone Step / Structured Output
+
+Not yet wired to a real agent in this version. `output_schema` was removed
+from `action.yml` - it was read into memory but nothing ever validated
+output against it (SPEC §23.1's parse/validate/retry loop was never built).
+A step with no matching event/mode still runs successfully and sets
+`result` to a small status object (`runId`, `status: "initialized"`,
+`mode`, `trigger`), but no agent is invoked and no schema-validated output
+is produced. Only `review` mode currently produces real `result`,
+`review_findings`, and `summary` outputs.
+
 ## Hardened SHA-Pinned Variant
 
 Replace `shuv1337/shuvbot@v0` with the release commit SHA for immutable production workflows:
