@@ -459,10 +459,6 @@ inputs:
     description: "Shell permission: disabled, restricted, enabled"
     required: false
 
-  output_schema:
-    description: "JSON Schema for structured action output"
-    required: false
-
   token:
     description: "GitHub token"
     required: false
@@ -470,7 +466,7 @@ inputs:
 
 outputs:
   result:
-    description: "Structured result when requested"
+    description: "Compact JSON status object for the run"
 
   review_findings:
     description: "JSON array of review findings"
@@ -632,48 +628,11 @@ jobs:
 
 ### 5.3 Standalone Structured Output
 
-```yaml
-name: Release notes
-
-on:
-  push:
-    tags: ["v*"]
-
-permissions:
-  contents: write
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: notes
-        uses: shuv/reviewbot@v0
-        with:
-          mode: release-notes
-          prompt: |
-            Generate release notes for ${{ github.ref_name }}.
-            Compare with the previous tag.
-          output_schema: |
-            {
-              "type": "object",
-              "required": ["summary", "features", "fixes", "breaking"],
-              "properties": {
-                "summary": { "type": "string" },
-                "features": { "type": "array", "items": { "type": "string" } },
-                "fixes": { "type": "array", "items": { "type": "string" } },
-                "breaking": { "type": "array", "items": { "type": "string" } }
-              }
-            }
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-      - run: |
-          echo '${{ steps.notes.outputs.result }}' > release.json
-```
+**Not implemented in this repo.** The current `action.yml` does not expose
+`output_schema`, and `release-notes` mode does not call an agent. A standalone
+step can still set the normal `result` output, but it is only the compact run
+status object; no schema-validated release notes are produced until the
+structured-output flow in §23.1 is built.
 
 ### 5.4 CI Repair Workflow
 
@@ -1439,6 +1398,11 @@ export interface ReviewFinding {
 
 Purpose: fulfill a maintainer request.
 
+**Not fully implemented in this repo.** The current runtime classifies the
+request, prepares the `reviewbot/*` branch, applies policy, and posts a
+summary, but the agent edit/check/commit/push/PR step is still an explicit
+no-op.
+
 Flow:
 
 ```text
@@ -1468,6 +1432,10 @@ Mode: implement
 
 Purpose: read failed checks and patch.
 
+**Not fully implemented in this repo.** The current runtime finds failed check
+runs, fetches logs, applies policy, and posts a summary, but the agent
+edit/test/commit/push step is still an explicit no-op.
+
 Flow:
 
 ```text
@@ -1493,6 +1461,9 @@ rerunChecks = true
 
 Purpose: issue/PR management.
 
+**Not implemented in this repo.** Triage commands can be classified, but the
+runtime does not yet start an agent or perform these actions.
+
 Allowed actions:
 
 - Label issue.
@@ -1505,6 +1476,9 @@ Allowed actions:
 ### 13.5 `release-notes`
 
 Purpose: structured workflow output.
+
+**Not implemented in this repo.** `release-notes` mode is classified but does
+not yet start an agent or validate structured output; see §5.3 and §23.
 
 Flow:
 
