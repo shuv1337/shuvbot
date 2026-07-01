@@ -1,5 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { readSafeWorkspaceFile } from "../workspace-read.ts";
 import { labelContextBlock } from "./labels.ts";
 import { buildContextManifest, type ContextManifest, type ContextSection } from "./manifest.ts";
 
@@ -29,7 +30,7 @@ const INSTRUCTION_FILES = [
 export async function loadRepoInstructions(cwd: string): Promise<ContextSection[]> {
   const sections: ContextSection[] = [];
   for (const relativePath of INSTRUCTION_FILES) {
-    const content = await readOptional(join(cwd, relativePath));
+    const content = await readOptional(cwd, relativePath);
     if (content !== undefined) {
       sections.push({
         id: `repo-instructions:${relativePath}`,
@@ -40,7 +41,7 @@ export async function loadRepoInstructions(cwd: string): Promise<ContextSection[
     }
   }
   for (const relativePath of await listCursorRuleFiles(cwd)) {
-    const content = await readOptional(join(cwd, relativePath));
+    const content = await readOptional(cwd, relativePath);
     if (content !== undefined) {
       sections.push({
         id: `repo-instructions:${relativePath}`,
@@ -105,9 +106,9 @@ export function assembleReviewContext(input: AssembleReviewContextInput): Review
   };
 }
 
-async function readOptional(path: string): Promise<string | undefined> {
+async function readOptional(cwd: string, relativePath: string): Promise<string | undefined> {
   try {
-    return await readFile(path, "utf8");
+    return (await readSafeWorkspaceFile(cwd, relativePath)).content;
   } catch {
     return undefined;
   }

@@ -1,7 +1,6 @@
-import { readFile, realpath } from "node:fs/promises";
-import { resolve, relative, isAbsolute, sep, basename } from "node:path";
 import type { GitHubClient } from "../../../github/src/octokit.ts";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
+import { readSafeWorkspaceFile } from "../../../core/src/workspace-read.ts";
 import type { ToolContext, ToolSchema } from "../tool-spec.ts";
 
 export const EMPTY_INPUT_SCHEMA = {
@@ -51,46 +50,23 @@ export async function readWorkspaceFile(
   filePath: string,
   maxBytes: number
 ): Promise<{ path: string; content: string; truncated: boolean; bytes: number }> {
-  const cwd = resolve(requireCwd(context));
-  if (isAbsolute(filePath)) throw new ToolExecutionError("read_file path must be relative to the workspace");
-  const resolved = resolve(cwd, filePath);
-  const relativePath = relative(cwd, resolved);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new ToolExecutionError("read_file path escapes the workspace");
-  }
-  assertWorkspaceReadAllowed(relativePath);
-  const realCwd = await realpath(cwd);
-  const realResolved = await realpath(resolved);
-  const realRelativePath = relative(realCwd, realResolved);
-  if (realRelativePath.startsWith("..") || isAbsolute(realRelativePath)) {
-    throw new ToolExecutionError("read_file path escapes the workspace");
-  }
-  assertWorkspaceReadAllowed(realRelativePath);
-  const content = await readFile(realResolved, "utf8");
-  const bounded = boundedString(content, maxBytes);
-  return {
-    path: relativePath,
-    content: bounded.text,
-    truncated: bounded.truncated,
-    bytes: bounded.bytes
-  };
-}
-
-function assertWorkspaceReadAllowed(relativePath: string): void {
-  const segments = relativePath.split(sep).filter(Boolean);
-  const fileName = basename(relativePath).toLowerCase();
-  const lowerSegments = segments.map((segment) => segment.toLowerCase());
-  if (
-    lowerSegments.includes(".git") ||
-    lowerSegments.includes(".aws") ||
-    lowerSegments.includes(".ssh") ||
-    fileName === ".env" ||
-    fileName.startsWith(".env.") ||
-    fileName === ".npmrc" ||
-    fileName === ".netrc" ||
-    fileName.includes("credentials")
-  ) {
-    throw new ToolExecutionError(`read_file refuses credential-bearing path: ${relativePath}`);
+  try {
+    const safeRead = await readSafeWorkspaceFile(requireCwd(context), filePath);
+    const bounded = boundedString(safeRead.content, maxBytes);
+    return {
+      path: safeRead.relativePath,
+      content: bounded.text,
+      truncated: bounded.truncated,
+      bytes: bounded.bytes
+    };
+  } catch (error) {
+    if (error instanceof ToolExecutionError) {
+      const message = error.message
+        .replace("workspace file path", "read_file path")
+        .replace("workspace file read", "read_file");
+      throw new ToolExecutionError(message, { cause: error });
+    }
+    throw error;
   }
 }
 
