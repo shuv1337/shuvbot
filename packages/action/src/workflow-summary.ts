@@ -1,7 +1,12 @@
 import * as core from "@actions/core";
+import { DefaultRedactor, type Redactor } from "../../core/src/redaction.ts";
 import type { RunRecord } from "../../core/src/run-record.ts";
 
-export async function writeWorkflowSummary(record: RunRecord): Promise<void> {
+export async function writeWorkflowSummary(
+  rawRecord: RunRecord,
+  redactor: Redactor = new DefaultRedactor()
+): Promise<void> {
+  const record = redactor.redact(rawRecord);
   const summary = core.summary
     .addHeading("reviewbot")
     .addTable([

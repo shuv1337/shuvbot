@@ -6,7 +6,9 @@ import { RunLogger } from "../../core/src/observability.ts";
 import {
   completeRunRecord,
   createRunRecord,
-  recordPolicy
+  recordError,
+  recordPolicy,
+  recordToolAudit
 } from "../../core/src/run-record.ts";
 import type { RunRecord } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
@@ -24,17 +26,31 @@ import {
   type ActorContext
 } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
-import { MODES, type ReviewbotMode } from "../../core/src/types.ts";
+import { ConfigError } from "../../core/src/errors.ts";
+import { MODES, type AgentId, type ReviewbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
-import { createFakeReviewAgent, runReview } from "../../core/src/review-runner.ts";
+import { runReview } from "../../core/src/review-runner.ts";
 import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
 import { runImplement } from "../../core/src/implement-runner.ts";
 import { createOrFastForwardReviewbotBranch } from "../../github/src/branches.ts";
 import { parseDurationMs, runFixCiLoop } from "../../core/src/fix-ci.ts";
 import { fetchCheckLog, findFailedCheckRuns } from "../../github/src/checks.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
+import type { AgentDriver } from "../../agents/src/driver.ts";
+import { createClaudeCodeDriver } from "../../agents/src/claude-code.ts";
+import { createDriverReviewAgent } from "../../agents/src/review-agent.ts";
+import { startReviewbotMcpServer } from "../../mcp/src/server.ts";
+import { allMcpTools } from "../../mcp/src/tools/index.ts";
+import { AuditLog } from "../../mcp/src/audit.ts";
 
-export async function main(): Promise<void> {
+export interface MainOverrides {
+  /** Injected in tests to avoid spawning a real agent CLI subprocess. */
+  driver?: AgentDriver;
+  /** Injected in tests to point the GitHub client at a local stand-in server. */
+  fetchImpl?: typeof fetch;
+}
+
+export async function main(overrides: MainOverrides = {}): Promise<void> {
   const logger = new RunLogger();
   const inputs = readActionInputs();
   const fileConfig = inputs.config ? await loadConfigFile(inputs.config) : normalizeConfig({});
@@ -67,7 +83,9 @@ export async function main(): Promise<void> {
   };
 
   const actorLogin = process.env.GITHUB_ACTOR ?? event?.sender.login ?? "unknown";
-  const client = inputs.token ? createGitHubClient({ token: inputs.token }) : undefined;
+  const client = inputs.token
+    ? createGitHubClient({ token: inputs.token, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) })
+    : undefined;
   const actor = event
     ? await deriveActorContext({
         event,
@@ -117,139 +135,202 @@ export async function main(): Promise<void> {
     modeReason: resolved.reason
   });
 
-  if (mode === "review" && event?.kind === "pull_request" && client && policy) {
-    const repo = { owner: event.repo.owner, name: event.repo.name };
-    const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
-    const filesResponse = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: event.pullRequest.number, per_page: 100 }
-    });
-    const review = await runReview({
-      cwd: inputs.cwd ?? process.cwd(),
-      repo: event.repo.fullName,
-      event,
-      diff: diff.raw,
-      files: Array.isArray(filesResponse.data) ? filesResponse.data : [],
-      config,
-      policy,
-      agent: createFakeReviewAgent(parsePromptFindings(inputs.prompt))
-    });
-    let postedComments = 0;
-    if (policy.canReview) {
-      const posted = await postReview({
-        client,
-        repo,
-        pullNumber: event.pullRequest.number,
-        body: buildReviewSummary(review.pipeline.summaryFindings),
-        event: review.pipeline.reviewEvent,
-        comments: review.pipeline.inlineFindings
-          .filter((finding) => finding.inline)
-          .map((finding) => ({
-            path: finding.inline!.path,
-            position: finding.inline!.position,
-            body: finding.body,
-            markerKey: finding.markerKey
-          }))
+  try {
+    if (mode === "review" && event?.kind === "pull_request" && client && policy) {
+      const repo = { owner: event.repo.owner, name: event.repo.name };
+      const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
+      const filesResponse = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
+        params: { owner: repo.owner, repo: repo.name, pull_number: event.pullRequest.number, per_page: 100 }
       });
-      postedComments = posted.postedComments;
+
+      const cwd = inputs.cwd ?? process.cwd();
+      const redactor = new DefaultRedactor();
+      const audit = new AuditLog(redactor);
+      const mcpServer = await startReviewbotMcpServer({
+        tools: allMcpTools,
+        context: {
+          repo,
+          runId: withPolicy.runId,
+          actor: withPolicy.actor,
+          mode,
+          policy,
+          client,
+          cwd,
+          redactor,
+          audit,
+          logger,
+          shellSandbox: {
+            allowCommands: config.shellSandbox.allowCommands,
+            denyCommands: config.shellSandbox.denyCommands
+          }
+        }
+      });
+
+      let review: Awaited<ReturnType<typeof runReview>>;
+      try {
+        const driver = overrides.driver ?? createReviewDriver(config.agent);
+        await driver.prepare({ cwd });
+        const agent = createDriverReviewAgent({
+          driver,
+          cwd,
+          env: process.env,
+          timeoutMs: parseDurationMs(config.timeout),
+          activityTimeoutMs: parseDurationMs(config.activityTimeout),
+          model: config.model,
+          mcpServerUrl: mcpServer.url.toString(),
+          logger
+        });
+        review = await runReview({
+          cwd,
+          repo: event.repo.fullName,
+          event,
+          diff: diff.raw,
+          files: Array.isArray(filesResponse.data) ? filesResponse.data : [],
+          config,
+          policy,
+          agent
+        });
+      } finally {
+        withPolicy = recordToolAudit(withPolicy, audit.snapshot().summary);
+        await mcpServer.close();
+      }
+
+      let postedComments = 0;
+      if (policy.canReview) {
+        const posted = await postReview({
+          client,
+          repo,
+          pullNumber: event.pullRequest.number,
+          body: buildReviewSummary(review.pipeline.summaryFindings),
+          event: review.pipeline.reviewEvent,
+          comments: review.pipeline.inlineFindings
+            .filter((finding) => finding.inline)
+            .map((finding) => ({
+              path: finding.inline!.path,
+              position: finding.inline!.position,
+              body: finding.body,
+              markerKey: finding.markerKey
+            }))
+        });
+        postedComments = posted.postedComments;
+      }
+      withPolicy = {
+        ...withPolicy,
+        findings: review.findings,
+        postedComments
+      };
+      const artifacts = await writeReviewArtifacts({
+        runRecord: withPolicy,
+        findings: review.findings,
+        contextManifest: review.context.manifest
+      });
+      withPolicy = { ...withPolicy, contextManifestPath: artifacts.contextManifestPath };
+      core.setOutput("review_findings", JSON.stringify(review.findings));
+      core.setOutput("summary", buildReviewSummary(review.pipeline.summaryFindings));
+      core.setOutput(
+        "result",
+        JSON.stringify({
+          runId: withPolicy.runId,
+          status: review.pipeline.failCheck ? "failed" : "reviewed",
+          mode,
+          findings: review.findings.length
+        })
+      );
+      await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+      return;
     }
-    withPolicy = {
-      ...withPolicy,
-      findings: review.findings,
-      postedComments
-    };
-    const artifacts = await writeReviewArtifacts({
-      runRecord: withPolicy,
-      findings: review.findings,
-      contextManifest: review.context.manifest
-    });
-    withPolicy = { ...withPolicy, contextManifestPath: artifacts.contextManifestPath };
-    core.setOutput("review_findings", JSON.stringify(review.findings));
-    core.setOutput("summary", buildReviewSummary(review.pipeline.summaryFindings));
-    core.setOutput(
-      "result",
-      JSON.stringify({
+
+    if (mode === "implement" && command && event && policy) {
+      const implementation = await runImplement({
+        cwd: inputs.cwd ?? process.cwd(),
         runId: withPolicy.runId,
-        status: review.pipeline.failCheck ? "failed" : "reviewed",
-        mode,
-        findings: review.findings.length
-      })
-    );
-    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
-    return;
-  }
-
-  if (mode === "implement" && command && event && policy) {
-    const implementation = await runImplement({
-      cwd: inputs.cwd ?? process.cwd(),
-      runId: withPolicy.runId,
-      command,
-      policy,
-      startPoint: triggerSha(event),
-      prepareBranch: createOrFastForwardReviewbotBranch,
-      agent: {
-        async run() {
-          return {
-            workDone: ["Prepared reviewbot implementation branch and validated implement-mode policy."],
-            filesChanged: [],
-            commandsRun: [],
-            checks: [],
-            commits: [],
-            followUps: ["Real agent patch execution is handled by the implementation driver path."]
-          };
+        command,
+        policy,
+        startPoint: triggerSha(event),
+        prepareBranch: createOrFastForwardReviewbotBranch,
+        agent: {
+          async run() {
+            return {
+              workDone: ["Prepared reviewbot implementation branch and validated implement-mode policy."],
+              filesChanged: [],
+              commandsRun: [],
+              checks: [],
+              commits: [],
+              followUps: [
+                "implement mode is not wired to a real agent in this version; no patch was written." +
+                  " See docs/workflows.md for current mode support."
+              ]
+            };
+          }
         }
-      }
-    });
-    withPolicy = {
-      ...withPolicy,
-      implementation: {
-        requestedTask: implementation.requestedTask,
-        branch: implementation.branch,
-        commandsRun: implementation.commandsRun,
-        checks: implementation.checks,
-        commits: implementation.commits
-      }
-    };
-    core.setOutput("summary", implementation.summary);
-    core.setOutput(
-      "result",
-      JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
-    );
-    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
-    return;
-  }
-
-  if (mode === "fix-ci" && event?.kind === "workflow_run" && client && policy) {
-    const repo = { owner: event.repo.owner, name: event.repo.name };
-    const failedRuns = await findFailedCheckRuns(client, repo, event.headSha);
-    const redactor = new DefaultRedactor();
-    const logs = await Promise.all(
-      failedRuns.map((run) => fetchCheckLog({ client, repo, runId: run.id, maxBytes: 16_384, redactor }))
-    );
-    const fix = await runFixCiLoop({
-      policy,
-      logs,
-      maxAttempts: config.fixCi.maxAttempts,
-      maxRuntimeMs: parseDurationMs(config.fixCi.maxRuntime),
-      now: () => Date.now(),
-      agent: {
-        async run() {
-          return {
-            summary: "Diagnosed failed checks; real patch execution is handled by the implementation driver path.",
-            commandsRun: [],
-            checks: failedRuns.map((run) => `${run.name}: ${run.conclusion}`),
-            commits: []
-          };
+      });
+      withPolicy = {
+        ...withPolicy,
+        implementation: {
+          requestedTask: implementation.requestedTask,
+          branch: implementation.branch,
+          commandsRun: implementation.commandsRun,
+          checks: implementation.checks,
+          commits: implementation.commits
         }
-      }
-    });
-    core.setOutput("summary", fix.summary);
-    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: fix.status, mode, attempts: fix.attempts }));
-    await writeWorkflowSummary(completeRunRecord(withPolicy, fix.status === "completed" ? "success" : "failure"));
-    return;
-  }
+      };
+      core.setOutput("summary", implementation.summary);
+      core.setOutput(
+        "result",
+        JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
+      );
+      await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+      return;
+    }
 
-  core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
-  await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+    if (mode === "fix-ci" && event?.kind === "workflow_run" && client && policy) {
+      const repo = { owner: event.repo.owner, name: event.repo.name };
+      const failedRuns = await findFailedCheckRuns(client, repo, event.headSha);
+      const redactor = new DefaultRedactor();
+      const logs = await Promise.all(
+        failedRuns.map((run) => fetchCheckLog({ client, repo, runId: run.id, maxBytes: 16_384, redactor }))
+      );
+      const fix = await runFixCiLoop({
+        policy,
+        logs,
+        maxAttempts: config.fixCi.maxAttempts,
+        maxRuntimeMs: parseDurationMs(config.fixCi.maxRuntime),
+        now: () => Date.now(),
+        agent: {
+          async run() {
+            return {
+              summary:
+                "Diagnosed failed checks, but fix-ci mode is not wired to a real agent in this version; no fix was attempted." +
+                " See docs/workflows.md for current mode support.",
+              commandsRun: [],
+              checks: failedRuns.map((run) => `${run.name}: ${run.conclusion}`),
+              commits: []
+            };
+          }
+        }
+      });
+      core.setOutput("summary", fix.summary);
+      core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: fix.status, mode, attempts: fix.attempts }));
+      await writeWorkflowSummary(completeRunRecord(withPolicy, fix.status === "completed" ? "success" : "failure"));
+      return;
+    }
+
+    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
+    await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
+  } catch (error) {
+    withPolicy = recordError(withPolicy, error);
+    await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
+    throw error;
+  }
+}
+
+function createReviewDriver(agentId: AgentId): AgentDriver {
+  if (agentId !== "claude-code") {
+    throw new ConfigError(
+      `agent "${agentId}" is not wired to a real driver in this version; only "claude-code" is supported`
+    );
+  }
+  return createClaudeCodeDriver();
 }
 
 function isExplicitMode(value: string | undefined): value is ReviewbotMode {
@@ -298,16 +379,6 @@ async function readEventPayload(): Promise<unknown> {
     return raw.trim().length > 0 ? JSON.parse(raw) : null;
   } catch {
     return null;
-  }
-}
-
-function parsePromptFindings(prompt: string | undefined): unknown[] {
-  if (!prompt) return [];
-  try {
-    const parsed = JSON.parse(prompt);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
   }
 }
 
