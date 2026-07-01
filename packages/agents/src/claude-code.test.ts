@@ -51,6 +51,26 @@ describe("Claude Code driver", () => {
     expect(calls[0]?.env.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
+  test("routes stdin write errors through the driver failure path", async () => {
+    const stdinError = new Error("write EPIPE");
+    const driver = createClaudeCodeDriver({
+      spawnImpl() {
+        return fakeStdinErrorProcess(stdinError);
+      },
+      masker: { setSecret() {} }
+    });
+
+    await expect(
+      driver.run({
+        prompt: "review",
+        cwd: process.cwd(),
+        timeoutMs: 1_000,
+        activityTimeoutMs: 1_000,
+        env: { ANTHROPIC_API_KEY: "api-key-value" }
+      })
+    ).rejects.toThrow("write EPIPE");
+  });
+
   test("enforces activity timeout", async () => {
     const driver = createClaudeCodeDriver({
       spawnImpl() {
@@ -86,6 +106,16 @@ function fakeProcess(stdout: string, stderr: string, exitCode: number): ReturnTy
     stderrStream.end();
     child.emit("close", exitCode);
   });
+  return child;
+}
+
+function fakeStdinErrorProcess(error: Error): ReturnType<SpawnImpl> {
+  const child = new EventEmitter() as ReturnType<SpawnImpl>;
+  child.stdin = new PassThrough() as ReturnType<SpawnImpl>["stdin"];
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = (() => true) as ReturnType<SpawnImpl>["kill"];
+  queueMicrotask(() => child.stdin.emit("error", error));
   return child;
 }
 

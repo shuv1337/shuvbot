@@ -129,10 +129,11 @@ interface RunProcessResult {
 function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
   return new Promise((resolve, reject) => {
     const child = input.spawnImpl(input.command, input.args, { cwd: input.cwd, env: input.env });
-    if (input.stdin !== undefined) child.stdin.end(input.stdin);
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let totalTimer: ReturnType<typeof setTimeout>;
+    let activityTimer: ReturnType<typeof setTimeout>;
 
     const finish = (callback: () => void): void => {
       if (settled) return;
@@ -150,15 +151,18 @@ function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
       }, input.activityTimeoutMs);
     };
 
-    const totalTimer = setTimeout(() => {
+    totalTimer = setTimeout(() => {
       child.kill("SIGTERM");
       finish(() => reject(new AgentTimeoutError(`Claude timed out after ${input.timeoutMs}ms`)));
     }, input.timeoutMs);
-    let activityTimer = setTimeout(() => {
+    activityTimer = setTimeout(() => {
       child.kill("SIGTERM");
       finish(() => reject(new AgentActivityTimeoutError(`Claude produced no output for ${input.activityTimeoutMs}ms`)));
     }, input.activityTimeoutMs);
 
+    child.stdin.on("error", (error) => {
+      finish(() => reject(error));
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       resetActivity();
       stdout += input.redactor.redactString(chunk.toString("utf8"));
@@ -173,5 +177,7 @@ function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
     child.on("close", (exitCode) => {
       finish(() => resolve({ stdout, stderr, exitCode }));
     });
+
+    if (input.stdin !== undefined) child.stdin.end(input.stdin);
   });
 }
