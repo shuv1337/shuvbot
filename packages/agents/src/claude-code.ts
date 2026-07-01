@@ -60,6 +60,7 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
       const result = await runProcess({
         command,
         args,
+        stdin: input.prompt,
         cwd: input.cwd,
         env,
         timeoutMs: input.timeoutMs,
@@ -81,13 +82,23 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
 export const claudeCodeDriver = createClaudeCodeDriver();
 
 function buildClaudeArgs(input: AgentRunInput): string[] {
-  const args = ["--print", "--output-format", "text", "--no-session-persistence"];
+  const args = ["--print", "--input-format", "text", "--output-format", "text", "--no-session-persistence"];
   if (input.model) args.push("--model", input.model);
   if (input.systemPrompt) args.push("--system-prompt", input.systemPrompt);
   if (input.mcpServerUrl) {
-    args.push("--mcp-config", JSON.stringify(toMcpConfig(input.mcpServerUrl)), "--strict-mcp-config");
+    args.push(
+      "--mcp-config",
+      JSON.stringify(toMcpConfig(input.mcpServerUrl)),
+      "--strict-mcp-config",
+      "--disallowedTools",
+      "Bash",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep"
+    );
   }
-  args.push(input.prompt);
   return args;
 }
 
@@ -105,6 +116,7 @@ function toMcpConfig(url: string): Record<string, unknown> {
 interface RunProcessInput {
   command: string;
   args: readonly string[];
+  stdin?: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
   timeoutMs: number;
@@ -122,6 +134,7 @@ interface RunProcessResult {
 function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
   return new Promise((resolve, reject) => {
     const child = input.spawnImpl(input.command, input.args, { cwd: input.cwd, env: input.env });
+    if (input.stdin !== undefined) child.stdin.end(input.stdin);
     let stdout = "";
     let stderr = "";
     let settled = false;
