@@ -203,6 +203,21 @@ describe("read-context MCP tools", () => {
     );
   });
 
+  test("check log access redacts secret-looking tokens", async () => {
+    const client = new MockGitHubClient({});
+    client.textRoutes.set(
+      "GET /repos/octo/reviewbot/actions/jobs/9/logs",
+      "build ok\nCLAUDE_CODE_OAUTH_TOKEN=secret-token-value\nghp_abcdefghijklmnopqrstuvwxyz"
+    );
+
+    await expect(executeTool(getCheckLogsTool, { runId: 9 }, context({ client }))).resolves.toMatchObject({
+      runId: 9,
+      logs: "build ok\nCLAUDE_CODE_OAUTH_TOKEN=[REDACTED]\n[REDACTED]",
+      truncated: false,
+      untrusted: true
+    });
+  });
+
   test("check log access is policy gated", async () => {
     const deniedContext = context({
       client: new MockGitHubClient({}),

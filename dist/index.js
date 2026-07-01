@@ -2087,6 +2087,7 @@ function createClaudeCodeDriver(options = {}) {
       const result = await runProcess({
         command,
         args,
+        stdin: input.prompt,
         cwd: input.cwd,
         env,
         timeoutMs: input.timeoutMs,
@@ -2106,13 +2107,18 @@ function createClaudeCodeDriver(options = {}) {
 }
 var claudeCodeDriver = createClaudeCodeDriver();
 function buildClaudeArgs(input) {
-  const args = ["--print", "--output-format", "text", "--no-session-persistence"];
+  const args = ["--print", "--input-format", "text", "--output-format", "text", "--no-session-persistence"];
   if (input.model) args.push("--model", input.model);
   if (input.systemPrompt) args.push("--system-prompt", input.systemPrompt);
   if (input.mcpServerUrl) {
-    args.push("--mcp-config", JSON.stringify(toMcpConfig(input.mcpServerUrl)), "--strict-mcp-config");
+    args.push(
+      "--mcp-config",
+      JSON.stringify(toMcpConfig(input.mcpServerUrl)),
+      "--strict-mcp-config",
+      "--tools",
+      ""
+    );
   }
-  args.push(input.prompt);
   return args;
 }
 function toMcpConfig(url) {
@@ -2128,6 +2134,7 @@ function toMcpConfig(url) {
 function runProcess(input) {
   return new Promise((resolve2, reject) => {
     const child = input.spawnImpl(input.command, input.args, { cwd: input.cwd, env: input.env });
+    if (input.stdin !== void 0) child.stdin.end(input.stdin);
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -2661,7 +2668,7 @@ var STREAMABLE_HTTP_STATELESS_OPTIONS = {
 };
 
 // packages/mcp/src/tools/shared.ts
-import { readFile as readFile3 } from "fs/promises";
+import { readFile as readFile3, realpath } from "fs/promises";
 import { resolve, relative as relative2, isAbsolute, sep, basename } from "path";
 function requireClient(context) {
   if (!context.client) throw new ToolExecutionError("MCP tool requires a GitHub client");
@@ -2694,7 +2701,14 @@ async function readWorkspaceFile(context, filePath, maxBytes) {
     throw new ToolExecutionError("read_file path escapes the workspace");
   }
   assertWorkspaceReadAllowed(relativePath);
-  const content = await readFile3(resolved, "utf8");
+  const realCwd = await realpath(cwd);
+  const realResolved = await realpath(resolved);
+  const realRelativePath = relative2(realCwd, realResolved);
+  if (realRelativePath.startsWith("..") || isAbsolute(realRelativePath)) {
+    throw new ToolExecutionError("read_file path escapes the workspace");
+  }
+  assertWorkspaceReadAllowed(realRelativePath);
+  const content = await readFile3(realResolved, "utf8");
   const bounded = boundedString(content, maxBytes);
   return {
     path: relativePath,
@@ -2814,9 +2828,10 @@ var getCheckLogsTool = {
       responseType: "text"
     });
     const bounded = boundedString(response.data, input.maxBytes ?? 128e3);
+    const redactedLogs = context.redactor.redactString(bounded.text);
     return {
       runId: input.runId,
-      logs: bounded.text,
+      logs: redactedLogs,
       truncated: bounded.truncated,
       bytes: bounded.bytes,
       untrusted: true

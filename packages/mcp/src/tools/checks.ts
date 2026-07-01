@@ -80,9 +80,10 @@ export const getCheckLogsTool: ToolSpec<CheckLogInput, Record<string, unknown>> 
       responseType: "text"
     });
     const bounded = boundedString(response.data, input.maxBytes ?? 128_000);
+    const redactedLogs = context.redactor.redactString(bounded.text);
     return {
       runId: input.runId,
-      logs: bounded.text,
+      logs: redactedLogs,
       truncated: bounded.truncated,
       bytes: bounded.bytes,
       untrusted: true
