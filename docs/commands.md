@@ -2,10 +2,10 @@
 
 Mention commands use the `@reviewbot` prefix:
 
-- `@reviewbot review` maps to review mode.
-- `@reviewbot implement <task>` maps to trusted implementation mode.
-- `@reviewbot improve <task>` maps to implementation mode.
-- `@reviewbot fix-ci` maps to CI repair mode.
+- `@reviewbot review` maps to review mode. Runs a real agent.
+- `@reviewbot implement <task>` maps to trusted implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
+- `@reviewbot improve <task>` maps to implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
+- `@reviewbot fix-ci` maps to CI repair mode. Not yet wired to a real agent - see `docs/workflows.md`.
 - `@reviewbot ask`, `explain`, and `summarize` map to triage mode.
 - `@reviewbot describe`, `changelog` map to release-notes mode.
 - `@reviewbot test-plan` maps to review mode.
