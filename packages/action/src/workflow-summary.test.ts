@@ -21,7 +21,13 @@ describe("writeWorkflowSummary", () => {
 
   test("redacts secrets embedded in recorded errors", async () => {
     const record = recordError(
-      createRunRecord({ event: "pull_request", actor: "maintainer", mode: "review", agent: "claude-code", model: "claude/sonnet" }),
+      createRunRecord({
+        event: "pull_request",
+        actor: "maintainer",
+        mode: "review",
+        agent: "claude-code",
+        model: "claude/sonnet"
+      }),
       new Error("Claude exited with auth failure: ANTHROPIC_API_KEY=sk-live-verysecretvalue1234")
     );
 

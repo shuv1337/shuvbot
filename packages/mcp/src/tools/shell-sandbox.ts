@@ -19,7 +19,9 @@ export function filterShellEnv(
 
 export function assertDockerSandboxAvailable(input: { dockerPath?: string | null }): string {
   if (!input.dockerPath) {
-    throw new ToolExecutionError("restricted shell requires Docker and fails closed when Docker is unavailable");
+    throw new ToolExecutionError(
+      "restricted shell requires Docker and fails closed when Docker is unavailable"
+    );
   }
   return input.dockerPath;
 }
@@ -35,7 +37,11 @@ export function validateShellCommand(input: {
     if (input.denyCommands?.includes(executable)) {
       throw new ToolExecutionError(`shell command is denied: ${executable}`);
     }
-    if (input.allowCommands && input.allowCommands.length > 0 && !input.allowCommands.includes(executable)) {
+    if (
+      input.allowCommands &&
+      input.allowCommands.length > 0 &&
+      !input.allowCommands.includes(executable)
+    ) {
       throw new ToolExecutionError(`shell command is not allowlisted: ${executable}`);
     }
   }
@@ -93,5 +99,8 @@ function commandTokens(command: string): string[] {
 }
 
 function firstCommandToken(command: string): string | undefined {
-  return command.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, "");
+  return command
+    .trim()
+    .split(/\s+/)[0]
+    ?.replace(/^["']|["']$/g, "");
 }

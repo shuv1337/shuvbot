@@ -752,9 +752,7 @@ export function resolveClaudeAuth(env: NodeJS.ProcessEnv): ClaudeAuth {
     return { kind: "api-key", env: { ANTHROPIC_API_KEY: apiKey } };
   }
 
-  throw new Error(
-    "Claude auth missing: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY"
-  );
+  throw new Error("Claude auth missing: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY");
 }
 ```
 
@@ -962,14 +960,14 @@ export interface RuntimePolicy {
 
 ### 9.2 Default Permission Matrix
 
-| Context | Shell | Push | Secrets | Comments | Reviews | Commits |
-|---|---:|---:|---:|---:|---:|---:|
-| PR from fork | disabled | disabled | no | yes | yes | no |
-| PR from same repo, non-collab | restricted | disabled | no | yes | yes | no |
-| Collaborator mention | restricted | restricted | selected | yes | yes | branch only |
-| Maintainer mention | restricted/enabled by config | restricted/enabled by config | selected | yes | yes | yes |
-| Scheduled repo maintenance | restricted | restricted | selected | yes | yes | bot branch |
-| Manual workflow dispatch | config-driven | config-driven | selected | yes | yes | config-driven |
+| Context                       |                        Shell |                         Push |  Secrets | Comments | Reviews |       Commits |
+| ----------------------------- | ---------------------------: | ---------------------------: | -------: | -------: | ------: | ------------: |
+| PR from fork                  |                     disabled |                     disabled |       no |      yes |     yes |            no |
+| PR from same repo, non-collab |                   restricted |                     disabled |       no |      yes |     yes |            no |
+| Collaborator mention          |                   restricted |                   restricted | selected |      yes |     yes |   branch only |
+| Maintainer mention            | restricted/enabled by config | restricted/enabled by config | selected |      yes |     yes |           yes |
+| Scheduled repo maintenance    |                   restricted |                   restricted | selected |      yes |     yes |    bot branch |
+| Manual workflow dispatch      |                config-driven |                config-driven | selected |      yes |     yes | config-driven |
 
 ### 9.3 Restricted Shell
 
@@ -1172,12 +1170,7 @@ For review comments:
 ### 11.1 Driver Interface
 
 ```ts
-export type AgentId =
-  | "claude-code"
-  | "anthropic-sdk"
-  | "openai"
-  | "codex-cli"
-  | "aider";
+export type AgentId = "claude-code" | "anthropic-sdk" | "openai" | "codex-cli" | "aider";
 
 export interface AgentDriver {
   id: AgentId;
@@ -1308,7 +1301,7 @@ export const models: Record<string, ModelAlias> = {
     preferred: true,
     supportsTools: true,
     supportsJsonSchema: true,
-    supportsLongContext: true,
+    supportsLongContext: true
   },
 
   "claude/opus": {
@@ -1318,7 +1311,7 @@ export const models: Record<string, ModelAlias> = {
     resolve: "opus-latest",
     supportsTools: true,
     supportsJsonSchema: true,
-    supportsLongContext: true,
+    supportsLongContext: true
   },
 
   "openai/gpt": {
@@ -1327,7 +1320,7 @@ export const models: Record<string, ModelAlias> = {
     displayName: "GPT",
     resolve: "gpt-latest",
     supportsTools: true,
-    supportsJsonSchema: true,
+    supportsJsonSchema: true
   }
 };
 ```
@@ -1920,18 +1913,18 @@ export interface ParsedCommand {
 
 ### 20.4 Command-to-Mode Mapping
 
-| Command | Mode | Write Capable |
-|---|---|---:|
-| `review` | `review` | no |
-| `improve` | `implement` | yes |
-| `ask` | `triage` / read-only | no |
-| `implement` | `implement` | yes |
-| `fix-ci` | `fix-ci` | yes |
-| `describe` | `release-notes` / summary | optional |
-| `changelog` | `release-notes` | optional |
-| `test-plan` | `review` / summary | no |
-| `explain` | read-only | no |
-| `summarize` | read-only | no |
+| Command     | Mode                      | Write Capable |
+| ----------- | ------------------------- | ------------: |
+| `review`    | `review`                  |            no |
+| `improve`   | `implement`               |           yes |
+| `ask`       | `triage` / read-only      |            no |
+| `implement` | `implement`               |           yes |
+| `fix-ci`    | `fix-ci`                  |           yes |
+| `describe`  | `release-notes` / summary |      optional |
+| `changelog` | `release-notes`           |      optional |
+| `test-plan` | `review` / summary        |            no |
+| `explain`   | read-only                 |            no |
+| `summarize` | read-only                 |            no |
 
 ---
 

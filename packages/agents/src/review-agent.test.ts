@@ -7,7 +7,13 @@ function fakeDriver(handler: (input: AgentRunInput) => AgentRunResult): AgentDri
   return {
     id: "claude-code",
     displayName: "fake",
-    supports: { mcp: true, structuredOutput: false, repoEditing: true, oauthToken: true, apiKey: true },
+    supports: {
+      mcp: true,
+      structuredOutput: false,
+      repoEditing: true,
+      oauthToken: true,
+      apiKey: true
+    },
     async prepare() {},
     async run(input) {
       return handler(input);
@@ -32,9 +38,21 @@ describe("createDriverReviewAgent", () => {
       }))
     });
 
-    const findings = await agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" });
+    const findings = await agent.run({
+      prompt: "diff",
+      skillPrompt: "skill",
+      skillId: "code-review"
+    });
     expect(findings).toEqual([
-      { id: "f1", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" }
+      {
+        id: "f1",
+        skill: "code-review",
+        title: "t",
+        body: "b",
+        severity: "high",
+        confidence: "high",
+        path: "a.ts"
+      }
     ]);
   });
 
@@ -48,7 +66,11 @@ describe("createDriverReviewAgent", () => {
       })
     });
 
-    await agent.run({ prompt: "diff", skillPrompt: "You are the security-review skill.", skillId: "security-review" });
+    await agent.run({
+      prompt: "diff",
+      skillPrompt: "You are the security-review skill.",
+      skillId: "security-review"
+    });
     expect(capturedSystemPrompt).toContain("security-review");
   });
 
@@ -60,9 +82,15 @@ describe("createDriverReviewAgent", () => {
       logger
     });
 
-    await expect(agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })).rejects.toThrow("boom");
+    await expect(
+      agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })
+    ).rejects.toThrow("boom");
     expect(logger.snapshot()).toContainEqual(
-      expect.objectContaining({ level: "warn", event: "review.skill_failed", data: { skillId: "code-review", error: "boom" } })
+      expect.objectContaining({
+        level: "warn",
+        event: "review.skill_failed",
+        data: { skillId: "code-review", error: "boom" }
+      })
     );
   });
 
@@ -72,7 +100,13 @@ describe("createDriverReviewAgent", () => {
       driver: {
         id: "claude-code",
         displayName: "fake",
-        supports: { mcp: true, structuredOutput: false, repoEditing: true, oauthToken: true, apiKey: true },
+        supports: {
+          mcp: true,
+          structuredOutput: false,
+          repoEditing: true,
+          oauthToken: true,
+          apiKey: true
+        },
         async prepare() {},
         async run() {
           throw new Error("spawn failed");
@@ -80,7 +114,9 @@ describe("createDriverReviewAgent", () => {
       }
     });
 
-    await expect(agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })).rejects.toThrow("spawn failed");
+    await expect(
+      agent.run({ prompt: "diff", skillPrompt: "skill", skillId: "code-review" })
+    ).rejects.toThrow("spawn failed");
   });
 
   test("verify keeps only ids returned by the driver", async () => {
@@ -92,8 +128,24 @@ describe("createDriverReviewAgent", () => {
     const ids = await agent.verify?.({
       prompt: "diff",
       findings: [
-        { id: "kept", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" },
-        { id: "dropped", skill: "code-review", title: "t2", body: "b2", severity: "high", confidence: "high", path: "a.ts" }
+        {
+          id: "kept",
+          skill: "code-review",
+          title: "t",
+          body: "b",
+          severity: "high",
+          confidence: "high",
+          path: "a.ts"
+        },
+        {
+          id: "dropped",
+          skill: "code-review",
+          title: "t2",
+          body: "b2",
+          severity: "high",
+          confidence: "high",
+          path: "a.ts"
+        }
       ]
     });
     expect(ids).toEqual(["kept"]);
@@ -109,10 +161,26 @@ describe("createDriverReviewAgent", () => {
 
     const ids = await agent.verify?.({
       prompt: "diff",
-      findings: [{ id: "a", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" }]
+      findings: [
+        {
+          id: "a",
+          skill: "code-review",
+          title: "t",
+          body: "b",
+          severity: "high",
+          confidence: "high",
+          path: "a.ts"
+        }
+      ]
     });
     expect(ids).toEqual([]);
-    expect(logger.snapshot()).toContainEqual(expect.objectContaining({ level: "warn", event: "review.verify_failed", data: { error: "boom" } }));
+    expect(logger.snapshot()).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        event: "review.verify_failed",
+        data: { error: "boom" }
+      })
+    );
   });
 
   test("verify fails closed and logs when the driver throws", async () => {
@@ -127,11 +195,25 @@ describe("createDriverReviewAgent", () => {
 
     const ids = await agent.verify?.({
       prompt: "diff",
-      findings: [{ id: "a", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" }]
+      findings: [
+        {
+          id: "a",
+          skill: "code-review",
+          title: "t",
+          body: "b",
+          severity: "high",
+          confidence: "high",
+          path: "a.ts"
+        }
+      ]
     });
     expect(ids).toEqual([]);
     expect(logger.snapshot()).toContainEqual(
-      expect.objectContaining({ level: "warn", event: "review.verify_error", data: { error: "spawn failed" } })
+      expect.objectContaining({
+        level: "warn",
+        event: "review.verify_error",
+        data: { error: "spawn failed" }
+      })
     );
   });
 

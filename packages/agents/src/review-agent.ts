@@ -72,7 +72,9 @@ export function createDriverReviewAgent(options: DriverReviewAgentOptions): Revi
           options.logger?.log("warn", "review.verify_failed", { error: result.error });
           return [];
         }
-        const ids = extractJsonArray(result.output ?? "").filter((id): id is string => typeof id === "string");
+        const ids = extractJsonArray(result.output ?? "").filter(
+          (id): id is string => typeof id === "string"
+        );
         return ids;
       } catch (error) {
         options.logger?.log("warn", "review.verify_error", { error: errorMessage(error) });

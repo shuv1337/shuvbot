@@ -50,7 +50,7 @@ a live Claude secret, out of scope for this pass.
 ## Key context
 
 - Follow `SPEC.md`, `AGENTS.md`; `SPEC.md` is source of truth for
-  product/security behavior *where it's not marked "Not implemented"* -
+  product/security behavior _where it's not marked "Not implemented"_ -
   several sections (§4.2 `output_schema`, §23, §24.4 `[telemetry]`) now say
   explicitly what isn't built yet.
 - Runtime policy remains the only permission authority. Fork PRs must not
@@ -65,7 +65,7 @@ a live Claude secret, out of scope for this pass.
    Wiring them for real means spawning the agent with real repo-editing/git
    authority (commits, pushes, PR creation) and turning its free-text output
    into the structured `{workDone, filesChanged, commandsRun, checks,
-   commits}` / `{commandsRun, checks, commits}` shapes those runners expect -
+commits}` / `{commandsRun, checks, commits}` shapes those runners expect -
    materially riskier and larger than review-mode wiring (which only needs
    to parse JSON findings out of text). The original task explicitly allowed
    descoping this to review-only if it looked riskier, provided docs say so

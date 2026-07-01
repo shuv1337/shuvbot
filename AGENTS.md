@@ -4,7 +4,7 @@
 is live**: `packages/action/src/main.ts` wires the real `claude-code`
 driver + MCP tool server into every PR review run (as of the "wire real
 agent" work, see git log around the `feat(action): wire real Claude Code
-driver into review mode` commit). `implement` and `fix-ci` modes are *not*
+driver into review mode` commit). `implement` and `fix-ci` modes are _not_
 wired to a real agent yet - they run their full policy/branch/tooling path
 and end in a documented no-op agent step. See `docs/workflows.md` for the
 current per-mode status; don't trust older commit messages/docs that imply
@@ -74,7 +74,7 @@ bun run evals
   that memoizes `GITHUB_STEP_SUMMARY`'s file path on first use per process and
   ignores later env var changes (`node_modules/@actions/core/lib/summary.js`).
   Any test that points `GITHUB_STEP_SUMMARY` at a fresh per-test temp dir and
-  deletes that dir afterward will poison every *later* summary-writing test in
+  deletes that dir afterward will poison every _later_ summary-writing test in
   the same `bun test` process with an ENOENT. Use one fixed, never-deleted
   path for the whole test process instead - see
   `packages/action/src/workflow-summary.test.ts` and
@@ -87,4 +87,4 @@ bun run evals
   path/trigger routing, not live-agent detection accuracy (that needs a real
   network call, which the offline eval suite deliberately doesn't make). Add
   a `diff`/`files` payload to any new case, not just `{id, expected,
-  description}`, or the case is checking nothing.
+description}`, or the case is checking nothing.

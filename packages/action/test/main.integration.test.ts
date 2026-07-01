@@ -76,10 +76,11 @@ async function postMcp(url: string, body: unknown): Promise<unknown> {
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`MCP request failed: ${response.status} ${text}`);
-  const jsonText = text
-    .split("\n")
-    .find((line) => line.startsWith("data: "))
-    ?.slice("data: ".length) ?? text;
+  const jsonText =
+    text
+      .split("\n")
+      .find((line) => line.startsWith("data: "))
+      ?.slice("data: ".length) ?? text;
   return JSON.parse(jsonText);
 }
 
@@ -89,11 +90,14 @@ function fakeGitHubServer(routes: Record<string, { status: number; body: unknown
     const url = new URL(typeof input === "string" ? input : input.toString());
     const method = (init?.method ?? "GET").toUpperCase();
     const key = `${method} ${url.pathname}`;
-    const body = typeof init?.body === "string" && init.body.length > 0 ? JSON.parse(init.body) : undefined;
+    const body =
+      typeof init?.body === "string" && init.body.length > 0 ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname, body });
     const route = routes[key];
     if (!route) {
-      return new Response(JSON.stringify({ message: `no mock route registered for ${key}` }), { status: 404 });
+      return new Response(JSON.stringify({ message: `no mock route registered for ${key}` }), {
+        status: 404
+      });
     }
     const responseBody = typeof route.body === "string" ? route.body : JSON.stringify(route.body);
     return new Response(responseBody, { status: route.status });
@@ -105,7 +109,13 @@ function scriptedDriver(observedToolNames?: string[][]): AgentDriver {
   return {
     id: "claude-code",
     displayName: "scripted-test-driver",
-    supports: { mcp: true, structuredOutput: false, repoEditing: true, oauthToken: true, apiKey: true },
+    supports: {
+      mcp: true,
+      structuredOutput: false,
+      repoEditing: true,
+      oauthToken: true,
+      apiKey: true
+    },
     async prepare() {},
     async run(input: AgentRunInput) {
       if (input.mcpServerUrl && observedToolNames) {
@@ -160,24 +170,41 @@ describe("main() end to end (review mode)", () => {
 
   test("reviews a real PR fixture end to end and posts a review with the agent's finding", async () => {
     const server = fakeGitHubServer({
-      "GET /repos/octo/repo/collaborators/alice/permission": { status: 200, body: { role_name: "write" } },
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      },
       "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_DIFF },
       "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] },
       "GET /repos/octo/repo/pulls/1/comments": { status: 200, body: [] },
-      "POST /repos/octo/repo/pulls/1/reviews": { status: 200, body: { id: 42, html_url: "https://example.test/pr/1#review-42" } }
+      "POST /repos/octo/repo/pulls/1/reviews": {
+        status: 200,
+        body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
+      }
     });
 
     const observedToolNames: string[][] = [];
 
     await main({ driver: scriptedDriver(observedToolNames), fetchImpl: server.fetchImpl });
 
-    const postedReview = server.calls.find((call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews");
+    const postedReview = server.calls.find(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
     expect(postedReview).toBeDefined();
-    const reviewBody = postedReview!.body as { body: string; event: string; comments: Array<{ path: string; position: number; body: string }> };
+    const reviewBody = postedReview!.body as {
+      body: string;
+      event: string;
+      comments: Array<{ path: string; position: number; body: string }>;
+    };
 
-    const allPostedText = [reviewBody.body, ...reviewBody.comments.map((comment) => comment.body)].join("\n");
+    const allPostedText = [
+      reviewBody.body,
+      ...reviewBody.comments.map((comment) => comment.body)
+    ].join("\n");
     expect(allPostedText).toContain(INJECTED_FINDING.body);
-    expect(reviewBody.comments.some((comment) => comment.path === "src/app.ts" && comment.position === 4)).toBe(true);
+    expect(
+      reviewBody.comments.some((comment) => comment.path === "src/app.ts" && comment.position === 4)
+    ).toBe(true);
     expect(reviewBody.event === "COMMENT" || reviewBody.event === "REQUEST_CHANGES").toBe(true);
     expect(observedToolNames.length).toBeGreaterThan(0);
     expect(observedToolNames[0]).toEqual([
@@ -203,14 +230,23 @@ describe("main() end to end (review mode)", () => {
 
   test("records the failure and still writes a workflow summary when the driver can't prepare", async () => {
     const server = fakeGitHubServer({
-      "GET /repos/octo/repo/collaborators/alice/permission": { status: 200, body: { role_name: "write" } },
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      },
       "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_DIFF },
       "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] }
     });
     const failingDriver: AgentDriver = {
       id: "claude-code",
       displayName: "failing-test-driver",
-      supports: { mcp: true, structuredOutput: false, repoEditing: true, oauthToken: true, apiKey: true },
+      supports: {
+        mcp: true,
+        structuredOutput: false,
+        repoEditing: true,
+        oauthToken: true,
+        apiKey: true
+      },
       async prepare() {
         throw new Error("claude CLI not found on PATH");
       },
@@ -227,7 +263,9 @@ describe("main() end to end (review mode)", () => {
     expect(summary).toContain("claude CLI not found on PATH");
     expect(summary).toContain("Errors");
 
-    const postedReview = server.calls.find((call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews");
+    const postedReview = server.calls.find(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
     expect(postedReview).toBeUndefined();
   });
 });

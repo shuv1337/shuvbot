@@ -8,9 +8,13 @@ export interface SafeWorkspaceReadResult {
   content: string;
 }
 
-export async function readSafeWorkspaceFile(cwd: string, filePath: string): Promise<SafeWorkspaceReadResult> {
+export async function readSafeWorkspaceFile(
+  cwd: string,
+  filePath: string
+): Promise<SafeWorkspaceReadResult> {
   const workspaceRoot = resolve(cwd);
-  if (isAbsolute(filePath)) throw new ToolExecutionError("workspace file path must be relative to the workspace");
+  if (isAbsolute(filePath))
+    throw new ToolExecutionError("workspace file path must be relative to the workspace");
 
   const resolved = resolve(workspaceRoot, filePath);
   const relativePath = relative(workspaceRoot, resolved);
@@ -48,7 +52,9 @@ export function assertWorkspaceReadAllowed(relativePath: string): void {
     fileName === ".netrc" ||
     fileName.includes("credentials")
   ) {
-    throw new ToolExecutionError(`workspace file read refuses credential-bearing path: ${relativePath}`);
+    throw new ToolExecutionError(
+      `workspace file read refuses credential-bearing path: ${relativePath}`
+    );
   }
 }
 

@@ -35,9 +35,13 @@ export function requireCwd(context: ToolContext): string {
   return context.cwd;
 }
 
-export function boundedString(value: string, maxBytes: number): { text: string; truncated: boolean; bytes: number } {
+export function boundedString(
+  value: string,
+  maxBytes: number
+): { text: string; truncated: boolean; bytes: number } {
   const buffer = Buffer.from(value, "utf8");
-  if (buffer.byteLength <= maxBytes) return { text: value, truncated: false, bytes: buffer.byteLength };
+  if (buffer.byteLength <= maxBytes)
+    return { text: value, truncated: false, bytes: buffer.byteLength };
   return {
     text: `${buffer.subarray(0, maxBytes).toString("utf8")}\n[reviewbot:truncated maxBytes=${maxBytes}]`,
     truncated: true,
@@ -71,7 +75,9 @@ export async function readWorkspaceFile(
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 export function asArray(value: unknown): unknown[] {
@@ -93,7 +99,9 @@ export function booleanValue(record: Record<string, unknown>, key: string): bool
   return typeof value === "boolean" ? value : false;
 }
 
-export function labelsValue(record: Record<string, unknown>): Array<{ name: string; color?: string; description?: string }> {
+export function labelsValue(
+  record: Record<string, unknown>
+): Array<{ name: string; color?: string; description?: string }> {
   return asArray(record.labels).map((label) => {
     const labelRecord = asRecord(label);
     const result: { name: string; color?: string; description?: string } = {

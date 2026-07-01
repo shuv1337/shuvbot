@@ -145,7 +145,12 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
     "request_changes",
     config.requestChanges
   );
-  config.reportOn = enumValue(raw.reportOn ?? raw.report_on, SEVERITIES, "report_on", config.reportOn);
+  config.reportOn = enumValue(
+    raw.reportOn ?? raw.report_on,
+    SEVERITIES,
+    "report_on",
+    config.reportOn
+  );
   config.minConfidence = enumValue(
     raw.minConfidence ?? raw.min_confidence,
     CONFIDENCES,
@@ -179,9 +184,21 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
   const fixCiRaw = raw.fixCi ?? raw.fix_ci;
   if (fixCiRaw !== undefined) {
     const fixCi = assertRecord(fixCiRaw, "fix_ci");
-    config.fixCi.maxAttempts = integerValue(fixCi.maxAttempts ?? fixCi.max_attempts, "fix_ci.max_attempts", config.fixCi.maxAttempts);
-    config.fixCi.maxRuntime = stringValue(fixCi.maxRuntime ?? fixCi.max_runtime, "fix_ci.max_runtime", config.fixCi.maxRuntime);
-    config.fixCi.rerunChecks = booleanValue(fixCi.rerunChecks ?? fixCi.rerun_checks, "fix_ci.rerun_checks", config.fixCi.rerunChecks);
+    config.fixCi.maxAttempts = integerValue(
+      fixCi.maxAttempts ?? fixCi.max_attempts,
+      "fix_ci.max_attempts",
+      config.fixCi.maxAttempts
+    );
+    config.fixCi.maxRuntime = stringValue(
+      fixCi.maxRuntime ?? fixCi.max_runtime,
+      "fix_ci.max_runtime",
+      config.fixCi.maxRuntime
+    );
+    config.fixCi.rerunChecks = booleanValue(
+      fixCi.rerunChecks ?? fixCi.rerun_checks,
+      "fix_ci.rerun_checks",
+      config.fixCi.rerunChecks
+    );
   }
 
   if (raw.memory !== undefined) {
@@ -256,7 +273,10 @@ function globList(value: unknown, field: string, fallback: string[]): string[] {
 
 function stringList(value: unknown, field: string, fallback: string[]): string[] {
   if (value === undefined) return fallback;
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.trim().length === 0)) {
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== "string" || item.trim().length === 0)
+  ) {
     throw new ConfigError(`${field} must be an array of non-empty strings.`);
   }
   return [...value];

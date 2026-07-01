@@ -30,7 +30,9 @@ const ACTIONABLE_TAG_BY_SKILL: Record<string, string> = {
   "docs-review": "docs"
 };
 
-export async function runEvalHarness(input: RunEvalHarnessInput = {}): Promise<{ results: EvalCaseResult[]; table: string }> {
+export async function runEvalHarness(
+  input: RunEvalHarnessInput = {}
+): Promise<{ results: EvalCaseResult[]; table: string }> {
   const root = input.root ?? process.cwd();
   const eventDir = join(root, "fixtures", "events");
   const caseDir = join(root, "packages", "evals", "cases");
@@ -68,7 +70,11 @@ export async function runEvalHarness(input: RunEvalHarnessInput = {}): Promise<{
  * real/scripted driver call and network access (see the smoke test in the
  * punch-list report).
  */
-async function runHardeningCase(root: string, testCase: HardeningCase, dirName: string): Promise<EvalCaseResult> {
+async function runHardeningCase(
+  root: string,
+  testCase: HardeningCase,
+  dirName: string
+): Promise<EvalCaseResult> {
   const id = testCase.id ?? dirName;
   if (!testCase.diff || !Array.isArray(testCase.files) || testCase.files.length === 0) {
     return { id: `case:${id}`, passed: false, notes: ["case.json is missing diff/files"] };

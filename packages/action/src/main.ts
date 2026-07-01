@@ -13,18 +13,11 @@ import {
 import type { RunRecord } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
 import { writeReviewArtifacts } from "./artifacts.ts";
-import {
-  isSupportedEventName,
-  normalizeEvent,
-  type BotEvent
-} from "../../core/src/events.ts";
+import { isSupportedEventName, normalizeEvent, type BotEvent } from "../../core/src/events.ts";
 import { findCommandInEvent } from "../../core/src/commands.ts";
 import { resolveMode } from "../../core/src/modes.ts";
 import { buildRuntimePolicy } from "../../core/src/policy.ts";
-import {
-  deriveActorContext,
-  type ActorContext
-} from "../../github/src/permissions.ts";
+import { deriveActorContext, type ActorContext } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
 import { ConfigError } from "../../core/src/errors.ts";
 import { MODES, type AgentId, type ReviewbotMode } from "../../core/src/types.ts";
@@ -57,9 +50,10 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
 
   const eventName = process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const eventPayload = await readEventPayload();
-  const event = isSupportedEventName(eventName) && eventPayload
-    ? normalizeEvent({ eventName, payload: eventPayload })
-    : null;
+  const event =
+    isSupportedEventName(eventName) && eventPayload
+      ? normalizeEvent({ eventName, payload: eventPayload })
+      : null;
 
   const command = findCommandInEvent(event);
   const explicitMode = isExplicitMode(inputs.mode) ? inputs.mode : "auto";
@@ -84,7 +78,10 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
 
   const actorLogin = process.env.GITHUB_ACTOR ?? event?.sender.login ?? "unknown";
   const client = inputs.token
-    ? createGitHubClient({ token: inputs.token, ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}) })
+    ? createGitHubClient({
+        token: inputs.token,
+        ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {})
+      })
     : undefined;
   const actor = event
     ? await deriveActorContext({
@@ -139,9 +136,17 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     if (mode === "review" && event?.kind === "pull_request" && client && policy) {
       const repo = { owner: event.repo.owner, name: event.repo.name };
       const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
-      const filesResponse = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
-        params: { owner: repo.owner, repo: repo.name, pull_number: event.pullRequest.number, per_page: 100 }
-      });
+      const filesResponse = await client.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
+        {
+          params: {
+            owner: repo.owner,
+            repo: repo.name,
+            pull_number: event.pullRequest.number,
+            per_page: 100
+          }
+        }
+      );
 
       const cwd = inputs.cwd ?? process.cwd();
       const redactor = new DefaultRedactor();
@@ -251,7 +256,9 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         agent: {
           async run() {
             return {
-              workDone: ["Prepared reviewbot implementation branch and validated implement-mode policy."],
+              workDone: [
+                "Prepared reviewbot implementation branch and validated implement-mode policy."
+              ],
               filesChanged: [],
               commandsRun: [],
               checks: [],
@@ -277,7 +284,12 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       core.setOutput("summary", implementation.summary);
       core.setOutput(
         "result",
-        JSON.stringify({ runId: withPolicy.runId, status: "implemented", mode, branch: implementation.branch })
+        JSON.stringify({
+          runId: withPolicy.runId,
+          status: "implemented",
+          mode,
+          branch: implementation.branch
+        })
       );
       await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
       return;
@@ -288,7 +300,9 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       const failedRuns = await findFailedCheckRuns(client, repo, event.headSha);
       const redactor = new DefaultRedactor();
       const logs = await Promise.all(
-        failedRuns.map((run) => fetchCheckLog({ client, repo, runId: run.id, maxBytes: 16_384, redactor }))
+        failedRuns.map((run) =>
+          fetchCheckLog({ client, repo, runId: run.id, maxBytes: 16_384, redactor })
+        )
       );
       const fix = await runFixCiLoop({
         policy,
@@ -310,12 +324,30 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         }
       });
       core.setOutput("summary", fix.summary);
-      core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: fix.status, mode, attempts: fix.attempts }));
-      await writeWorkflowSummary(completeRunRecord(withPolicy, fix.status === "completed" ? "success" : "failure"));
+      core.setOutput(
+        "result",
+        JSON.stringify({
+          runId: withPolicy.runId,
+          status: fix.status,
+          mode,
+          attempts: fix.attempts
+        })
+      );
+      await writeWorkflowSummary(
+        completeRunRecord(withPolicy, fix.status === "completed" ? "success" : "failure")
+      );
       return;
     }
 
-    core.setOutput("result", JSON.stringify({ runId: withPolicy.runId, status: "initialized", mode, trigger: withPolicy.trigger }));
+    core.setOutput(
+      "result",
+      JSON.stringify({
+        runId: withPolicy.runId,
+        status: "initialized",
+        mode,
+        trigger: withPolicy.trigger
+      })
+    );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
   } catch (error) {
     withPolicy = recordError(withPolicy, error);
