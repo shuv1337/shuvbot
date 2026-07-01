@@ -108,6 +108,40 @@ describe("git, shell, and memory MCP tools", () => {
     );
   });
 
+  test("create_pull_request resolves the repo's actual default branch when base is omitted", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-git-default-branch-"));
+    await execFileAsync("git", ["init"], { cwd });
+    const routes: string[] = [];
+    const toolContext = context({
+      cwd,
+      policy: defaultRuntimePolicy({
+        actor: "maintainer",
+        actorPermission: "write",
+        event: "issue_comment",
+        isFork: false,
+        isPrivateRepo: false
+      }),
+      client: {
+        async request(route: string) {
+          routes.push(route);
+          if (route === "GET /repos/{owner}/{repo}") return { status: 200, headers: {}, data: { default_branch: "trunk" } };
+          if (route.startsWith("GET ")) return { status: 200, headers: {}, data: [] };
+          return { status: 201, headers: {}, data: { number: 1, base: { ref: "trunk" } } };
+        }
+      } as GitHubClient,
+      repo: { owner: "octo", name: "repo" }
+    });
+
+    await expect(
+      executeTool(createPullRequestTool, { branch: "reviewbot/test", title: "Test", body: "Body" }, toolContext)
+    ).resolves.toMatchObject({ accepted: true, base: "trunk" });
+    expect(routes).toEqual([
+      "GET /repos/{owner}/{repo}",
+      "GET /repos/{owner}/{repo}/pulls",
+      "POST /repos/{owner}/{repo}/pulls"
+    ]);
+  });
+
   test("git write tools deny read actors and disabled push policy", async () => {
     const deniedContext = context({
       policy: {

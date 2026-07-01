@@ -194,6 +194,7 @@ export const createPullRequestTool: ToolSpec<CreatePullRequestInput, Record<stri
     assertWriteActor(context.policy.actorPermission);
     assertReviewbotBranch(input.branch);
     if (!context.client || !context.repo) throw new ToolExecutionError("create_pull_request requires GitHub client and repo context");
+    const base = input.base ?? (await resolveDefaultBranch(context.client, context.repo));
     const existing = await context.client.request("GET /repos/{owner}/{repo}/pulls", {
       params: {
         owner: context.repo.owner,
@@ -213,7 +214,7 @@ export const createPullRequestTool: ToolSpec<CreatePullRequestInput, Record<stri
           params: { owner: context.repo.owner, repo: context.repo.name },
           body: {
             head: input.branch,
-            base: input.base ?? "main",
+            base,
             title: input.title,
             body: input.body
           }
@@ -223,7 +224,7 @@ export const createPullRequestTool: ToolSpec<CreatePullRequestInput, Record<stri
       executed: true,
       branch: input.branch,
       title: input.title,
-      base: input.base ?? "main",
+      base,
       pullRequest: response.data
     };
   }
@@ -239,6 +240,17 @@ export const gitTools = [
   deleteBranchTool,
   createPullRequestTool
 ] as const;
+
+async function resolveDefaultBranch(client: NonNullable<ToolContext["client"]>, repo: NonNullable<ToolContext["repo"]>): Promise<string> {
+  const response = await client.request("GET /repos/{owner}/{repo}", {
+    params: { owner: repo.owner, repo: repo.name }
+  });
+  const defaultBranch = asRecord(response.data).default_branch;
+  if (typeof defaultBranch !== "string" || defaultBranch.length === 0) {
+    throw new ToolExecutionError("create_pull_request could not resolve the repository's default branch");
+  }
+  return defaultBranch;
+}
 
 async function runGit(context: ToolContext, args: string[]): Promise<{ stdout: string; stderr: string }> {
   const cwd = requireCwd(context);
