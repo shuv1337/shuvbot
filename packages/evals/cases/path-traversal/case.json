@@ -1,1 +1,7 @@
-{"id":"path-traversal","expected":["security-review"],"description":"Detect path traversal."}
+{
+  "id": "path-traversal",
+  "description": "Detect path traversal.",
+  "expected": ["security-review"],
+  "files": [{ "filename": "src/files/download.ts" }],
+  "diff": "diff --git a/src/files/download.ts b/src/files/download.ts\n--- a/src/files/download.ts\n+++ b/src/files/download.ts\n@@ -1,2 +1,4 @@\n import { readFile } from \"fs/promises\";\n \n+export function download(userPath) {\n+  return readFile(`/data/uploads/${userPath}`);\n+}\n"
+}

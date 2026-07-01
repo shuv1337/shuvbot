@@ -1,1 +1,7 @@
-{"id":"incorrect-permission-check","expected":["security-review"],"description":"Detect incorrect permission logic."}
+{
+  "id": "incorrect-permission-check",
+  "description": "Detect incorrect permission logic.",
+  "expected": ["security-review"],
+  "files": [{ "filename": "src/auth/permissions.ts" }],
+  "diff": "diff --git a/src/auth/permissions.ts b/src/auth/permissions.ts\n--- a/src/auth/permissions.ts\n+++ b/src/auth/permissions.ts\n@@ -1,3 +1,5 @@\n-export function canDelete(user) {\n-  return user.role === \"admin\";\n+export function canDelete(user) {\n+  // treat any non-guest role as admin-equivalent\n+  return user.role !== \"guest\";\n }\n"
+}

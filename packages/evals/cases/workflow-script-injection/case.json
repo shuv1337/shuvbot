@@ -1,1 +1,7 @@
-{"id":"workflow-script-injection","expected":["workflow-security"],"description":"Detect untrusted workflow script execution."}
+{
+  "id": "workflow-script-injection",
+  "description": "Detect untrusted workflow script execution.",
+  "expected": ["workflow-security"],
+  "files": [{ "filename": ".github/workflows/comment.yml" }],
+  "diff": "diff --git a/.github/workflows/comment.yml b/.github/workflows/comment.yml\n--- a/.github/workflows/comment.yml\n+++ b/.github/workflows/comment.yml\n@@ -1,3 +1,5 @@\n jobs:\n   comment:\n     runs-on: ubuntu-latest\n+    steps:\n+      - run: echo \"${{ github.event.issue.title }}\"\n"
+}

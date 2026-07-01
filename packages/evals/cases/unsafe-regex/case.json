@@ -1,1 +1,7 @@
-{"id":"unsafe-regex","expected":["security-review"],"description":"Detect catastrophic backtracking risk."}
+{
+  "id": "unsafe-regex",
+  "description": "Detect catastrophic backtracking risk.",
+  "expected": ["security-review"],
+  "files": [{ "filename": "src/validate.ts" }],
+  "diff": "diff --git a/src/validate.ts b/src/validate.ts\n--- a/src/validate.ts\n+++ b/src/validate.ts\n@@ -1,2 +1,4 @@\n export function isEmailLike(value) {\n-  return true;\n+  const pattern = /^([a-zA-Z0-9]+)+@/;\n+  return pattern.test(value);\n }\n"
+}

@@ -1,1 +1,7 @@
-{"id":"command-injection","expected":["security-review"],"description":"Detect command injection."}
+{
+  "id": "command-injection",
+  "description": "Detect command injection.",
+  "expected": ["security-review"],
+  "files": [{ "filename": "src/exec.ts" }],
+  "diff": "diff --git a/src/exec.ts b/src/exec.ts\n--- a/src/exec.ts\n+++ b/src/exec.ts\n@@ -1,2 +1,4 @@\n import { exec } from \"child_process\";\n \n+export function listDir(userInput) {\n+  exec(`ls ${userInput}`);\n+}\n"
+}

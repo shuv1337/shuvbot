@@ -15,4 +15,13 @@ describe("eval harness", () => {
     expect(replay.canApprove).toBe(false);
     expect(replay.push).toBe("disabled");
   });
+
+  test("hardening cases actually run a code sample through the review pipeline", async () => {
+    const result = await runEvalHarness();
+    const commandInjection = result.results.find((entry) => entry.id === "case:command-injection");
+    expect(commandInjection?.passed).toBe(true);
+    // Not vacuous: notes report which skill actually fired for the seeded diff,
+    // not just that the case file declared a non-empty `expected` array.
+    expect(commandInjection?.notes.join(" ")).toContain("found=security-review");
+  });
 });
