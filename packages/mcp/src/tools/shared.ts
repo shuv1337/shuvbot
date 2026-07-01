@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { resolve, relative, isAbsolute, sep, basename } from "node:path";
 import type { GitHubClient } from "../../../github/src/octokit.ts";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
@@ -59,7 +59,14 @@ export async function readWorkspaceFile(
     throw new ToolExecutionError("read_file path escapes the workspace");
   }
   assertWorkspaceReadAllowed(relativePath);
-  const content = await readFile(resolved, "utf8");
+  const realCwd = await realpath(cwd);
+  const realResolved = await realpath(resolved);
+  const realRelativePath = relative(realCwd, realResolved);
+  if (realRelativePath.startsWith("..") || isAbsolute(realRelativePath)) {
+    throw new ToolExecutionError("read_file path escapes the workspace");
+  }
+  assertWorkspaceReadAllowed(realRelativePath);
+  const content = await readFile(realResolved, "utf8");
   const bounded = boundedString(content, maxBytes);
   return {
     path: relativePath,

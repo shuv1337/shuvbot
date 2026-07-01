@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -183,6 +183,24 @@ describe("read-context MCP tools", () => {
       content: "hello world",
       truncated: false
     });
+  });
+
+  test("read_file rejects symlink escapes and credential targets", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-mcp-"));
+    const outside = await mkdtemp(join(tmpdir(), "reviewbot-mcp-outside-"));
+    await mkdir(join(cwd, ".git"));
+    await writeFile(join(cwd, ".git", "config"), "token");
+    await writeFile(join(outside, "secret.txt"), "secret");
+    await symlink(join(outside, "secret.txt"), join(cwd, "outside-link.txt"));
+    await symlink(join(cwd, ".git", "config"), join(cwd, "git-config-link.txt"));
+    const toolContext = context({ cwd });
+
+    await expect(executeTool(readFileTool, { path: "outside-link.txt" }, toolContext)).rejects.toThrow(
+      "escapes the workspace"
+    );
+    await expect(executeTool(readFileTool, { path: "git-config-link.txt" }, toolContext)).rejects.toThrow(
+      "credential-bearing path"
+    );
   });
 
   test("check log access is policy gated", async () => {
