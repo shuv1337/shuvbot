@@ -3986,7 +3986,7 @@ async function main(overrides = {}) {
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
       const mcpServer = await startReviewbotMcpServer({
-        tools: allMcpTools,
+        tools: readContextTools,
         context: {
           repo,
           runId: withPolicy.runId,

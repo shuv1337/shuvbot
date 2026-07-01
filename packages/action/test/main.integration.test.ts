@@ -49,6 +49,40 @@ interface RecordedCall {
   body?: unknown;
 }
 
+async function listMcpToolNames(url: string): Promise<string[]> {
+  await postMcp(url, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "scripted-test-driver", version: "0.0.0" }
+    }
+  });
+  const response = await postMcp(url, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+  const tools = (response as { result?: { tools?: Array<{ name: string }> } }).result?.tools ?? [];
+  return tools.map((tool) => tool.name).sort();
+}
+
+async function postMcp(url: string, body: unknown): Promise<unknown> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`MCP request failed: ${response.status} ${text}`);
+  const jsonText = text
+    .split("\n")
+    .find((line) => line.startsWith("data: "))
+    ?.slice("data: ".length) ?? text;
+  return JSON.parse(jsonText);
+}
+
 function fakeGitHubServer(routes: Record<string, { status: number; body: unknown }>) {
   const calls: RecordedCall[] = [];
   const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
@@ -67,13 +101,16 @@ function fakeGitHubServer(routes: Record<string, { status: number; body: unknown
   return { fetchImpl, calls };
 }
 
-function scriptedDriver(): AgentDriver {
+function scriptedDriver(observedToolNames?: string[][]): AgentDriver {
   return {
     id: "claude-code",
     displayName: "scripted-test-driver",
     supports: { mcp: true, structuredOutput: false, repoEditing: true, oauthToken: true, apiKey: true },
     async prepare() {},
     async run(input: AgentRunInput) {
+      if (input.mcpServerUrl && observedToolNames) {
+        observedToolNames.push(await listMcpToolNames(input.mcpServerUrl));
+      }
       if (input.systemPrompt?.includes("Candidate findings:")) {
         return { success: true, output: JSON.stringify([INJECTED_FINDING.id]) };
       }
@@ -130,7 +167,9 @@ describe("main() end to end (review mode)", () => {
       "POST /repos/octo/repo/pulls/1/reviews": { status: 200, body: { id: 42, html_url: "https://example.test/pr/1#review-42" } }
     });
 
-    await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
+    const observedToolNames: string[][] = [];
+
+    await main({ driver: scriptedDriver(observedToolNames), fetchImpl: server.fetchImpl });
 
     const postedReview = server.calls.find((call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews");
     expect(postedReview).toBeDefined();
@@ -140,6 +179,19 @@ describe("main() end to end (review mode)", () => {
     expect(allPostedText).toContain(INJECTED_FINDING.body);
     expect(reviewBody.comments.some((comment) => comment.path === "src/app.ts" && comment.position === 4)).toBe(true);
     expect(reviewBody.event === "COMMENT" || reviewBody.event === "REQUEST_CHANGES").toBe(true);
+    expect(observedToolNames.length).toBeGreaterThan(0);
+    expect(observedToolNames[0]).toEqual([
+      "get_check_logs",
+      "get_check_runs",
+      "get_issue",
+      "get_issue_comments",
+      "get_pr",
+      "get_pr_diff",
+      "get_pr_files",
+      "get_review_comments",
+      "read_file",
+      "search_repo"
+    ]);
 
     const output = await readFile(join(cwd, "output.txt"), "utf8");
     expect(output).toContain("review_findings");

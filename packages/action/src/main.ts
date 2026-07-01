@@ -40,7 +40,7 @@ import type { AgentDriver } from "../../agents/src/driver.ts";
 import { createClaudeCodeDriver } from "../../agents/src/claude-code.ts";
 import { createDriverReviewAgent } from "../../agents/src/review-agent.ts";
 import { startReviewbotMcpServer } from "../../mcp/src/server.ts";
-import { allMcpTools } from "../../mcp/src/tools/index.ts";
+import { readContextTools } from "../../mcp/src/tools/index.ts";
 import { AuditLog } from "../../mcp/src/audit.ts";
 
 export interface MainOverrides {
@@ -147,7 +147,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
       const mcpServer = await startReviewbotMcpServer({
-        tools: allMcpTools,
+        tools: readContextTools,
         context: {
           repo,
           runId: withPolicy.runId,
