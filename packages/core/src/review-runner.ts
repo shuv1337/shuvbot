@@ -8,7 +8,7 @@ import { runReviewPipeline, type ReviewPipelineResult } from "./review-pipeline.
 import { runnableReviewSkills } from "./skills/index.ts";
 
 export interface ReviewAgent {
-  run(input: { prompt: string; skillPrompt: string }): Promise<unknown>;
+  run(input: { prompt: string; skillPrompt: string; skillId: string }): Promise<unknown>;
   verify?(input: { prompt: string; findings: ReviewFinding[] }): Promise<readonly string[]>;
 }
 
@@ -18,7 +18,10 @@ export interface RunReviewInput {
   event: PullRequestEvent;
   diff: string;
   files: unknown[];
-  config: Pick<ReviewbotConfig, "failCheck" | "paths" | "failOn" | "minConfidence" | "reportOn" | "requestChanges">;
+  config: Pick<
+    ReviewbotConfig,
+    "failCheck" | "paths" | "failOn" | "minConfidence" | "reportOn" | "requestChanges"
+  >;
   policy: RuntimePolicy;
   agent: ReviewAgent;
 }
@@ -41,9 +44,26 @@ export async function runReview(input: RunReviewInput): Promise<RunReviewResult>
     files: input.files,
     repoInstructions
   });
-  const skills = runnableReviewSkills({ event: input.event, files: input.files as Array<{ filename?: string }>, config: input.config });
-  const rawFindings = await Promise.all(
-    skills.map((skill) => input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt }))
+  const skills = runnableReviewSkills({
+    event: input.event,
+    files: input.files as Array<{ filename?: string }>,
+    config: input.config
+  });
+  const skillResults = await Promise.allSettled(
+    skills.map((skill) =>
+      input.agent.run({ prompt: context.prompt, skillPrompt: skill.prompt, skillId: skill.id })
+    )
+  );
+  const failedSkills = skillResults.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  if (skills.length > 0 && failedSkills.length === skills.length) {
+    throw new Error(
+      `All review skills failed: ${failedSkills.map((result) => errorMessage(result.reason)).join("; ")}`
+    );
+  }
+  const rawFindings = skillResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
   );
   const parsed = parseFindings(rawFindings.flat());
   const verifiedFindingIds = await verifyFindings(input.agent, context.prompt, parsed.findings);
@@ -77,8 +97,12 @@ export function createFakeReviewAgent(findings: unknown[]): ReviewAgent {
     },
     async verify(_input) {
       return findings
-        .filter((finding): finding is { id: string } =>
-          typeof finding === "object" && finding !== null && "id" in finding && typeof finding.id === "string"
+        .filter(
+          (finding): finding is { id: string } =>
+            typeof finding === "object" &&
+            finding !== null &&
+            "id" in finding &&
+            typeof finding.id === "string"
         )
         .map((finding) => finding.id);
     }
@@ -99,4 +123,8 @@ async function verifyFindings(
 function severitiesAtOrAbove(minimum: ReviewFinding["severity"]): ReviewFinding["severity"][] {
   const index = SEVERITY_ORDER.indexOf(minimum);
   return SEVERITY_ORDER.slice(0, index + 1);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

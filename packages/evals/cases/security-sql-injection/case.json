@@ -1,1 +1,7 @@
-{"id":"security-sql-injection","expected":["security-review"],"description":"Detect unsafe SQL string interpolation."}
+{
+  "id": "security-sql-injection",
+  "description": "Detect unsafe SQL string interpolation.",
+  "expected": ["security-review"],
+  "files": [{ "filename": "src/db/query.ts" }],
+  "diff": "diff --git a/src/db/query.ts b/src/db/query.ts\n--- a/src/db/query.ts\n+++ b/src/db/query.ts\n@@ -1,2 +1,4 @@\n import { db } from \"./client\";\n \n+export function findUser(name) {\n+  return db.query(`SELECT * FROM users WHERE name = '${name}'`);\n+}\n"
+}

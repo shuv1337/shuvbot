@@ -51,6 +51,92 @@ describe("review runner", () => {
     expect(result.context.manifest.sections.some((section) => section.untrusted)).toBe(true);
   });
 
+  test("continues with successful skill findings when some skills fail", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-partial-fail-"));
+    let firstSkill = true;
+    const agent: ReviewAgent = {
+      async run({ skillId }) {
+        if (!firstSkill) throw new Error(`${skillId} failed`);
+        firstSkill = false;
+        return [
+          {
+            id: "kept",
+            skill: skillId,
+            title: "Changed constant",
+            body: "Check this behavior.",
+            severity: "high",
+            confidence: "high",
+            path: "src/a.ts",
+            line: 1,
+            tags: ["correctness"]
+          }
+        ];
+      },
+      async verify() {
+        return ["kept"];
+      }
+    };
+
+    const result = await runReview({
+      cwd,
+      repo: "octo/reviewbot",
+      event: event(),
+      files: [{ filename: "src/a.ts" }],
+      diff: `diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1 +1 @@
+-const a = 1;
++const a = 2;`,
+      config: normalizeConfig({}),
+      policy: defaultRuntimePolicy({
+        actor: "alice",
+        actorPermission: "write",
+        event: "pull_request",
+        isFork: false,
+        isPrivateRepo: false
+      }),
+      agent
+    });
+
+    expect(result.parseErrors).toEqual([]);
+    expect(result.pipeline.dropped).toEqual([]);
+    expect(result.findings.map((finding) => finding.id)).toEqual(["kept"]);
+  });
+
+  test("throws when all review skills fail", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-all-fail-"));
+    const agent: ReviewAgent = {
+      async run({ skillId }) {
+        throw new Error(`${skillId} failed`);
+      }
+    };
+
+    await expect(
+      runReview({
+        cwd,
+        repo: "octo/reviewbot",
+        event: event(),
+        files: [{ filename: "src/a.ts" }],
+        diff: `diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1 +1 @@
+-const a = 1;
++const a = 2;`,
+        config: normalizeConfig({}),
+        policy: defaultRuntimePolicy({
+          actor: "alice",
+          actorPermission: "write",
+          event: "pull_request",
+          isFork: false,
+          isPrivateRepo: false
+        }),
+        agent
+      })
+    ).rejects.toThrow("All review skills failed");
+  });
+
   test("runs verification before pipeline filtering", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-verify-"));
     const findings = [

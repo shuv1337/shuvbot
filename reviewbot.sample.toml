@@ -18,7 +18,3 @@ enabled = false
 backend = "github"
 learnings = false
 pr_summaries = true
-
-[telemetry]
-enabled = false
-endpoint = ""

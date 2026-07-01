@@ -1,1 +1,7 @@
-{"id":"missing-await","expected":["code-review"],"description":"Detect missing await on a promise."}
+{
+  "id": "missing-await",
+  "description": "Detect missing await on a promise.",
+  "expected": ["code-review"],
+  "files": [{ "filename": "src/service.ts" }],
+  "diff": "diff --git a/src/service.ts b/src/service.ts\n--- a/src/service.ts\n+++ b/src/service.ts\n@@ -1,3 +1,4 @@\n export async function save(record) {\n-  return db.write(record);\n+  db.write(record);\n+  return record;\n }\n"
+}

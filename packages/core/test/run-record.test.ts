@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createRunRecord, recordToolAudit } from "../src/run-record.ts";
+import { AuthError } from "../src/errors.ts";
+import { createRunRecord, recordError, recordToolAudit } from "../src/run-record.ts";
 
 describe("run record", () => {
   test("attaches tool audit summaries", () => {
@@ -59,5 +60,26 @@ describe("run record", () => {
       }
     });
     expect(record.toolAudit).toBeUndefined();
+  });
+
+  test("appends structured errors without mutating the original record", () => {
+    const record = createRunRecord({
+      event: "pull_request",
+      actor: "maintainer",
+      mode: "review",
+      agent: "claude-code",
+      model: "claude/sonnet"
+    });
+
+    const updated = recordError(record, new AuthError("Claude auth missing"));
+
+    expect(updated.errors).toEqual([{ class: "AuthError", message: "Claude auth missing" }]);
+    expect(record.errors).toEqual([]);
+
+    const again = recordError(updated, "plain string failure");
+    expect(again.errors).toEqual([
+      { class: "AuthError", message: "Claude auth missing" },
+      { class: "Error", message: "plain string failure" }
+    ]);
   });
 });

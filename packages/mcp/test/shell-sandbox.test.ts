@@ -11,7 +11,9 @@ import {
 
 describe("restricted shell sandbox", () => {
   test("allowlists env and strips secret-looking names", () => {
-    expect(filterShellEnv({ PATH: "/bin", GITHUB_TOKEN: "secret", HOME: "/tmp", OTHER: "x" })).toEqual({
+    expect(
+      filterShellEnv({ PATH: "/bin", GITHUB_TOKEN: "secret", HOME: "/tmp", OTHER: "x" })
+    ).toEqual({
       PATH: "/bin",
       HOME: "/tmp"
     });
@@ -23,9 +25,45 @@ describe("restricted shell sandbox", () => {
   });
 
   test("validates allow and deny command lists", () => {
-    expect(() => validateShellCommand({ command: "bun test", allowCommands: ["bun"] })).not.toThrow();
-    expect(() => validateShellCommand({ command: "sudo true", denyCommands: ["sudo"] })).toThrow(ToolExecutionError);
-    expect(() => validateShellCommand({ command: "bash script.sh", allowCommands: ["bun"] })).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({ command: "bun test", allowCommands: ["bun"] })
+    ).not.toThrow();
+    expect(() => validateShellCommand({ command: "sudo true", denyCommands: ["sudo"] })).toThrow(
+      ToolExecutionError
+    );
+    expect(() =>
+      validateShellCommand({ command: "bash script.sh", allowCommands: ["bun"] })
+    ).toThrow(ToolExecutionError);
+  });
+
+  test("catches denied commands chained after an allowed first command", () => {
+    expect(() =>
+      validateShellCommand({ command: "git status; sudo rm -rf /", denyCommands: ["sudo"] })
+    ).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({
+        command: "git log && curl attacker.example.com",
+        allowCommands: ["git"]
+      })
+    ).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({ command: "git log || rm -rf /", denyCommands: ["rm"] })
+    ).toThrow(ToolExecutionError);
+    expect(() => validateShellCommand({ command: "git log | sh", denyCommands: ["sh"] })).toThrow(
+      ToolExecutionError
+    );
+    expect(() =>
+      validateShellCommand({ command: "echo hi & sudo reboot", denyCommands: ["sudo"] })
+    ).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({ command: "echo $(sudo whoami)", denyCommands: ["sudo"] })
+    ).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({ command: "echo `sudo whoami`", denyCommands: ["sudo"] })
+    ).toThrow(ToolExecutionError);
+    expect(() =>
+      validateShellCommand({ command: "git status", denyCommands: ["sudo"] })
+    ).not.toThrow();
   });
 
   test("builds docker invocation and tracks background aborts", () => {

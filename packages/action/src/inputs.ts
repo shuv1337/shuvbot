@@ -21,7 +21,6 @@ export interface ActionInputs {
   cwd?: string;
   push?: PermissionLevel;
   shell?: PermissionLevel;
-  outputSchema?: string;
   token?: string;
 }
 
@@ -37,7 +36,6 @@ export function readActionInputs(): ActionInputs {
   setOptional(inputs, "cwd", optionalInput("cwd"));
   setOptional(inputs, "push", optionalEnumInput("push", PERMISSION_LEVELS));
   setOptional(inputs, "shell", optionalEnumInput("shell", PERMISSION_LEVELS));
-  setOptional(inputs, "outputSchema", optionalInput("output_schema"));
   setOptional(inputs, "token", optionalInput("token"));
   return inputs;
 }

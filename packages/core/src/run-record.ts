@@ -127,6 +127,12 @@ export function recordPolicy(record: RunRecord, policy: RuntimePolicy): RunRecor
   return { ...record, policy: summarizePolicy(policy) };
 }
 
+export function recordError(record: RunRecord, error: unknown): RunRecord {
+  const errorClass = error instanceof Error ? error.name : "Error";
+  const message = error instanceof Error ? error.message : String(error);
+  return { ...record, errors: [...record.errors, { class: errorClass, message }] };
+}
+
 export function recordToolAudit(record: RunRecord, audit: ToolAuditRunSummary): RunRecord {
   return {
     ...record,

@@ -19,7 +19,9 @@ export function filterShellEnv(
 
 export function assertDockerSandboxAvailable(input: { dockerPath?: string | null }): string {
   if (!input.dockerPath) {
-    throw new ToolExecutionError("restricted shell requires Docker and fails closed when Docker is unavailable");
+    throw new ToolExecutionError(
+      "restricted shell requires Docker and fails closed when Docker is unavailable"
+    );
   }
   return input.dockerPath;
 }
@@ -29,13 +31,19 @@ export function validateShellCommand(input: {
   allowCommands?: readonly string[];
   denyCommands?: readonly string[];
 }): void {
-  const executable = firstCommandToken(input.command);
-  if (!executable) throw new ToolExecutionError("shell command is empty");
-  if (input.denyCommands?.includes(executable)) {
-    throw new ToolExecutionError(`shell command is denied: ${executable}`);
-  }
-  if (input.allowCommands && input.allowCommands.length > 0 && !input.allowCommands.includes(executable)) {
-    throw new ToolExecutionError(`shell command is not allowlisted: ${executable}`);
+  const executables = commandTokens(input.command);
+  if (executables.length === 0) throw new ToolExecutionError("shell command is empty");
+  for (const executable of executables) {
+    if (input.denyCommands?.includes(executable)) {
+      throw new ToolExecutionError(`shell command is denied: ${executable}`);
+    }
+    if (
+      input.allowCommands &&
+      input.allowCommands.length > 0 &&
+      !input.allowCommands.includes(executable)
+    ) {
+      throw new ToolExecutionError(`shell command is not allowlisted: ${executable}`);
+    }
   }
 }
 
@@ -76,6 +84,23 @@ export function killTrackedBackgroundProcess(processId: string): boolean {
   return true;
 }
 
+// Matches shell operators that chain or inject additional commands into a single
+// invocation: `;`, `&&`, `||`, `|`, `&`, newlines, backticks, and `$(` substitutions.
+// Splitting on these (rather than only inspecting the first word of the raw string)
+// closes the bypass where `git status; sudo rm -rf /` passed allow/deny checks under
+// the "git" executable while `sudo` ran unchecked.
+const COMMAND_CHAIN_PATTERN = /&&|\|\||\$\(|[;&|`\n]/;
+
+function commandTokens(command: string): string[] {
+  return command
+    .split(COMMAND_CHAIN_PATTERN)
+    .map((segment) => firstCommandToken(segment))
+    .filter((token): token is string => Boolean(token));
+}
+
 function firstCommandToken(command: string): string | undefined {
-  return command.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, "");
+  return command
+    .trim()
+    .split(/\s+/)[0]
+    ?.replace(/^["']|["']$/g, "");
 }

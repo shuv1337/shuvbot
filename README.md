@@ -1,6 +1,12 @@
 # reviewbot
 
-`reviewbot` is a GitHub-native code review and coding-agent action. It reviews pull requests, responds to trusted `@reviewbot` mentions, can run a guarded CI repair loop, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
+`reviewbot` is a GitHub-native code review and coding-agent action. In this version it reviews pull requests with a real agent, classifies trusted `@reviewbot` mentions, runs guarded no-op implement/fix-ci paths, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
+
+**Status: review mode is live in this version.** It runs the real Claude Code
+driver against the MCP tool server and posts real findings. `implement` and
+`fix-ci` modes exist end-to-end (policy, branch prep, commit/PR tooling) but
+are not yet wired to a real agent - they currently no-op and say so in their
+run summary. See `docs/workflows.md` for details.
 
 ## Secure Quickstart
 

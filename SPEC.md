@@ -459,10 +459,6 @@ inputs:
     description: "Shell permission: disabled, restricted, enabled"
     required: false
 
-  output_schema:
-    description: "JSON Schema for structured action output"
-    required: false
-
   token:
     description: "GitHub token"
     required: false
@@ -470,7 +466,7 @@ inputs:
 
 outputs:
   result:
-    description: "Structured result when requested"
+    description: "Compact JSON status object for the run"
 
   review_findings:
     description: "JSON array of review findings"
@@ -536,6 +532,9 @@ If omitted, resolved from config and policy.
 #### `output_schema`
 
 A JSON Schema. If supplied, the bot must return JSON matching it or fail the action.
+
+**Not implemented.** `action.yml` in this repo does not declare `output_schema`
+and the runtime never reads it - see §23.1.
 
 ### 4.3 Action Outputs
 
@@ -629,48 +628,11 @@ jobs:
 
 ### 5.3 Standalone Structured Output
 
-```yaml
-name: Release notes
-
-on:
-  push:
-    tags: ["v*"]
-
-permissions:
-  contents: write
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: notes
-        uses: shuv/reviewbot@v0
-        with:
-          mode: release-notes
-          prompt: |
-            Generate release notes for ${{ github.ref_name }}.
-            Compare with the previous tag.
-          output_schema: |
-            {
-              "type": "object",
-              "required": ["summary", "features", "fixes", "breaking"],
-              "properties": {
-                "summary": { "type": "string" },
-                "features": { "type": "array", "items": { "type": "string" } },
-                "fixes": { "type": "array", "items": { "type": "string" } },
-                "breaking": { "type": "array", "items": { "type": "string" } }
-              }
-            }
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-      - run: |
-          echo '${{ steps.notes.outputs.result }}' > release.json
-```
+**Not implemented in this repo.** The current `action.yml` does not expose
+`output_schema`, and `release-notes` mode does not call an agent. A standalone
+step can still set the normal `result` output, but it is only the compact run
+status object; no schema-validated release notes are produced until the
+structured-output flow in §23.1 is built.
 
 ### 5.4 CI Repair Workflow
 
@@ -790,9 +752,7 @@ export function resolveClaudeAuth(env: NodeJS.ProcessEnv): ClaudeAuth {
     return { kind: "api-key", env: { ANTHROPIC_API_KEY: apiKey } };
   }
 
-  throw new Error(
-    "Claude auth missing: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY"
-  );
+  throw new Error("Claude auth missing: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY");
 }
 ```
 
@@ -822,101 +782,57 @@ Default path:
 
 ### 7.2 Example Config
 
-```toml
-version = 1
+The parser (`packages/core/src/config.ts`) implements a flat schema: a fixed
+allowlist of top-level keys, each either a scalar or a small nested table.
+There is no `version` field and no `[[modes]]`/`[[skills]]`/`[chunking]`
+tables - modes and review skills are built into the code
+(`packages/core/src/skills/*.ts`), not configured via TOML. Unknown
+top-level keys are rejected (`x-*` excepted), so the nested/versioned
+example previously shown here does not parse against the real code; this
+is the actual accepted shape.
 
-[defaults]
+```toml
 agent = "claude-code"
 model = "claude/sonnet"
+mode = "review"
 timeout = "1h"
-activityTimeout = "5m"
+activity_timeout = "5m"
 
 # Review gates
-failOn = "high"
-reportOn = "medium"
-requestChanges = false
-failCheck = false
-maxFindings = 50
-minConfidence = "medium"
+fail_on = "high"
+fail_check = false
+request_changes = false
+report_on = "medium"
+min_confidence = "medium"
 
 # Tool gates
 shell = "restricted"
 push = "restricted"
 
-# Files
-ignorePaths = [
-  "dist/**",
-  "build/**",
-  "coverage/**",
-  "**/*.snap",
-  "**/pnpm-lock.yaml",
-  "**/bun.lock",
-]
+[shell_sandbox]
+allow_commands = []
+deny_commands = ["sudo", "su", "docker", "podman"]
 
-[review]
-summary = true
-inlineComments = true
-suggestedFixes = true
-verifyFindings = true
-dedupe = true
+[fix_ci]
+max_attempts = 3
+max_runtime = "90m"
+rerun_checks = true
 
-[chunking]
-mode = "hunks"
-maxChunkChars = 8000
-coalesce = true
-maxGapLines = 30
-maxContextFiles = 50
+[paths]
+include = ["**/*"]
+ignore = []
 
 [memory]
 enabled = false
 backend = "github" # github | file | api | disabled
 learnings = false
-prSummaries = true
+pr_summaries = true
 # Repo learnings are disabled by default. Opt in explicitly before reading or writing them.
-
-[commands]
-prefix = "@reviewbot"
-
-[[modes]]
-name = "review"
-description = "Review the PR and post findings"
-
-[[modes]]
-name = "implement"
-description = "Implement requested changes and push commits"
-
-[[modes]]
-name = "fix-ci"
-description = "Read failing check logs and attempt fixes"
-
-[[skills]]
-name = "security-review"
-description = "Find security issues"
-paths = ["src/**/*.ts", ".github/workflows/*.yml", "action.yml"]
-ignorePaths = ["**/*.test.ts"]
-failOn = "high"
-reportOn = "medium"
-
-[[skills.triggers]]
-type = "pull_request"
-actions = ["opened", "synchronize", "reopened"]
-
-[[skills]]
-name = "code-review"
-description = "General correctness and maintainability review"
-paths = ["src/**/*.ts", "packages/**/*.ts"]
-
-[[skills.triggers]]
-type = "pull_request"
-actions = ["opened", "synchronize", "reopened"]
-
-[[skills]]
-name = "workflow-security"
-description = "Audit GitHub Actions workflow security"
-paths = [".github/workflows/*.yml", ".github/workflows/*.yaml"]
-failOn = "medium"
-reportOn = "low"
 ```
+
+Both `camelCase` and `snake_case` spellings are accepted for every key
+(e.g. `failOn`/`fail_on`, `activityTimeout`/`activity_timeout`); the example
+above uses `snake_case` to match `reviewbot.sample.toml` and `docs/config.md`.
 
 ### 7.3 Config Validation
 
@@ -1044,14 +960,14 @@ export interface RuntimePolicy {
 
 ### 9.2 Default Permission Matrix
 
-| Context | Shell | Push | Secrets | Comments | Reviews | Commits |
-|---|---:|---:|---:|---:|---:|---:|
-| PR from fork | disabled | disabled | no | yes | yes | no |
-| PR from same repo, non-collab | restricted | disabled | no | yes | yes | no |
-| Collaborator mention | restricted | restricted | selected | yes | yes | branch only |
-| Maintainer mention | restricted/enabled by config | restricted/enabled by config | selected | yes | yes | yes |
-| Scheduled repo maintenance | restricted | restricted | selected | yes | yes | bot branch |
-| Manual workflow dispatch | config-driven | config-driven | selected | yes | yes | config-driven |
+| Context                       |                        Shell |                         Push |  Secrets | Comments | Reviews |       Commits |
+| ----------------------------- | ---------------------------: | ---------------------------: | -------: | -------: | ------: | ------------: |
+| PR from fork                  |                     disabled |                     disabled |       no |      yes |     yes |            no |
+| PR from same repo, non-collab |                   restricted |                     disabled |       no |      yes |     yes |            no |
+| Collaborator mention          |                   restricted |                   restricted | selected |      yes |     yes |   branch only |
+| Maintainer mention            | restricted/enabled by config | restricted/enabled by config | selected |      yes |     yes |           yes |
+| Scheduled repo maintenance    |                   restricted |                   restricted | selected |      yes |     yes |    bot branch |
+| Manual workflow dispatch      |                config-driven |                config-driven | selected |      yes |     yes | config-driven |
 
 ### 9.3 Restricted Shell
 
@@ -1254,12 +1170,7 @@ For review comments:
 ### 11.1 Driver Interface
 
 ```ts
-export type AgentId =
-  | "claude-code"
-  | "anthropic-sdk"
-  | "openai"
-  | "codex-cli"
-  | "aider";
+export type AgentId = "claude-code" | "anthropic-sdk" | "openai" | "codex-cli" | "aider";
 
 export interface AgentDriver {
   id: AgentId;
@@ -1390,7 +1301,7 @@ export const models: Record<string, ModelAlias> = {
     preferred: true,
     supportsTools: true,
     supportsJsonSchema: true,
-    supportsLongContext: true,
+    supportsLongContext: true
   },
 
   "claude/opus": {
@@ -1400,7 +1311,7 @@ export const models: Record<string, ModelAlias> = {
     resolve: "opus-latest",
     supportsTools: true,
     supportsJsonSchema: true,
-    supportsLongContext: true,
+    supportsLongContext: true
   },
 
   "openai/gpt": {
@@ -1409,7 +1320,7 @@ export const models: Record<string, ModelAlias> = {
     displayName: "GPT",
     resolve: "gpt-latest",
     supportsTools: true,
-    supportsJsonSchema: true,
+    supportsJsonSchema: true
   }
 };
 ```
@@ -1480,6 +1391,11 @@ export interface ReviewFinding {
 
 Purpose: fulfill a maintainer request.
 
+**Not fully implemented in this repo.** The current runtime classifies the
+request, prepares the `reviewbot/*` branch, applies policy, and posts a
+summary, but the agent edit/check/commit/push/PR step is still an explicit
+no-op.
+
 Flow:
 
 ```text
@@ -1509,6 +1425,10 @@ Mode: implement
 
 Purpose: read failed checks and patch.
 
+**Not fully implemented in this repo.** The current runtime finds failed check
+runs, fetches logs, applies policy, and posts a summary, but the agent
+edit/test/commit/push step is still an explicit no-op.
+
 Flow:
 
 ```text
@@ -1534,6 +1454,9 @@ rerunChecks = true
 
 Purpose: issue/PR management.
 
+**Not implemented in this repo.** Triage commands can be classified, but the
+runtime does not yet start an agent or perform these actions.
+
 Allowed actions:
 
 - Label issue.
@@ -1546,6 +1469,9 @@ Allowed actions:
 ### 13.5 `release-notes`
 
 Purpose: structured workflow output.
+
+**Not implemented in this repo.** `release-notes` mode is classified but does
+not yet start an agent or validate structured output; see §5.3 and §23.
 
 Flow:
 
@@ -1987,18 +1913,18 @@ export interface ParsedCommand {
 
 ### 20.4 Command-to-Mode Mapping
 
-| Command | Mode | Write Capable |
-|---|---|---:|
-| `review` | `review` | no |
-| `improve` | `implement` | yes |
-| `ask` | `triage` / read-only | no |
-| `implement` | `implement` | yes |
-| `fix-ci` | `fix-ci` | yes |
-| `describe` | `release-notes` / summary | optional |
-| `changelog` | `release-notes` | optional |
-| `test-plan` | `review` / summary | no |
-| `explain` | read-only | no |
-| `summarize` | read-only | no |
+| Command     | Mode                      | Write Capable |
+| ----------- | ------------------------- | ------------: |
+| `review`    | `review`                  |            no |
+| `improve`   | `implement`               |           yes |
+| `ask`       | `triage` / read-only      |            no |
+| `implement` | `implement`               |           yes |
+| `fix-ci`    | `fix-ci`                  |           yes |
+| `describe`  | `release-notes` / summary |      optional |
+| `changelog` | `release-notes`           |      optional |
+| `test-plan` | `review` / summary        |            no |
+| `explain`   | read-only                 |            no |
+| `summarize` | read-only                 |            no |
 
 ---
 
@@ -2144,6 +2070,13 @@ export interface ReviewSkill {
 
 ## 23. Structured Outputs
 
+**Not implemented in this repo.** `action.yml` does not declare `output_schema`
+and no parse/validate/retry loop exists. §23.1 describes the intended design
+for a later milestone; §23.2 describes the `set_output` MCP tool, which is
+implemented today but with a `{name, value}` contract rather than the
+`{result, summary?}` shape shown below - see the implementation note at the
+end of §23.2.
+
 ### 23.1 Output Schema Handling
 
 If `output_schema` is provided:
@@ -2177,6 +2110,14 @@ Rules:
 - Validate against schema when provided.
 - Store raw JSON in run artifact.
 - Set GitHub Action output as compact JSON string.
+
+**Implementation note.** The `set_output` tool shipped in this repo
+(`packages/mcp/src/tools/output.ts`) uses a `{name, value}` contract instead
+of `{result, summary?}` above - it sets an arbitrary named action output
+rather than the single schema-validated `result`, since schema validation
+isn't implemented (see the note at the top of §23). Treat `{name, value}` as
+the current contract; revisit this section together with `output_schema`
+when that flow gets built.
 
 ---
 
@@ -2250,6 +2191,12 @@ Optional telemetry should be explicit:
 enabled = false
 endpoint = ""
 ```
+
+**Not implemented.** No export path exists yet, so `config.ts` rejects a
+`[telemetry]` block as an unknown top-level key rather than silently
+accepting and dropping it. Add it back once an exporter exists. This is
+distinct from internal observability (run records, redacted logs, tool-call
+audit), which is implemented and always on - see §24.1-§24.3.
 
 ---
 

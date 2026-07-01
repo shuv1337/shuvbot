@@ -20,7 +20,8 @@ export type SpawnImpl = (
 
 export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): AgentDriver {
   const command = options.command ?? "claude";
-  const spawnImpl = options.spawnImpl ?? ((cmd, args, spawnOptions) => spawn(cmd, [...args], spawnOptions));
+  const spawnImpl =
+    options.spawnImpl ?? ((cmd, args, spawnOptions) => spawn(cmd, [...args], spawnOptions));
   const redactor = options.redactor ?? new DefaultRedactor();
 
   return {
@@ -44,7 +45,9 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
         spawnImpl,
         redactor
       }).catch((error: unknown) => {
-        throw new AuthError(`Claude CLI not available: ${error instanceof Error ? error.message : String(error)}`);
+        throw new AuthError(
+          `Claude CLI not available: ${error instanceof Error ? error.message : String(error)}`
+        );
       });
     },
     async run(input: AgentRunInput): Promise<AgentRunResult> {
@@ -60,6 +63,7 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
       const result = await runProcess({
         command,
         args,
+        stdin: input.prompt,
         cwd: input.cwd,
         env,
         timeoutMs: input.timeoutMs,
@@ -71,7 +75,9 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
         success: result.exitCode === 0,
         output: result.stdout
       };
-      const error = result.stderr || (result.exitCode === 0 ? undefined : `Claude exited with ${result.exitCode}`);
+      const error =
+        result.stderr ||
+        (result.exitCode === 0 ? undefined : `Claude exited with ${result.exitCode}`);
       if (error !== undefined) runResult.error = error;
       return runResult;
     }
@@ -81,13 +87,25 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
 export const claudeCodeDriver = createClaudeCodeDriver();
 
 function buildClaudeArgs(input: AgentRunInput): string[] {
-  const args = ["--print", "--output-format", "text", "--no-session-persistence"];
+  const args = [
+    "--print",
+    "--input-format",
+    "text",
+    "--output-format",
+    "text",
+    "--no-session-persistence"
+  ];
   if (input.model) args.push("--model", input.model);
   if (input.systemPrompt) args.push("--system-prompt", input.systemPrompt);
   if (input.mcpServerUrl) {
-    args.push("--mcp-config", JSON.stringify(toMcpConfig(input.mcpServerUrl)), "--strict-mcp-config");
+    args.push(
+      "--mcp-config",
+      JSON.stringify(toMcpConfig(input.mcpServerUrl)),
+      "--strict-mcp-config",
+      "--tools",
+      ""
+    );
   }
-  args.push(input.prompt);
   return args;
 }
 
@@ -105,6 +123,7 @@ function toMcpConfig(url: string): Record<string, unknown> {
 interface RunProcessInput {
   command: string;
   args: readonly string[];
+  stdin?: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
   timeoutMs: number;
@@ -125,6 +144,11 @@ function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    const totalTimer = setTimeout(() => {
+      child.kill("SIGTERM");
+      finish(() => reject(new AgentTimeoutError(`Claude timed out after ${input.timeoutMs}ms`)));
+    }, input.timeoutMs);
+    let activityTimer: ReturnType<typeof setTimeout>;
 
     const finish = (callback: () => void): void => {
       if (settled) return;
@@ -138,19 +162,30 @@ function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
       clearTimeout(activityTimer);
       activityTimer = setTimeout(() => {
         child.kill("SIGTERM");
-        finish(() => reject(new AgentActivityTimeoutError(`Claude produced no output for ${input.activityTimeoutMs}ms`)));
+        finish(() =>
+          reject(
+            new AgentActivityTimeoutError(
+              `Claude produced no output for ${input.activityTimeoutMs}ms`
+            )
+          )
+        );
       }, input.activityTimeoutMs);
     };
 
-    const totalTimer = setTimeout(() => {
+    activityTimer = setTimeout(() => {
       child.kill("SIGTERM");
-      finish(() => reject(new AgentTimeoutError(`Claude timed out after ${input.timeoutMs}ms`)));
-    }, input.timeoutMs);
-    let activityTimer = setTimeout(() => {
-      child.kill("SIGTERM");
-      finish(() => reject(new AgentActivityTimeoutError(`Claude produced no output for ${input.activityTimeoutMs}ms`)));
+      finish(() =>
+        reject(
+          new AgentActivityTimeoutError(
+            `Claude produced no output for ${input.activityTimeoutMs}ms`
+          )
+        )
+      );
     }, input.activityTimeoutMs);
 
+    child.stdin.on("error", (error) => {
+      finish(() => reject(error));
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       resetActivity();
       stdout += input.redactor.redactString(chunk.toString("utf8"));
@@ -165,5 +200,7 @@ function runProcess(input: RunProcessInput): Promise<RunProcessResult> {
     child.on("close", (exitCode) => {
       finish(() => resolve({ stdout, stderr, exitCode }));
     });
+
+    if (input.stdin !== undefined) child.stdin.end(input.stdin);
   });
 }

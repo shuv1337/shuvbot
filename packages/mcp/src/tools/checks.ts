@@ -1,5 +1,13 @@
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { asArray, asRecord, boundedString, numberValue, requireClient, requireRepo, stringValue } from "./shared.ts";
+import {
+  asArray,
+  asRecord,
+  boundedString,
+  numberValue,
+  requireClient,
+  requireRepo,
+  stringValue
+} from "./shared.ts";
 
 interface CheckRunsInput {
   ref: string;
@@ -43,9 +51,12 @@ export const getCheckRunsTool: ToolSpec<CheckRunsInput, Record<string, unknown>>
   requiredPolicy: { canReadChecks: true },
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
-      params: { owner: repo.owner, repo: repo.name, ref: input.ref, per_page: 100 }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
+      {
+        params: { owner: repo.owner, repo: repo.name, ref: input.ref, per_page: 100 }
+      }
+    );
     const data = asRecord(response.data);
     return {
       ref: input.ref,
@@ -75,14 +86,18 @@ export const getCheckLogsTool: ToolSpec<CheckLogInput, Record<string, unknown>> 
   requiredPolicy: { canReadChecks: true },
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request<string>("GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs", {
-      params: { owner: repo.owner, repo: repo.name, job_id: input.runId },
-      responseType: "text"
-    });
+    const response = await requireClient(context).request<string>(
+      "GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+      {
+        params: { owner: repo.owner, repo: repo.name, job_id: input.runId },
+        responseType: "text"
+      }
+    );
     const bounded = boundedString(response.data, input.maxBytes ?? 128_000);
+    const redactedLogs = context.redactor.redactString(bounded.text);
     return {
       runId: input.runId,
-      logs: bounded.text,
+      logs: redactedLogs,
       truncated: bounded.truncated,
       bytes: bounded.bytes,
       untrusted: true
