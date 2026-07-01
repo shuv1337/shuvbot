@@ -1,27 +1,22 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { createRunRecord, recordError } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
 
+// @actions/core's `core.summary` is a process-wide singleton that memoizes
+// GITHUB_STEP_SUMMARY's file path on first use and ignores later env changes
+// (see node_modules/@actions/core/lib/summary.js). Any test file that points
+// GITHUB_STEP_SUMMARY at a fresh per-test temp dir and then deletes that dir
+// poisons every later summary-writing test in the same process with an ENOENT.
+// Use one fixed, never-deleted path for the whole process instead.
+const SUMMARY_PATH = join(tmpdir(), "reviewbot-tests-github-step-summary.md");
+
 describe("writeWorkflowSummary", () => {
-  let dir: string;
-  let summaryPath: string;
-  let previousSummaryPath: string | undefined;
-
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "reviewbot-summary-"));
-    summaryPath = join(dir, "summary.md");
-    await writeFile(summaryPath, "");
-    previousSummaryPath = process.env.GITHUB_STEP_SUMMARY;
-    process.env.GITHUB_STEP_SUMMARY = summaryPath;
-  });
-
-  afterEach(async () => {
-    if (previousSummaryPath === undefined) delete process.env.GITHUB_STEP_SUMMARY;
-    else process.env.GITHUB_STEP_SUMMARY = previousSummaryPath;
-    await rm(dir, { recursive: true, force: true });
+    await writeFile(SUMMARY_PATH, "");
+    process.env.GITHUB_STEP_SUMMARY = SUMMARY_PATH;
   });
 
   test("redacts secrets embedded in recorded errors", async () => {
@@ -32,7 +27,7 @@ describe("writeWorkflowSummary", () => {
 
     await writeWorkflowSummary(record);
 
-    const written = await readFile(summaryPath, "utf8");
+    const written = await readFile(SUMMARY_PATH, "utf8");
     expect(written).not.toContain("sk-live-verysecretvalue1234");
     expect(written).toContain("[REDACTED]");
   });
