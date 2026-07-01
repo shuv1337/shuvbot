@@ -41,7 +41,10 @@ describe("Claude Code driver", () => {
     expect(masked).toEqual(["secret-token-value"]);
     expect(calls[0]?.args).toContain("--mcp-config");
     expect(calls[0]?.args).toContain("--strict-mcp-config");
-    expect(calls[0]?.args).toContain("--disallowedTools");
+    const toolsIndex = calls[0]?.args.indexOf("--tools") ?? -1;
+    expect(toolsIndex).toBeGreaterThanOrEqual(0);
+    expect(calls[0]?.args[toolsIndex + 1]).toBe("");
+    expect(calls[0]?.args).not.toContain("--disallowedTools");
     expect(calls[0]?.args).not.toContain("review");
     expect(stdinWrites.join("")).toBe("review");
     expect(calls[0]?.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("secret-token-value");

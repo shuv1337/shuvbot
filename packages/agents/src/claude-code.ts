@@ -90,13 +90,8 @@ function buildClaudeArgs(input: AgentRunInput): string[] {
       "--mcp-config",
       JSON.stringify(toMcpConfig(input.mcpServerUrl)),
       "--strict-mcp-config",
-      "--disallowedTools",
-      "Bash",
-      "Edit",
-      "Write",
-      "Read",
-      "Glob",
-      "Grep"
+      "--tools",
+      ""
     );
   }
   return args;
