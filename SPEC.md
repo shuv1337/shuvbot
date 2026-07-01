@@ -825,101 +825,57 @@ Default path:
 
 ### 7.2 Example Config
 
-```toml
-version = 1
+The parser (`packages/core/src/config.ts`) implements a flat schema: a fixed
+allowlist of top-level keys, each either a scalar or a small nested table.
+There is no `version` field and no `[[modes]]`/`[[skills]]`/`[chunking]`
+tables - modes and review skills are built into the code
+(`packages/core/src/skills/*.ts`), not configured via TOML. Unknown
+top-level keys are rejected (`x-*` excepted), so the nested/versioned
+example previously shown here does not parse against the real code; this
+is the actual accepted shape.
 
-[defaults]
+```toml
 agent = "claude-code"
 model = "claude/sonnet"
+mode = "review"
 timeout = "1h"
-activityTimeout = "5m"
+activity_timeout = "5m"
 
 # Review gates
-failOn = "high"
-reportOn = "medium"
-requestChanges = false
-failCheck = false
-maxFindings = 50
-minConfidence = "medium"
+fail_on = "high"
+fail_check = false
+request_changes = false
+report_on = "medium"
+min_confidence = "medium"
 
 # Tool gates
 shell = "restricted"
 push = "restricted"
 
-# Files
-ignorePaths = [
-  "dist/**",
-  "build/**",
-  "coverage/**",
-  "**/*.snap",
-  "**/pnpm-lock.yaml",
-  "**/bun.lock",
-]
+[shell_sandbox]
+allow_commands = []
+deny_commands = ["sudo", "su", "docker", "podman"]
 
-[review]
-summary = true
-inlineComments = true
-suggestedFixes = true
-verifyFindings = true
-dedupe = true
+[fix_ci]
+max_attempts = 3
+max_runtime = "90m"
+rerun_checks = true
 
-[chunking]
-mode = "hunks"
-maxChunkChars = 8000
-coalesce = true
-maxGapLines = 30
-maxContextFiles = 50
+[paths]
+include = ["**/*"]
+ignore = []
 
 [memory]
 enabled = false
 backend = "github" # github | file | api | disabled
 learnings = false
-prSummaries = true
+pr_summaries = true
 # Repo learnings are disabled by default. Opt in explicitly before reading or writing them.
-
-[commands]
-prefix = "@reviewbot"
-
-[[modes]]
-name = "review"
-description = "Review the PR and post findings"
-
-[[modes]]
-name = "implement"
-description = "Implement requested changes and push commits"
-
-[[modes]]
-name = "fix-ci"
-description = "Read failing check logs and attempt fixes"
-
-[[skills]]
-name = "security-review"
-description = "Find security issues"
-paths = ["src/**/*.ts", ".github/workflows/*.yml", "action.yml"]
-ignorePaths = ["**/*.test.ts"]
-failOn = "high"
-reportOn = "medium"
-
-[[skills.triggers]]
-type = "pull_request"
-actions = ["opened", "synchronize", "reopened"]
-
-[[skills]]
-name = "code-review"
-description = "General correctness and maintainability review"
-paths = ["src/**/*.ts", "packages/**/*.ts"]
-
-[[skills.triggers]]
-type = "pull_request"
-actions = ["opened", "synchronize", "reopened"]
-
-[[skills]]
-name = "workflow-security"
-description = "Audit GitHub Actions workflow security"
-paths = [".github/workflows/*.yml", ".github/workflows/*.yaml"]
-failOn = "medium"
-reportOn = "low"
 ```
+
+Both `camelCase` and `snake_case` spellings are accepted for every key
+(e.g. `failOn`/`fail_on`, `activityTimeout`/`activity_timeout`); the example
+above uses `snake_case` to match `reviewbot.sample.toml` and `docs/config.md`.
 
 ### 7.3 Config Validation
 
