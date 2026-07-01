@@ -107,8 +107,7 @@ const TOP_LEVEL_KEYS = new Set([
   "fix_ci",
   "push",
   "paths",
-  "memory",
-  "telemetry"
+  "memory"
 ]);
 
 export async function loadConfigFile(path: string): Promise<ReviewbotConfig> {

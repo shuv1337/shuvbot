@@ -537,6 +537,9 @@ If omitted, resolved from config and policy.
 
 A JSON Schema. If supplied, the bot must return JSON matching it or fail the action.
 
+**Not implemented.** `action.yml` in this repo does not declare `output_schema`
+and the runtime never reads it - see §23.1.
+
 ### 4.3 Action Outputs
 
 #### `result`
@@ -2144,6 +2147,13 @@ export interface ReviewSkill {
 
 ## 23. Structured Outputs
 
+**Not implemented in this repo.** `action.yml` does not declare `output_schema`
+and no parse/validate/retry loop exists. §23.1 describes the intended design
+for a later milestone; §23.2 describes the `set_output` MCP tool, which is
+implemented today but with a `{name, value}` contract rather than the
+`{result, summary?}` shape shown below - see the implementation note at the
+end of §23.2.
+
 ### 23.1 Output Schema Handling
 
 If `output_schema` is provided:
@@ -2177,6 +2187,14 @@ Rules:
 - Validate against schema when provided.
 - Store raw JSON in run artifact.
 - Set GitHub Action output as compact JSON string.
+
+**Implementation note.** The `set_output` tool shipped in this repo
+(`packages/mcp/src/tools/output.ts`) uses a `{name, value}` contract instead
+of `{result, summary?}` above - it sets an arbitrary named action output
+rather than the single schema-validated `result`, since schema validation
+isn't implemented (see the note at the top of §23). Treat `{name, value}` as
+the current contract; revisit this section together with `output_schema`
+when that flow gets built.
 
 ---
 
@@ -2250,6 +2268,12 @@ Optional telemetry should be explicit:
 enabled = false
 endpoint = ""
 ```
+
+**Not implemented.** No export path exists yet, so `config.ts` rejects a
+`[telemetry]` block as an unknown top-level key rather than silently
+accepting and dropping it. Add it back once an exporter exists. This is
+distinct from internal observability (run records, redacted logs, tool-call
+audit), which is implemented and always on - see §24.1-§24.3.
 
 ---
 

@@ -32,12 +32,16 @@ inputs:
   shell:
     description: Shell permission level.
     required: false
-  output_schema:
-    description: JSON schema for structured standalone output.
-    required: false
   token:
     description: GitHub token.
     required: false
+outputs:
+  result:
+    description: Compact JSON status object for the run (runId, status, mode, and mode-specific fields).
+  review_findings:
+    description: JSON array of posted review findings. Only set in review mode.
+  summary:
+    description: Human-readable run summary text.
 runs:
   using: node24
   main: dist/index.js
