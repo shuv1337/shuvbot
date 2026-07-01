@@ -25,8 +25,8 @@ describe("review context assembly", () => {
     expect(context.manifest.sections).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "L5:diff", untrusted: true, bytes: Buffer.byteLength("+change") }),
-        expect.objectContaining({ id: "repo-instructions:AGENTS.md", untrusted: false }),
-        expect.objectContaining({ id: "repo-instructions:.cursor/rules/review.mdc", untrusted: false })
+        expect.objectContaining({ id: "repo-instructions:AGENTS.md", untrusted: true }),
+        expect.objectContaining({ id: "repo-instructions:.cursor/rules/review.mdc", untrusted: true })
       ])
     );
   });

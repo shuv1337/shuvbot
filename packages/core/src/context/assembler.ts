@@ -35,7 +35,7 @@ export async function loadRepoInstructions(cwd: string): Promise<ContextSection[
         id: `repo-instructions:${relativePath}`,
         title: `Repository instructions: ${relativePath}`,
         content,
-        untrusted: false
+        untrusted: true
       });
     }
   }
@@ -46,7 +46,7 @@ export async function loadRepoInstructions(cwd: string): Promise<ContextSection[
         id: `repo-instructions:${relativePath}`,
         title: `Repository instructions: ${relativePath}`,
         content,
-        untrusted: false
+        untrusted: true
       });
     }
   }
