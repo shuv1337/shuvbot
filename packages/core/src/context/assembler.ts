@@ -86,7 +86,7 @@ export function assembleReviewContext(input: AssembleReviewContextInput): Review
       id: "L6:pr-summary",
       title: "Previous PR summary",
       content: input.prSummary,
-      untrusted: false
+      untrusted: true
     });
   }
   if (input.learnings) {
@@ -94,7 +94,7 @@ export function assembleReviewContext(input: AssembleReviewContextInput): Review
       id: "L7:repo-learnings",
       title: "Repository learnings",
       content: input.learnings,
-      untrusted: false
+      untrusted: true
     });
   }
 
