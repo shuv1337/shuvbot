@@ -2215,12 +2215,15 @@ ${FINDING_SCHEMA_INSTRUCTIONS}`
           prompt,
           systemPrompt: verifyInstructions(findings)
         });
-        if (!result.success) return findings.map((finding) => finding.id);
+        if (!result.success) {
+          options.logger?.log("warn", "review.verify_failed", { error: result.error });
+          return [];
+        }
         const ids = extractJsonArray(result.output ?? "").filter((id) => typeof id === "string");
         return ids;
       } catch (error) {
         options.logger?.log("warn", "review.verify_error", { error: errorMessage(error) });
-        return findings.map((finding) => finding.id);
+        return [];
       }
     }
   };

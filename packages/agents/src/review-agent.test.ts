@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { RunLogger } from "../../core/src/observability.ts";
 import type { AgentDriver, AgentRunInput, AgentRunResult } from "./driver.ts";
 import { createDriverReviewAgent } from "./review-agent.ts";
 
@@ -95,17 +96,40 @@ describe("createDriverReviewAgent", () => {
     expect(ids).toEqual(["kept"]);
   });
 
-  test("verify trusts all candidates when the driver fails", async () => {
+  test("verify fails closed and logs when the driver fails", async () => {
+    const logger = new RunLogger();
     const agent = createDriverReviewAgent({
       ...BASE_OPTIONS,
-      driver: fakeDriver(() => ({ success: false, error: "boom" }))
+      driver: fakeDriver(() => ({ success: false, error: "boom" })),
+      logger
     });
 
     const ids = await agent.verify?.({
       prompt: "diff",
       findings: [{ id: "a", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" }]
     });
-    expect(ids).toEqual(["a"]);
+    expect(ids).toEqual([]);
+    expect(logger.snapshot()).toContainEqual(expect.objectContaining({ level: "warn", event: "review.verify_failed", data: { error: "boom" } }));
+  });
+
+  test("verify fails closed and logs when the driver throws", async () => {
+    const logger = new RunLogger();
+    const agent = createDriverReviewAgent({
+      ...BASE_OPTIONS,
+      driver: fakeDriver(() => {
+        throw new Error("spawn failed");
+      }),
+      logger
+    });
+
+    const ids = await agent.verify?.({
+      prompt: "diff",
+      findings: [{ id: "a", skill: "code-review", title: "t", body: "b", severity: "high", confidence: "high", path: "a.ts" }]
+    });
+    expect(ids).toEqual([]);
+    expect(logger.snapshot()).toContainEqual(
+      expect.objectContaining({ level: "warn", event: "review.verify_error", data: { error: "spawn failed" } })
+    );
   });
 
   test("verify short-circuits with no findings", async () => {
