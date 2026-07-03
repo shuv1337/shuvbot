@@ -2354,6 +2354,11 @@ Build output:
 dist/index.js
 ```
 
+The committed action bundle must be self-contained. GitHub executes `dist/index.js`
+from the checked-out action repository with no `npm install`, so release builds
+must inline runtime dependencies and avoid live bare imports from third-party
+packages.
+
 ### 27.2 Versioning
 
 Use semver:
@@ -2379,6 +2384,7 @@ v1
 - Redaction tests pass.
 - Fork PR policy tests pass.
 - `action.yml` points to compiled dist.
+- `dist/index.js` is committed, fresh relative to source, and passes the self-contained bundle guard.
 - Changelog generated.
 - Release tag created.
 
