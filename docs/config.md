@@ -46,3 +46,5 @@ pr_summaries = true
 ```
 
 Unknown top-level keys are rejected unless they start with `x-`.
+
+`model` accepts reviewbot aliases such as `claude/sonnet` and `claude/opus`, or a direct provider model ID. The Claude Code driver resolves reviewbot aliases to Claude CLI-compatible model IDs before invoking `claude --print`.
