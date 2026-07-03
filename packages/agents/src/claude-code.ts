@@ -4,6 +4,10 @@ import { DefaultRedactor } from "../../core/src/redaction.ts";
 import type { Redactor } from "../../core/src/redaction.ts";
 import type { AgentContext, AgentDriver, AgentRunInput, AgentRunResult } from "./driver.ts";
 import { maskSecret, resolveClaudeAuth } from "./auth.ts";
+import { resolveModelId } from "./model-registry.ts";
+
+/** Max characters of each stream (stdout/stderr) kept in a failure diagnostic. */
+const MAX_DIAGNOSTIC_CHARS = 2000;
 
 export interface ClaudeCodeDriverOptions {
   command?: string;
@@ -52,7 +56,8 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
     },
     async run(input: AgentRunInput): Promise<AgentRunResult> {
       const auth = resolveClaudeAuth(input.env);
-      for (const value of Object.values(auth.env)) maskSecret(value, "Claude auth", options.masker);
+      const secrets = Object.values(auth.env);
+      for (const value of secrets) maskSecret(value, "Claude auth", options.masker);
 
       const env: NodeJS.ProcessEnv = {
         PATH: process.env.PATH,
@@ -75,10 +80,17 @@ export function createClaudeCodeDriver(options: ClaudeCodeDriverOptions = {}): A
         success: result.exitCode === 0,
         output: result.stdout
       };
-      const error =
-        result.stderr ||
-        (result.exitCode === 0 ? undefined : `Claude exited with ${result.exitCode}`);
-      if (error !== undefined) runResult.error = error;
+      // On failure the CLI frequently prints its real error (auth, model access,
+      // bad flags) to STDOUT with an EMPTY stderr, so a bare exit code is
+      // useless for triage. Surface a bounded, secret-scrubbed tail of both
+      // streams. stdout/stderr are already pattern-redacted as they stream in;
+      // scrubSecrets adds an exact-value pass in case a token was split across
+      // stream chunks and slipped past the pattern redactor.
+      if (result.exitCode === 0) {
+        if (result.stderr) runResult.error = result.stderr;
+      } else {
+        runResult.error = formatFailureDiagnostics(result, secrets);
+      }
       return runResult;
     }
   };
@@ -95,7 +107,11 @@ function buildClaudeArgs(input: AgentRunInput): string[] {
     "text",
     "--no-session-persistence"
   ];
-  if (input.model) args.push("--model", input.model);
+  // The config uses reviewbot slugs like "claude/sonnet"; the Claude CLI only
+  // accepts its own aliases ("sonnet") or full model ids ("claude-sonnet-4-5").
+  // Passing the raw slug makes the CLI exit 1 ("model may not exist") even with
+  // valid auth, so resolve through the registry before handing it off.
+  if (input.model) args.push("--model", resolveModelId(input.model).model);
   if (input.systemPrompt) args.push("--system-prompt", input.systemPrompt);
   if (input.mcpServerUrl) {
     args.push(
@@ -107,6 +123,29 @@ function buildClaudeArgs(input: AgentRunInput): string[] {
     );
   }
   return args;
+}
+
+function formatFailureDiagnostics(result: RunProcessResult, secrets: readonly string[]): string {
+  const stderrTail = boundedTail(scrubSecrets(result.stderr, secrets));
+  const stdoutTail = boundedTail(scrubSecrets(result.stdout, secrets));
+  return [
+    `Claude exited with ${result.exitCode ?? "null"}`,
+    `stderr: ${stderrTail || "<empty>"}`,
+    `stdout: ${stdoutTail || "<empty>"}`
+  ].join("\n");
+}
+
+function boundedTail(text: string, max = MAX_DIAGNOSTIC_CHARS): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `…[${trimmed.length - max} chars omitted]…\n${trimmed.slice(-max)}`;
+}
+
+function scrubSecrets(text: string, secrets: readonly string[]): string {
+  return secrets.reduce(
+    (current, secret) => (secret ? current.split(secret).join("[REDACTED]") : current),
+    text
+  );
 }
 
 function toMcpConfig(url: string): Record<string, unknown> {

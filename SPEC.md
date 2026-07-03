@@ -1278,8 +1278,8 @@ Use stable aliases instead of hardcoded provider model IDs.
 export interface ModelAlias {
   slug: string;
   provider: string;
-  displayName: string;
-  resolve: string;
+  model: string;
+  displayName?: string;
   preferred?: boolean;
   fallback?: string;
   supportsTools?: boolean;
@@ -1297,7 +1297,7 @@ export const models: Record<string, ModelAlias> = {
     slug: "claude/sonnet",
     provider: "anthropic",
     displayName: "Claude Sonnet",
-    resolve: "sonnet-latest",
+    model: "claude-sonnet-4-5",
     preferred: true,
     supportsTools: true,
     supportsJsonSchema: true,
@@ -1308,7 +1308,7 @@ export const models: Record<string, ModelAlias> = {
     slug: "claude/opus",
     provider: "anthropic",
     displayName: "Claude Opus",
-    resolve: "opus-latest",
+    model: "claude-opus-4-1",
     supportsTools: true,
     supportsJsonSchema: true,
     supportsLongContext: true
@@ -1318,7 +1318,7 @@ export const models: Record<string, ModelAlias> = {
     slug: "openai/gpt",
     provider: "openai",
     displayName: "GPT",
-    resolve: "gpt-latest",
+    model: "gpt-latest",
     supportsTools: true,
     supportsJsonSchema: true
   }
@@ -1329,8 +1329,8 @@ export const models: Record<string, ModelAlias> = {
 
 - Config uses aliases.
 - Driver resolves alias to concrete model.
-- Concrete model IDs can be overridden.
-- Missing alias fails clearly.
+- Concrete model IDs can be passed through directly.
+- The Claude Code driver must pass Claude CLI-compatible aliases or concrete IDs to `--model`, not reviewbot slugs like `claude/sonnet`.
 - Provider-specific model churn should not break repo config.
 
 ---

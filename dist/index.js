@@ -428,18 +428,18 @@ var require_tunnel = __commonJS({
             res.statusCode
           );
           socket.destroy();
-          var error2 = new Error("tunneling socket could not be established, statusCode=" + res.statusCode);
-          error2.code = "ECONNRESET";
-          options.request.emit("error", error2);
+          var error3 = new Error("tunneling socket could not be established, statusCode=" + res.statusCode);
+          error3.code = "ECONNRESET";
+          options.request.emit("error", error3);
           self.removeSocket(placeholder);
           return;
         }
         if (head.length > 0) {
           debug("got illegal response body from proxy");
           socket.destroy();
-          var error2 = new Error("got illegal response body from proxy");
-          error2.code = "ECONNRESET";
-          options.request.emit("error", error2);
+          var error3 = new Error("got illegal response body from proxy");
+          error3.code = "ECONNRESET";
+          options.request.emit("error", error3);
           self.removeSocket(placeholder);
           return;
         }
@@ -454,9 +454,9 @@ var require_tunnel = __commonJS({
           cause.message,
           cause.stack
         );
-        var error2 = new Error("tunneling socket could not be established, cause=" + cause.message);
-        error2.code = "ECONNRESET";
-        options.request.emit("error", error2);
+        var error3 = new Error("tunneling socket could not be established, cause=" + cause.message);
+        error3.code = "ECONNRESET";
+        options.request.emit("error", error3);
         self.removeSocket(placeholder);
       }
     };
@@ -5587,7 +5587,7 @@ Content-Type: ${value.type || "application/octet-stream"}\r
         throw new TypeError("Body is unusable");
       }
       const promise = createDeferredPromise();
-      const errorSteps = (error2) => promise.reject(error2);
+      const errorSteps = (error3) => promise.reject(error3);
       const successSteps = (data) => {
         try {
           promise.resolve(convertBytesToJSValue(data));
@@ -5873,16 +5873,16 @@ var require_request = __commonJS({
           this.onError(err);
         }
       }
-      onError(error2) {
+      onError(error3) {
         this.onFinally();
         if (channels.error.hasSubscribers) {
-          channels.error.publish({ request: this, error: error2 });
+          channels.error.publish({ request: this, error: error3 });
         }
         if (this.aborted) {
           return;
         }
         this.aborted = true;
-        return this[kHandler].onError(error2);
+        return this[kHandler].onError(error3);
       }
       onFinally() {
         if (this.errorHandler) {
@@ -6745,8 +6745,8 @@ var require_RedirectHandler = __commonJS({
       onUpgrade(statusCode, headers, socket) {
         this.handler.onUpgrade(statusCode, headers, socket);
       }
-      onError(error2) {
-        this.handler.onError(error2);
+      onError(error3) {
+        this.handler.onError(error3);
       }
       onHeaders(statusCode, headers, resume, statusText) {
         this.location = this.history.length >= this.maxRedirections || util2.isDisturbed(this.opts.body) ? null : parseLocation(statusCode, headers);
@@ -8890,7 +8890,7 @@ var require_pool = __commonJS({
         this[kOptions] = { ...util2.deepClone(options), connect, allowH2 };
         this[kOptions].interceptors = options.interceptors ? { ...options.interceptors } : void 0;
         this[kFactory] = factory;
-        this.on("connectionError", (origin2, targets, error2) => {
+        this.on("connectionError", (origin2, targets, error3) => {
           for (const target of targets) {
             const idx = this[kClients].indexOf(target);
             if (idx !== -1) {
@@ -10501,13 +10501,13 @@ var require_mock_utils = __commonJS({
       if (mockDispatch2.data.callback) {
         mockDispatch2.data = { ...mockDispatch2.data, ...mockDispatch2.data.callback(opts) };
       }
-      const { data: { statusCode, data, headers, trailers, error: error2 }, delay, persist } = mockDispatch2;
+      const { data: { statusCode, data, headers, trailers, error: error3 }, delay, persist } = mockDispatch2;
       const { timesInvoked, times } = mockDispatch2;
       mockDispatch2.consumed = !persist && timesInvoked >= times;
       mockDispatch2.pending = timesInvoked < times;
-      if (error2 !== null) {
+      if (error3 !== null) {
         deleteMockDispatch(this[kDispatches], key);
-        handler.onError(error2);
+        handler.onError(error3);
         return true;
       }
       if (typeof delay === "number" && delay > 0) {
@@ -10545,19 +10545,19 @@ var require_mock_utils = __commonJS({
         if (agent.isMockActive) {
           try {
             mockDispatch.call(this, opts, handler);
-          } catch (error2) {
-            if (error2 instanceof MockNotMatchedError) {
+          } catch (error3) {
+            if (error3 instanceof MockNotMatchedError) {
               const netConnect = agent[kGetNetConnect]();
               if (netConnect === false) {
-                throw new MockNotMatchedError(`${error2.message}: subsequent request to origin ${origin} was not allowed (net.connect disabled)`);
+                throw new MockNotMatchedError(`${error3.message}: subsequent request to origin ${origin} was not allowed (net.connect disabled)`);
               }
               if (checkNetConnect(netConnect, origin)) {
                 originalDispatch.call(this, opts, handler);
               } else {
-                throw new MockNotMatchedError(`${error2.message}: subsequent request to origin ${origin} was not allowed (net.connect is not enabled for this origin)`);
+                throw new MockNotMatchedError(`${error3.message}: subsequent request to origin ${origin} was not allowed (net.connect is not enabled for this origin)`);
               }
             } else {
-              throw error2;
+              throw error3;
             }
           }
         } else {
@@ -10720,11 +10720,11 @@ var require_mock_interceptor = __commonJS({
       /**
        * Mock an undici request with a defined error.
        */
-      replyWithError(error2) {
-        if (typeof error2 === "undefined") {
+      replyWithError(error3) {
+        if (typeof error3 === "undefined") {
           throw new InvalidArgumentError("error must be defined");
         }
-        const newMockDispatch = addMockDispatch(this[kDispatches], this[kDispatchKey], { error: error2 });
+        const newMockDispatch = addMockDispatch(this[kDispatches], this[kDispatchKey], { error: error3 });
         return new MockScope(newMockDispatch);
       }
       /**
@@ -13052,17 +13052,17 @@ var require_fetch = __commonJS({
         this.emit("terminated", reason);
       }
       // https://fetch.spec.whatwg.org/#fetch-controller-abort
-      abort(error2) {
+      abort(error3) {
         if (this.state !== "ongoing") {
           return;
         }
         this.state = "aborted";
-        if (!error2) {
-          error2 = new DOMException2("The operation was aborted.", "AbortError");
+        if (!error3) {
+          error3 = new DOMException2("The operation was aborted.", "AbortError");
         }
-        this.serializedAbortReason = error2;
-        this.connection?.destroy(error2);
-        this.emit("terminated", error2);
+        this.serializedAbortReason = error3;
+        this.connection?.destroy(error3);
+        this.emit("terminated", error3);
       }
     };
     function fetch2(input, init = {}) {
@@ -13166,13 +13166,13 @@ var require_fetch = __commonJS({
         performance.markResourceTiming(timingInfo, originalURL.href, initiatorType, globalThis2, cacheState);
       }
     }
-    function abortFetch(p, request, responseObject, error2) {
-      if (!error2) {
-        error2 = new DOMException2("The operation was aborted.", "AbortError");
+    function abortFetch(p, request, responseObject, error3) {
+      if (!error3) {
+        error3 = new DOMException2("The operation was aborted.", "AbortError");
       }
-      p.reject(error2);
+      p.reject(error3);
       if (request.body != null && isReadable(request.body?.stream)) {
-        request.body.stream.cancel(error2).catch((err) => {
+        request.body.stream.cancel(error3).catch((err) => {
           if (err.code === "ERR_INVALID_STATE") {
             return;
           }
@@ -13184,7 +13184,7 @@ var require_fetch = __commonJS({
       }
       const response = responseObject[kState];
       if (response.body != null && isReadable(response.body?.stream)) {
-        response.body.stream.cancel(error2).catch((err) => {
+        response.body.stream.cancel(error3).catch((err) => {
           if (err.code === "ERR_INVALID_STATE") {
             return;
           }
@@ -13964,13 +13964,13 @@ var require_fetch = __commonJS({
               fetchParams.controller.ended = true;
               this.body.push(null);
             },
-            onError(error2) {
+            onError(error3) {
               if (this.abort) {
                 fetchParams.controller.off("terminated", this.abort);
               }
-              this.body?.destroy(error2);
-              fetchParams.controller.terminate(error2);
-              reject(error2);
+              this.body?.destroy(error3);
+              fetchParams.controller.terminate(error3);
+              reject(error3);
             },
             onUpgrade(status, headersList, socket) {
               if (status !== 101) {
@@ -14436,8 +14436,8 @@ var require_util4 = __commonJS({
                   }
                   fr[kResult] = result;
                   fireAProgressEvent("load", fr);
-                } catch (error2) {
-                  fr[kError] = error2;
+                } catch (error3) {
+                  fr[kError] = error3;
                   fireAProgressEvent("error", fr);
                 }
                 if (fr[kState] !== "loading") {
@@ -14446,13 +14446,13 @@ var require_util4 = __commonJS({
               });
               break;
             }
-          } catch (error2) {
+          } catch (error3) {
             if (fr[kAborted]) {
               return;
             }
             queueMicrotask(() => {
               fr[kState] = "done";
-              fr[kError] = error2;
+              fr[kError] = error3;
               fireAProgressEvent("error", fr);
               if (fr[kState] !== "loading") {
                 fireAProgressEvent("loadend", fr);
@@ -16452,11 +16452,11 @@ var require_connection = __commonJS({
         });
       }
     }
-    function onSocketError(error2) {
+    function onSocketError(error3) {
       const { ws } = this;
       ws[kReadyState] = states.CLOSING;
       if (channels.socketError.hasSubscribers) {
-        channels.socketError.publish(error2);
+        channels.socketError.publish(error3);
       }
       this.destroy();
     }
@@ -18088,12 +18088,12 @@ var require_oidc_utils = __commonJS({
         var _a3;
         return __awaiter(this, void 0, void 0, function* () {
           const httpclient = _OidcClient.createHttpClient();
-          const res = yield httpclient.getJson(id_token_url).catch((error2) => {
+          const res = yield httpclient.getJson(id_token_url).catch((error3) => {
             throw new Error(`Failed to get ID Token. 
  
-        Error Code : ${error2.statusCode}
+        Error Code : ${error3.statusCode}
  
-        Error Message: ${error2.message}`);
+        Error Message: ${error3.message}`);
           });
           const id_token = (_a3 = res.result) === null || _a3 === void 0 ? void 0 : _a3.value;
           if (!id_token) {
@@ -18114,8 +18114,8 @@ var require_oidc_utils = __commonJS({
             const id_token = yield _OidcClient.getCall(id_token_url);
             (0, core_1.setSecret)(id_token);
             return id_token;
-          } catch (error2) {
-            throw new Error(`Error message: ${error2.message}`);
+          } catch (error3) {
+            throw new Error(`Error message: ${error3.message}`);
           }
         });
       }
@@ -19237,7 +19237,7 @@ var require_toolrunner = __commonJS({
               this._debug(`STDIO streams have closed for tool '${this.toolPath}'`);
               state.CheckComplete();
             });
-            state.on("done", (error2, exitCode) => {
+            state.on("done", (error3, exitCode) => {
               if (stdbuffer.length > 0) {
                 this.emit("stdline", stdbuffer);
               }
@@ -19245,8 +19245,8 @@ var require_toolrunner = __commonJS({
                 this.emit("errline", errbuffer);
               }
               cp.removeAllListeners();
-              if (error2) {
-                reject(error2);
+              if (error3) {
+                reject(error3);
               } else {
                 resolve2(exitCode);
               }
@@ -19341,14 +19341,14 @@ var require_toolrunner = __commonJS({
         this.emit("debug", message);
       }
       _setResult() {
-        let error2;
+        let error3;
         if (this.processExited) {
           if (this.processError) {
-            error2 = new Error(`There was an error when attempting to execute the process '${this.toolPath}'. This may indicate the process failed to start. Error: ${this.processError}`);
+            error3 = new Error(`There was an error when attempting to execute the process '${this.toolPath}'. This may indicate the process failed to start. Error: ${this.processError}`);
           } else if (this.processExitCode !== 0 && !this.options.ignoreReturnCode) {
-            error2 = new Error(`The process '${this.toolPath}' failed with exit code ${this.processExitCode}`);
+            error3 = new Error(`The process '${this.toolPath}' failed with exit code ${this.processExitCode}`);
           } else if (this.processStderr && this.options.failOnStdErr) {
-            error2 = new Error(`The process '${this.toolPath}' failed because one or more lines were written to the STDERR stream`);
+            error3 = new Error(`The process '${this.toolPath}' failed because one or more lines were written to the STDERR stream`);
           }
         }
         if (this.timeout) {
@@ -19356,7 +19356,7 @@ var require_toolrunner = __commonJS({
           this.timeout = null;
         }
         this.done = true;
-        this.emit("done", error2, this.processExitCode);
+        this.emit("done", error3, this.processExitCode);
       }
       static HandleTimeout(state) {
         if (state.done) {
@@ -19739,7 +19739,7 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
     exports.setCommandEcho = setCommandEcho;
     function setFailed2(message) {
       process.exitCode = ExitCode.Failure;
-      error2(message);
+      error3(message);
     }
     exports.setFailed = setFailed2;
     function isDebug() {
@@ -19750,10 +19750,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("debug", {}, message);
     }
     exports.debug = debug;
-    function error2(message, properties = {}) {
+    function error3(message, properties = {}) {
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports.error = error2;
+    exports.error = error3;
     function warning(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -20267,9 +20267,9 @@ var require_codegen = __commonJS({
       }
     };
     var Throw = class extends Node {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render({ _n }) {
         return `throw ${this.error};` + _n;
@@ -20506,9 +20506,9 @@ var require_codegen = __commonJS({
       }
     };
     var Catch = class extends BlockNode {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render(opts) {
         return `catch(${this.error})` + super.render(opts);
@@ -20699,9 +20699,9 @@ var require_codegen = __commonJS({
         this._blockNode(node);
         this.code(tryBody);
         if (catchCode) {
-          const error2 = this.name("e");
-          this._currNode = node.catch = new Catch(error2);
-          catchCode(error2);
+          const error3 = this.name("e");
+          this._currNode = node.catch = new Catch(error3);
+          catchCode(error3);
         }
         if (finallyCode) {
           this._currNode = node.finally = new Finally();
@@ -20710,8 +20710,8 @@ var require_codegen = __commonJS({
         return this._endBlockNode(Catch, Finally);
       }
       // `throw` statement
-      throw(error2) {
-        return this._leafNode(new Throw(error2));
+      throw(error3) {
+        return this._leafNode(new Throw(error3));
       }
       // start self-balancing block
       block(body, nodeCount) {
@@ -21067,10 +21067,10 @@ var require_errors2 = __commonJS({
     exports.keyword$DataError = {
       message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
     };
-    function reportError(cxt, error2 = exports.keywordError, errorPaths, overrideAllErrors) {
+    function reportError(cxt, error3 = exports.keywordError, errorPaths, overrideAllErrors) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       if (overrideAllErrors !== null && overrideAllErrors !== void 0 ? overrideAllErrors : compositeRule || allErrors) {
         addError(gen, errObj);
       } else {
@@ -21078,10 +21078,10 @@ var require_errors2 = __commonJS({
       }
     }
     exports.reportError = reportError;
-    function reportExtraError(cxt, error2 = exports.keywordError, errorPaths) {
+    function reportExtraError(cxt, error3 = exports.keywordError, errorPaths) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       addError(gen, errObj);
       if (!(compositeRule || allErrors)) {
         returnErrors(it, names_1.default.vErrors);
@@ -21132,19 +21132,19 @@ var require_errors2 = __commonJS({
       schema: new codegen_1.Name("schema"),
       parentSchema: new codegen_1.Name("parentSchema")
     };
-    function errorObjectCode(cxt, error2, errorPaths) {
+    function errorObjectCode(cxt, error3, errorPaths) {
       const { createErrors } = cxt.it;
       if (createErrors === false)
         return (0, codegen_1._)`{}`;
-      return errorObject(cxt, error2, errorPaths);
+      return errorObject(cxt, error3, errorPaths);
     }
-    function errorObject(cxt, error2, errorPaths = {}) {
+    function errorObject(cxt, error3, errorPaths = {}) {
       const { gen, it } = cxt;
       const keyValues = [
         errorInstancePath(it, errorPaths),
         errorSchemaPath(cxt, errorPaths)
       ];
-      extraErrorProps(cxt, error2, keyValues);
+      extraErrorProps(cxt, error3, keyValues);
       return gen.object(...keyValues);
     }
     function errorInstancePath({ errorPath }, { instancePath }) {
@@ -24499,7 +24499,7 @@ var require_limitNumber = __commonJS({
       exclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
       exclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
     };
-    var error2 = {
+    var error3 = {
       message: ({ keyword, schemaCode }) => (0, codegen_1.str)`must be ${KWDs[keyword].okStr} ${schemaCode}`,
       params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
     };
@@ -24508,7 +24508,7 @@ var require_limitNumber = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
@@ -24524,7 +24524,7 @@ var require_multipleOf = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
       params: ({ schemaCode }) => (0, codegen_1._)`{multipleOf: ${schemaCode}}`
     };
@@ -24533,7 +24533,7 @@ var require_multipleOf = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
@@ -24580,7 +24580,7 @@ var require_limitLength = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
     var ucs2length_1 = require_ucs2length();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxLength" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} characters`;
@@ -24592,7 +24592,7 @@ var require_limitLength = __commonJS({
       type: "string",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode, it } = cxt;
         const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -24612,7 +24612,7 @@ var require_pattern = __commonJS({
     var code_1 = require_code2();
     var util_1 = require_util8();
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{pattern: ${schemaCode}}`
     };
@@ -24621,7 +24621,7 @@ var require_pattern = __commonJS({
       type: "string",
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
@@ -24647,7 +24647,7 @@ var require_limitProperties = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxProperties" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} properties`;
@@ -24659,7 +24659,7 @@ var require_limitProperties = __commonJS({
       type: "object",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxProperties" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -24678,7 +24678,7 @@ var require_required = __commonJS({
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: ({ params: { missingProperty } }) => (0, codegen_1.str)`must have required property '${missingProperty}'`,
       params: ({ params: { missingProperty } }) => (0, codegen_1._)`{missingProperty: ${missingProperty}}`
     };
@@ -24687,7 +24687,7 @@ var require_required = __commonJS({
       type: "object",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, schemaCode, data, $data, it } = cxt;
         const { opts } = it;
@@ -24758,7 +24758,7 @@ var require_limitItems = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxItems" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} items`;
@@ -24770,7 +24770,7 @@ var require_limitItems = __commonJS({
       type: "array",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxItems" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -24801,7 +24801,7 @@ var require_uniqueItems = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
       params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
     };
@@ -24810,7 +24810,7 @@ var require_uniqueItems = __commonJS({
       type: "array",
       schemaType: "boolean",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, parentSchema, schemaCode, it } = cxt;
         if (!$data && !schema)
@@ -24867,14 +24867,14 @@ var require_const = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: "must be equal to constant",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValue: ${schemaCode}}`
     };
     var def = {
       keyword: "const",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schemaCode, schema } = cxt;
         if ($data || schema && typeof schema == "object") {
@@ -24896,7 +24896,7 @@ var require_enum = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: "must be equal to one of the allowed values",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValues: ${schemaCode}}`
     };
@@ -24904,7 +24904,7 @@ var require_enum = __commonJS({
       keyword: "enum",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         if (!$data && schema.length === 0)
@@ -24983,7 +24983,7 @@ var require_additionalItems = __commonJS({
     exports.validateAdditionalItems = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -24992,7 +24992,7 @@ var require_additionalItems = __commonJS({
       type: "array",
       schemaType: ["boolean", "object"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { parentSchema, it } = cxt;
         const { items } = parentSchema;
@@ -25111,7 +25111,7 @@ var require_items2020 = __commonJS({
     var util_1 = require_util8();
     var code_1 = require_code2();
     var additionalItems_1 = require_additionalItems();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -25120,7 +25120,7 @@ var require_items2020 = __commonJS({
       type: "array",
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { schema, parentSchema, it } = cxt;
         const { prefixItems } = parentSchema;
@@ -25144,7 +25144,7 @@ var require_contains = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1.str)`must contain at least ${min} valid item(s)` : (0, codegen_1.str)`must contain at least ${min} and no more than ${max} valid item(s)`,
       params: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1._)`{minContains: ${min}}` : (0, codegen_1._)`{minContains: ${min}, maxContains: ${max}}`
     };
@@ -25154,7 +25154,7 @@ var require_contains = __commonJS({
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, it } = cxt;
         let min;
@@ -25332,7 +25332,7 @@ var require_propertyNames = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: "property name must be valid",
       params: ({ params }) => (0, codegen_1._)`{propertyName: ${params.propertyName}}`
     };
@@ -25340,7 +25340,7 @@ var require_propertyNames = __commonJS({
       keyword: "propertyNames",
       type: "object",
       schemaType: ["object", "boolean"],
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, data, it } = cxt;
         if ((0, util_1.alwaysValidSchema)(it, schema))
@@ -25377,7 +25377,7 @@ var require_additionalProperties = __commonJS({
     var codegen_1 = require_codegen();
     var names_1 = require_names();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: "must NOT have additional properties",
       params: ({ params }) => (0, codegen_1._)`{additionalProperty: ${params.additionalProperty}}`
     };
@@ -25387,7 +25387,7 @@ var require_additionalProperties = __commonJS({
       schemaType: ["boolean", "object"],
       allowUndefined: true,
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, errsCount, it } = cxt;
         if (!errsCount)
@@ -25661,7 +25661,7 @@ var require_oneOf = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: "must match exactly one schema in oneOf",
       params: ({ params }) => (0, codegen_1._)`{passingSchemas: ${params.passing}}`
     };
@@ -25669,7 +25669,7 @@ var require_oneOf = __commonJS({
       keyword: "oneOf",
       schemaType: "array",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, it } = cxt;
         if (!Array.isArray(schema))
@@ -25746,7 +25746,7 @@ var require_if = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: ({ params }) => (0, codegen_1.str)`must match "${params.ifClause}" schema`,
       params: ({ params }) => (0, codegen_1._)`{failingKeyword: ${params.ifClause}}`
     };
@@ -25754,7 +25754,7 @@ var require_if = __commonJS({
       keyword: "if",
       schemaType: ["object", "boolean"],
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, parentSchema, it } = cxt;
         if (parentSchema.then === void 0 && parentSchema.else === void 0) {
@@ -25880,7 +25880,7 @@ var require_format = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{format: ${schemaCode}}`
     };
@@ -25889,7 +25889,7 @@ var require_format = __commonJS({
       type: ["number", "string"],
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt, ruleType) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const { opts, errSchemaPath, schemaEnv, self } = it;
@@ -26044,7 +26044,7 @@ var require_discriminator = __commonJS({
     var compile_1 = require_compile();
     var ref_error_1 = require_ref_error();
     var util_1 = require_util8();
-    var error2 = {
+    var error3 = {
       message: ({ params: { discrError, tagName } }) => discrError === types_1.DiscrError.Tag ? `tag "${tagName}" must be string` : `value of tag "${tagName}" must be in oneOf`,
       params: ({ params: { discrError, tag, tagName } }) => (0, codegen_1._)`{error: ${discrError}, tag: ${tagName}, tagValue: ${tag}}`
     };
@@ -26052,7 +26052,7 @@ var require_discriminator = __commonJS({
       keyword: "discriminator",
       type: "object",
       schemaType: "object",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schema, parentSchema, it } = cxt;
         const { oneOf } = parentSchema;
@@ -27009,9 +27009,9 @@ var require_codegen2 = __commonJS({
       }
     };
     var Throw = class extends Node {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render({ _n }) {
         return `throw ${this.error};` + _n;
@@ -27248,9 +27248,9 @@ var require_codegen2 = __commonJS({
       }
     };
     var Catch = class extends BlockNode {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render(opts) {
         return `catch(${this.error})` + super.render(opts);
@@ -27441,9 +27441,9 @@ var require_codegen2 = __commonJS({
         this._blockNode(node);
         this.code(tryBody);
         if (catchCode) {
-          const error2 = this.name("e");
-          this._currNode = node.catch = new Catch(error2);
-          catchCode(error2);
+          const error3 = this.name("e");
+          this._currNode = node.catch = new Catch(error3);
+          catchCode(error3);
         }
         if (finallyCode) {
           this._currNode = node.finally = new Finally();
@@ -27452,8 +27452,8 @@ var require_codegen2 = __commonJS({
         return this._endBlockNode(Catch, Finally);
       }
       // `throw` statement
-      throw(error2) {
-        return this._leafNode(new Throw(error2));
+      throw(error3) {
+        return this._leafNode(new Throw(error3));
       }
       // start self-balancing block
       block(body, nodeCount) {
@@ -27809,10 +27809,10 @@ var require_errors3 = __commonJS({
     exports.keyword$DataError = {
       message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
     };
-    function reportError(cxt, error2 = exports.keywordError, errorPaths, overrideAllErrors) {
+    function reportError(cxt, error3 = exports.keywordError, errorPaths, overrideAllErrors) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       if (overrideAllErrors !== null && overrideAllErrors !== void 0 ? overrideAllErrors : compositeRule || allErrors) {
         addError(gen, errObj);
       } else {
@@ -27820,10 +27820,10 @@ var require_errors3 = __commonJS({
       }
     }
     exports.reportError = reportError;
-    function reportExtraError(cxt, error2 = exports.keywordError, errorPaths) {
+    function reportExtraError(cxt, error3 = exports.keywordError, errorPaths) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       addError(gen, errObj);
       if (!(compositeRule || allErrors)) {
         returnErrors(it, names_1.default.vErrors);
@@ -27874,19 +27874,19 @@ var require_errors3 = __commonJS({
       schema: new codegen_1.Name("schema"),
       parentSchema: new codegen_1.Name("parentSchema")
     };
-    function errorObjectCode(cxt, error2, errorPaths) {
+    function errorObjectCode(cxt, error3, errorPaths) {
       const { createErrors } = cxt.it;
       if (createErrors === false)
         return (0, codegen_1._)`{}`;
-      return errorObject(cxt, error2, errorPaths);
+      return errorObject(cxt, error3, errorPaths);
     }
-    function errorObject(cxt, error2, errorPaths = {}) {
+    function errorObject(cxt, error3, errorPaths = {}) {
       const { gen, it } = cxt;
       const keyValues = [
         errorInstancePath(it, errorPaths),
         errorSchemaPath(cxt, errorPaths)
       ];
-      extraErrorProps(cxt, error2, keyValues);
+      extraErrorProps(cxt, error3, keyValues);
       return gen.object(...keyValues);
     }
     function errorInstancePath({ errorPath }, { instancePath }) {
@@ -30397,7 +30397,7 @@ var require_limitNumber2 = __commonJS({
       exclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
       exclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
     };
-    var error2 = {
+    var error3 = {
       message: ({ keyword, schemaCode }) => (0, codegen_1.str)`must be ${KWDs[keyword].okStr} ${schemaCode}`,
       params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
     };
@@ -30406,7 +30406,7 @@ var require_limitNumber2 = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
@@ -30422,7 +30422,7 @@ var require_multipleOf2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
       params: ({ schemaCode }) => (0, codegen_1._)`{multipleOf: ${schemaCode}}`
     };
@@ -30431,7 +30431,7 @@ var require_multipleOf2 = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
@@ -30478,7 +30478,7 @@ var require_limitLength2 = __commonJS({
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
     var ucs2length_1 = require_ucs2length2();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxLength" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} characters`;
@@ -30490,7 +30490,7 @@ var require_limitLength2 = __commonJS({
       type: "string",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode, it } = cxt;
         const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -30510,7 +30510,7 @@ var require_pattern2 = __commonJS({
     var code_1 = require_code4();
     var util_1 = require_util9();
     var codegen_1 = require_codegen2();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{pattern: ${schemaCode}}`
     };
@@ -30519,7 +30519,7 @@ var require_pattern2 = __commonJS({
       type: "string",
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
@@ -30545,7 +30545,7 @@ var require_limitProperties2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxProperties" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} properties`;
@@ -30557,7 +30557,7 @@ var require_limitProperties2 = __commonJS({
       type: "object",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxProperties" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -30576,7 +30576,7 @@ var require_required2 = __commonJS({
     var code_1 = require_code4();
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: ({ params: { missingProperty } }) => (0, codegen_1.str)`must have required property '${missingProperty}'`,
       params: ({ params: { missingProperty } }) => (0, codegen_1._)`{missingProperty: ${missingProperty}}`
     };
@@ -30585,7 +30585,7 @@ var require_required2 = __commonJS({
       type: "object",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, schemaCode, data, $data, it } = cxt;
         const { opts } = it;
@@ -30656,7 +30656,7 @@ var require_limitItems2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxItems" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} items`;
@@ -30668,7 +30668,7 @@ var require_limitItems2 = __commonJS({
       type: "array",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxItems" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -30699,7 +30699,7 @@ var require_uniqueItems2 = __commonJS({
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
     var equal_1 = require_equal2();
-    var error2 = {
+    var error3 = {
       message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
       params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
     };
@@ -30708,7 +30708,7 @@ var require_uniqueItems2 = __commonJS({
       type: "array",
       schemaType: "boolean",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, parentSchema, schemaCode, it } = cxt;
         if (!$data && !schema)
@@ -30765,14 +30765,14 @@ var require_const2 = __commonJS({
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
     var equal_1 = require_equal2();
-    var error2 = {
+    var error3 = {
       message: "must be equal to constant",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValue: ${schemaCode}}`
     };
     var def = {
       keyword: "const",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schemaCode, schema } = cxt;
         if ($data || schema && typeof schema == "object") {
@@ -30794,7 +30794,7 @@ var require_enum2 = __commonJS({
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
     var equal_1 = require_equal2();
-    var error2 = {
+    var error3 = {
       message: "must be equal to one of the allowed values",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValues: ${schemaCode}}`
     };
@@ -30802,7 +30802,7 @@ var require_enum2 = __commonJS({
       keyword: "enum",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         if (!$data && schema.length === 0)
@@ -30881,7 +30881,7 @@ var require_additionalItems2 = __commonJS({
     exports.validateAdditionalItems = void 0;
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -30890,7 +30890,7 @@ var require_additionalItems2 = __commonJS({
       type: "array",
       schemaType: ["boolean", "object"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { parentSchema, it } = cxt;
         const { items } = parentSchema;
@@ -31009,7 +31009,7 @@ var require_items20202 = __commonJS({
     var util_1 = require_util9();
     var code_1 = require_code4();
     var additionalItems_1 = require_additionalItems2();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -31018,7 +31018,7 @@ var require_items20202 = __commonJS({
       type: "array",
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { schema, parentSchema, it } = cxt;
         const { prefixItems } = parentSchema;
@@ -31042,7 +31042,7 @@ var require_contains2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1.str)`must contain at least ${min} valid item(s)` : (0, codegen_1.str)`must contain at least ${min} and no more than ${max} valid item(s)`,
       params: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1._)`{minContains: ${min}}` : (0, codegen_1._)`{minContains: ${min}, maxContains: ${max}}`
     };
@@ -31052,7 +31052,7 @@ var require_contains2 = __commonJS({
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, it } = cxt;
         let min;
@@ -31230,7 +31230,7 @@ var require_propertyNames2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: "property name must be valid",
       params: ({ params }) => (0, codegen_1._)`{propertyName: ${params.propertyName}}`
     };
@@ -31238,7 +31238,7 @@ var require_propertyNames2 = __commonJS({
       keyword: "propertyNames",
       type: "object",
       schemaType: ["object", "boolean"],
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, data, it } = cxt;
         if ((0, util_1.alwaysValidSchema)(it, schema))
@@ -31275,7 +31275,7 @@ var require_additionalProperties2 = __commonJS({
     var codegen_1 = require_codegen2();
     var names_1 = require_names2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: "must NOT have additional properties",
       params: ({ params }) => (0, codegen_1._)`{additionalProperty: ${params.additionalProperty}}`
     };
@@ -31285,7 +31285,7 @@ var require_additionalProperties2 = __commonJS({
       schemaType: ["boolean", "object"],
       allowUndefined: true,
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, errsCount, it } = cxt;
         if (!errsCount)
@@ -31559,7 +31559,7 @@ var require_oneOf2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: "must match exactly one schema in oneOf",
       params: ({ params }) => (0, codegen_1._)`{passingSchemas: ${params.passing}}`
     };
@@ -31567,7 +31567,7 @@ var require_oneOf2 = __commonJS({
       keyword: "oneOf",
       schemaType: "array",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, it } = cxt;
         if (!Array.isArray(schema))
@@ -31644,7 +31644,7 @@ var require_if2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: ({ params }) => (0, codegen_1.str)`must match "${params.ifClause}" schema`,
       params: ({ params }) => (0, codegen_1._)`{failingKeyword: ${params.ifClause}}`
     };
@@ -31652,7 +31652,7 @@ var require_if2 = __commonJS({
       keyword: "if",
       schemaType: ["object", "boolean"],
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, parentSchema, it } = cxt;
         if (parentSchema.then === void 0 && parentSchema.else === void 0) {
@@ -31778,7 +31778,7 @@ var require_format3 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen2();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{format: ${schemaCode}}`
     };
@@ -31787,7 +31787,7 @@ var require_format3 = __commonJS({
       type: ["number", "string"],
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt, ruleType) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const { opts, errSchemaPath, schemaEnv, self } = it;
@@ -31942,7 +31942,7 @@ var require_discriminator2 = __commonJS({
     var compile_1 = require_compile2();
     var ref_error_1 = require_ref_error2();
     var util_1 = require_util9();
-    var error2 = {
+    var error3 = {
       message: ({ params: { discrError, tagName } }) => discrError === types_1.DiscrError.Tag ? `tag "${tagName}" must be string` : `value of tag "${tagName}" must be in oneOf`,
       params: ({ params: { discrError, tag, tagName } }) => (0, codegen_1._)`{error: ${discrError}, tag: ${tagName}, tagValue: ${tag}}`
     };
@@ -31950,7 +31950,7 @@ var require_discriminator2 = __commonJS({
       keyword: "discriminator",
       type: "object",
       schemaType: "object",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schema, parentSchema, it } = cxt;
         const { oneOf } = parentSchema;
@@ -32279,7 +32279,7 @@ var require_limit = __commonJS({
       formatExclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
       formatExclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
     };
-    var error2 = {
+    var error3 = {
       message: ({ keyword, schemaCode }) => (0, codegen_1.str)`should be ${KWDs[keyword].okStr} ${schemaCode}`,
       params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
     };
@@ -32288,7 +32288,7 @@ var require_limit = __commonJS({
       type: "string",
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schemaCode, keyword, it } = cxt;
         const { opts, self } = it;
@@ -33234,8 +33234,8 @@ function parseConfig(contents) {
   let parsed;
   try {
     parsed = parse(contents);
-  } catch (error2) {
-    throw new ConfigError("Config is not valid TOML.", { cause: error2 });
+  } catch (error3) {
+    throw new ConfigError("Config is not valid TOML.", { cause: error3 });
   }
   return normalizeConfig(assertRecord(parsed, "config"));
 }
@@ -33489,9 +33489,9 @@ function completeRunRecord(record2, status) {
 function recordPolicy(record2, policy) {
   return { ...record2, policy: summarizePolicy(policy) };
 }
-function recordError(record2, error2) {
-  const errorClass = error2 instanceof Error ? error2.name : "Error";
-  const message = error2 instanceof Error ? error2.message : String(error2);
+function recordError(record2, error3) {
+  const errorClass = error3 instanceof Error ? error3.name : "Error";
+  const message = error3 instanceof Error ? error3.message : String(error3);
   return { ...record2, errors: [...record2.errors, { class: errorClass, message }] };
 }
 function recordToolAudit(record2, audit) {
@@ -33647,6 +33647,14 @@ async function writeReviewArtifacts(input) {
   await writeJson(findingsPath, input.findings);
   await writeJson(contextManifestPath, input.contextManifest);
   return { dir, runPath, findingsPath, contextManifestPath };
+}
+async function writeFailureDiagnostics(input) {
+  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "reviewbot-agent-error.txt");
+  await writeFile(path, `${input.message.trimEnd()}
+`);
+  return path;
 }
 async function writeJson(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}
@@ -34553,7 +34561,7 @@ function parseFinding(value, index, errors) {
   if (!REVIEW_FINDING_CONFIDENCES.includes(record2.confidence)) {
     errors.push(`findings[${index}].confidence is invalid`);
   }
-  if (errors.some((error2) => error2.startsWith(`findings[${index}]`))) return void 0;
+  if (errors.some((error3) => error3.startsWith(`findings[${index}]`))) return void 0;
   const finding = {
     id: String(record2.id),
     skill: String(record2.skill),
@@ -34889,8 +34897,8 @@ function severitiesAtOrAbove(minimum) {
   const index = SEVERITY_ORDER.indexOf(minimum);
   return SEVERITY_ORDER.slice(0, index + 1);
 }
-function errorMessage(error2) {
-  return error2 instanceof Error ? error2.message : String(error2);
+function errorMessage(error3) {
+  return error3 instanceof Error ? error3.message : String(error3);
 }
 
 // packages/github/src/comments.ts
@@ -35194,7 +35202,25 @@ function maskSecret(value, label = "secret", masker = core3) {
   masker.setSecret(trimmed);
 }
 
+// packages/agents/src/model-registry.ts
+var MODEL_ALIASES = {
+  "claude/sonnet": {
+    slug: "claude/sonnet",
+    provider: "anthropic",
+    model: "claude-sonnet-4-5"
+  },
+  "claude/opus": {
+    slug: "claude/opus",
+    provider: "anthropic",
+    model: "claude-opus-4-1"
+  }
+};
+function resolveModelId(value) {
+  return MODEL_ALIASES[value] ?? { slug: value, provider: "direct", model: value };
+}
+
 // packages/agents/src/claude-code.ts
+var MAX_DIAGNOSTIC_CHARS = 2e3;
 function createClaudeCodeDriver(options = {}) {
   const command = options.command ?? "claude";
   const spawnImpl = options.spawnImpl ?? ((cmd, args, spawnOptions) => spawn(cmd, [...args], spawnOptions));
@@ -35219,15 +35245,16 @@ function createClaudeCodeDriver(options = {}) {
         activityTimeoutMs: 1e4,
         spawnImpl,
         redactor
-      }).catch((error2) => {
+      }).catch((error3) => {
         throw new AuthError(
-          `Claude CLI not available: ${error2 instanceof Error ? error2.message : String(error2)}`
+          `Claude CLI not available: ${error3 instanceof Error ? error3.message : String(error3)}`
         );
       });
     },
     async run(input) {
       const auth = resolveClaudeAuth(input.env);
-      for (const value of Object.values(auth.env)) maskSecret(value, "Claude auth", options.masker);
+      const secrets = Object.values(auth.env);
+      for (const value of secrets) maskSecret(value, "Claude auth", options.masker);
       const env = {
         PATH: process.env.PATH,
         HOME: process.env.HOME,
@@ -35249,8 +35276,11 @@ function createClaudeCodeDriver(options = {}) {
         success: result.exitCode === 0,
         output: result.stdout
       };
-      const error2 = result.stderr || (result.exitCode === 0 ? void 0 : `Claude exited with ${result.exitCode}`);
-      if (error2 !== void 0) runResult.error = error2;
+      if (result.exitCode === 0) {
+        if (result.stderr) runResult.error = result.stderr;
+      } else {
+        runResult.error = formatFailureDiagnostics(result, secrets);
+      }
       return runResult;
     }
   };
@@ -35265,7 +35295,7 @@ function buildClaudeArgs(input) {
     "text",
     "--no-session-persistence"
   ];
-  if (input.model) args.push("--model", input.model);
+  if (input.model) args.push("--model", resolveModelId(input.model).model);
   if (input.systemPrompt) args.push("--system-prompt", input.systemPrompt);
   if (input.mcpServerUrl) {
     args.push(
@@ -35277,6 +35307,27 @@ function buildClaudeArgs(input) {
     );
   }
   return args;
+}
+function formatFailureDiagnostics(result, secrets) {
+  const stderrTail = boundedTail(scrubSecrets(result.stderr, secrets));
+  const stdoutTail = boundedTail(scrubSecrets(result.stdout, secrets));
+  return [
+    `Claude exited with ${result.exitCode ?? "null"}`,
+    `stderr: ${stderrTail || "<empty>"}`,
+    `stdout: ${stdoutTail || "<empty>"}`
+  ].join("\n");
+}
+function boundedTail(text, max = MAX_DIAGNOSTIC_CHARS) {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `\u2026[${trimmed.length - max} chars omitted]\u2026
+${trimmed.slice(-max)}`;
+}
+function scrubSecrets(text, secrets) {
+  return secrets.reduce(
+    (current, secret) => secret ? current.split(secret).join("[REDACTED]") : current,
+    text
+  );
 }
 function toMcpConfig(url) {
   return {
@@ -35329,8 +35380,8 @@ function runProcess(input) {
         )
       );
     }, input.activityTimeoutMs);
-    child.stdin.on("error", (error2) => {
-      finish(() => reject(error2));
+    child.stdin.on("error", (error3) => {
+      finish(() => reject(error3));
     });
     child.stdout.on("data", (chunk) => {
       resetActivity();
@@ -35340,8 +35391,8 @@ function runProcess(input) {
       resetActivity();
       stderr += input.redactor.redactString(chunk.toString("utf8"));
     });
-    child.on("error", (error2) => {
-      finish(() => reject(error2));
+    child.on("error", (error3) => {
+      finish(() => reject(error3));
     });
     child.on("close", (exitCode) => {
       finish(() => resolve2({ stdout, stderr, exitCode }));
@@ -35392,9 +35443,9 @@ ${FINDING_SCHEMA_INSTRUCTIONS}`
           throw new ReviewSkillRunError(skillId, message);
         }
         return extractJsonArray(result.output ?? "");
-      } catch (error2) {
-        if (error2 instanceof ReviewSkillRunError) throw error2;
-        const message = errorMessage2(error2);
+      } catch (error3) {
+        if (error3 instanceof ReviewSkillRunError) throw error3;
+        const message = errorMessage2(error3);
         options.logger?.log("warn", "review.skill_error", { skillId, error: message });
         throw new ReviewSkillRunError(skillId, message);
       }
@@ -35414,8 +35465,8 @@ ${FINDING_SCHEMA_INSTRUCTIONS}`
           (id) => typeof id === "string"
         );
         return ids;
-      } catch (error2) {
-        options.logger?.log("warn", "review.verify_error", { error: errorMessage2(error2) });
+      } catch (error3) {
+        options.logger?.log("warn", "review.verify_error", { error: errorMessage2(error3) });
         return [];
       }
     }
@@ -35452,8 +35503,8 @@ function extractJsonArray(text) {
     return [];
   }
 }
-function errorMessage2(error2) {
-  return error2 instanceof Error ? error2.message : String(error2);
+function errorMessage2(error3) {
+  return error3 instanceof Error ? error3.message : String(error3);
 }
 
 // packages/mcp/src/server.ts
@@ -35639,8 +35690,8 @@ var ZodError = class _ZodError extends Error {
       return issue2.message;
     };
     const fieldErrors = { _errors: [] };
-    const processError = (error2) => {
-      for (const issue2 of error2.issues) {
+    const processError = (error3) => {
+      for (const issue2 of error3.issues) {
         if (issue2.code === "invalid_union") {
           issue2.unionErrors.map(processError);
         } else if (issue2.code === "invalid_return_type") {
@@ -35703,8 +35754,8 @@ var ZodError = class _ZodError extends Error {
   }
 };
 ZodError.create = (issues) => {
-  const error2 = new ZodError(issues);
-  return error2;
+  const error3 = new ZodError(issues);
+  return error3;
 };
 
 // node_modules/zod/v3/locales/en.js
@@ -35964,8 +36015,8 @@ var handleResult = (ctx, result) => {
       get error() {
         if (this._error)
           return this._error;
-        const error2 = new ZodError(ctx.common.issues);
-        this._error = error2;
+        const error3 = new ZodError(ctx.common.issues);
+        this._error = error3;
         return this._error;
       }
     };
@@ -38620,25 +38671,25 @@ var ZodFunction = class _ZodFunction extends ZodType {
       });
       return INVALID;
     }
-    function makeArgsIssue(args, error2) {
+    function makeArgsIssue(args, error3) {
       return makeIssue({
         data: args,
         path: ctx.path,
         errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_arguments,
-          argumentsError: error2
+          argumentsError: error3
         }
       });
     }
-    function makeReturnsIssue(returns, error2) {
+    function makeReturnsIssue(returns, error3) {
       return makeIssue({
         data: returns,
         path: ctx.path,
         errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_return_type,
-          returnTypeError: error2
+          returnTypeError: error3
         }
       });
     }
@@ -38647,15 +38698,15 @@ var ZodFunction = class _ZodFunction extends ZodType {
     if (this._def.returns instanceof ZodPromise) {
       const me = this;
       return OK(async function(...args) {
-        const error2 = new ZodError([]);
+        const error3 = new ZodError([]);
         const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
-          error2.addIssue(makeArgsIssue(args, e));
-          throw error2;
+          error3.addIssue(makeArgsIssue(args, e));
+          throw error3;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
         const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
-          error2.addIssue(makeReturnsIssue(result, e));
-          throw error2;
+          error3.addIssue(makeReturnsIssue(result, e));
+          throw error3;
         });
         return parsedReturns;
       });
@@ -40123,10 +40174,10 @@ var initializer = (inst, def) => {
 };
 var $ZodError = $constructor("$ZodError", initializer);
 var $ZodRealError = $constructor("$ZodError", initializer, { Parent: Error });
-function flattenError(error2, mapper = (issue2) => issue2.message) {
+function flattenError(error3, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
-  for (const sub of error2.issues) {
+  for (const sub of error3.issues) {
     if (sub.path.length > 0) {
       fieldErrors[sub.path[0]] = fieldErrors[sub.path[0]] || [];
       fieldErrors[sub.path[0]].push(mapper(sub));
@@ -40136,10 +40187,10 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
   }
   return { formErrors, fieldErrors };
 }
-function formatError(error2, mapper = (issue2) => issue2.message) {
+function formatError(error3, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path = []) => {
-    for (const issue2 of error3.issues) {
+  const processError = (error4, path = []) => {
+    for (const issue2 of error4.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
         issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
@@ -40169,7 +40220,7 @@ function formatError(error2, mapper = (issue2) => issue2.message) {
       }
     }
   };
-  processError(error2);
+  processError(error3);
   return fieldErrors;
 }
 
@@ -43946,24 +43997,24 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getParseErrorMessage(error2) {
-  if (error2 && typeof error2 === "object") {
-    if ("message" in error2 && typeof error2.message === "string") {
-      return error2.message;
+function getParseErrorMessage(error3) {
+  if (error3 && typeof error3 === "object") {
+    if ("message" in error3 && typeof error3.message === "string") {
+      return error3.message;
     }
-    if ("issues" in error2 && Array.isArray(error2.issues) && error2.issues.length > 0) {
-      const firstIssue = error2.issues[0];
+    if ("issues" in error3 && Array.isArray(error3.issues) && error3.issues.length > 0) {
+      const firstIssue = error3.issues[0];
       if (firstIssue && typeof firstIssue === "object" && "message" in firstIssue) {
         return String(firstIssue.message);
       }
     }
     try {
-      return JSON.stringify(error2);
+      return JSON.stringify(error3);
     } catch {
-      return String(error2);
+      return String(error3);
     }
   }
-  return String(error2);
+  return String(error3);
 }
 function getSchemaDescription(schema) {
   return schema.description;
@@ -47863,8 +47914,8 @@ var Protocol = class {
                     resolver(message);
                   } else {
                     const errorMessage3 = message;
-                    const error2 = new McpError(errorMessage3.error.code, errorMessage3.error.message, errorMessage3.error.data);
-                    resolver(error2);
+                    const error3 = new McpError(errorMessage3.error.code, errorMessage3.error.message, errorMessage3.error.data);
+                    resolver(error3);
                   }
                 } else {
                   const messageType = queuedMessage.type === "response" ? "Response" : "Error";
@@ -47908,8 +47959,8 @@ var Protocol = class {
             nextCursor,
             _meta: {}
           };
-        } catch (error2) {
-          throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error2 instanceof Error ? error2.message : String(error2)}`);
+        } catch (error3) {
+          throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error3 instanceof Error ? error3.message : String(error3)}`);
         }
       });
       this.setRequestHandler(CancelTaskRequestSchema, async (request, extra) => {
@@ -47931,11 +47982,11 @@ var Protocol = class {
             _meta: {},
             ...cancelledTask
           };
-        } catch (error2) {
-          if (error2 instanceof McpError) {
-            throw error2;
+        } catch (error3) {
+          if (error3 instanceof McpError) {
+            throw error3;
           }
-          throw new McpError(ErrorCode.InvalidRequest, `Failed to cancel task: ${error2 instanceof Error ? error2.message : String(error2)}`);
+          throw new McpError(ErrorCode.InvalidRequest, `Failed to cancel task: ${error3 instanceof Error ? error3.message : String(error3)}`);
         }
       });
     }
@@ -47996,9 +48047,9 @@ var Protocol = class {
       this._onclose();
     };
     const _onerror = this.transport?.onerror;
-    this._transport.onerror = (error2) => {
-      _onerror?.(error2);
-      this._onerror(error2);
+    this._transport.onerror = (error3) => {
+      _onerror?.(error3);
+      this._onerror(error3);
     };
     const _onmessage = this._transport?.onmessage;
     this._transport.onmessage = (message, extra) => {
@@ -48029,22 +48080,22 @@ var Protocol = class {
       controller.abort();
     }
     this._requestHandlerAbortControllers.clear();
-    const error2 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
+    const error3 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
     this._transport = void 0;
     this.onclose?.();
     for (const handler of responseHandlers.values()) {
-      handler(error2);
+      handler(error3);
     }
   }
-  _onerror(error2) {
-    this.onerror?.(error2);
+  _onerror(error3) {
+    this.onerror?.(error3);
   }
   _onnotification(notification) {
     const handler = this._notificationHandlers.get(notification.method) ?? this.fallbackNotificationHandler;
     if (handler === void 0) {
       return;
     }
-    Promise.resolve().then(() => handler(notification)).catch((error2) => this._onerror(new Error(`Uncaught error in notification handler: ${error2}`)));
+    Promise.resolve().then(() => handler(notification)).catch((error3) => this._onerror(new Error(`Uncaught error in notification handler: ${error3}`)));
   }
   _onrequest(request, extra) {
     const handler = this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
@@ -48064,9 +48115,9 @@ var Protocol = class {
           type: "error",
           message: errorResponse,
           timestamp: Date.now()
-        }, capturedTransport?.sessionId).catch((error2) => this._onerror(new Error(`Failed to enqueue error response: ${error2}`)));
+        }, capturedTransport?.sessionId).catch((error3) => this._onerror(new Error(`Failed to enqueue error response: ${error3}`)));
       } else {
-        capturedTransport?.send(errorResponse).catch((error2) => this._onerror(new Error(`Failed to send an error response: ${error2}`)));
+        capturedTransport?.send(errorResponse).catch((error3) => this._onerror(new Error(`Failed to send an error response: ${error3}`)));
       }
       return;
     }
@@ -48132,7 +48183,7 @@ var Protocol = class {
       } else {
         await capturedTransport?.send(response);
       }
-    }, async (error2) => {
+    }, async (error3) => {
       if (abortController.signal.aborted) {
         return;
       }
@@ -48140,9 +48191,9 @@ var Protocol = class {
         jsonrpc: "2.0",
         id: request.id,
         error: {
-          code: Number.isSafeInteger(error2["code"]) ? error2["code"] : ErrorCode.InternalError,
-          message: error2.message ?? "Internal error",
-          ...error2["data"] !== void 0 && { data: error2["data"] }
+          code: Number.isSafeInteger(error3["code"]) ? error3["code"] : ErrorCode.InternalError,
+          message: error3.message ?? "Internal error",
+          ...error3["data"] !== void 0 && { data: error3["data"] }
         }
       };
       if (relatedTaskId && this._taskMessageQueue) {
@@ -48154,7 +48205,7 @@ var Protocol = class {
       } else {
         await capturedTransport?.send(errorResponse);
       }
-    }).catch((error2) => this._onerror(new Error(`Failed to send response: ${error2}`))).finally(() => {
+    }).catch((error3) => this._onerror(new Error(`Failed to send response: ${error3}`))).finally(() => {
       if (this._requestHandlerAbortControllers.get(request.id) === abortController) {
         this._requestHandlerAbortControllers.delete(request.id);
       }
@@ -48173,11 +48224,11 @@ var Protocol = class {
     if (timeoutInfo && responseHandler && timeoutInfo.resetTimeoutOnProgress) {
       try {
         this._resetTimeout(messageId);
-      } catch (error2) {
+      } catch (error3) {
         this._responseHandlers.delete(messageId);
         this._progressHandlers.delete(messageId);
         this._cleanupTimeout(messageId);
-        responseHandler(error2);
+        responseHandler(error3);
         return;
       }
     }
@@ -48191,8 +48242,8 @@ var Protocol = class {
       if (isJSONRPCResultResponse(response)) {
         resolver(response);
       } else {
-        const error2 = new McpError(response.error.code, response.error.message, response.error.data);
-        resolver(error2);
+        const error3 = new McpError(response.error.code, response.error.message, response.error.data);
+        resolver(error3);
       }
       return;
     }
@@ -48220,8 +48271,8 @@ var Protocol = class {
     if (isJSONRPCResultResponse(response)) {
       handler(response);
     } else {
-      const error2 = McpError.fromError(response.error.code, response.error.message, response.error.data);
-      handler(error2);
+      const error3 = McpError.fromError(response.error.code, response.error.message, response.error.data);
+      handler(error3);
     }
   }
   get transport() {
@@ -48266,10 +48317,10 @@ var Protocol = class {
       try {
         const result = await this.request(request, resultSchema, options);
         yield { type: "result", result };
-      } catch (error2) {
+      } catch (error3) {
         yield {
           type: "error",
-          error: error2 instanceof McpError ? error2 : new McpError(ErrorCode.InternalError, String(error2))
+          error: error3 instanceof McpError ? error3 : new McpError(ErrorCode.InternalError, String(error3))
         };
       }
       return;
@@ -48312,10 +48363,10 @@ var Protocol = class {
         await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
         options?.signal?.throwIfAborted();
       }
-    } catch (error2) {
+    } catch (error3) {
       yield {
         type: "error",
-        error: error2 instanceof McpError ? error2 : new McpError(ErrorCode.InternalError, String(error2))
+        error: error3 instanceof McpError ? error3 : new McpError(ErrorCode.InternalError, String(error3))
       };
     }
   }
@@ -48327,8 +48378,8 @@ var Protocol = class {
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
     return new Promise((resolve2, reject) => {
-      const earlyReject = (error2) => {
-        reject(error2);
+      const earlyReject = (error3) => {
+        reject(error3);
       };
       if (!this._transport) {
         earlyReject(new Error("Not connected"));
@@ -48388,9 +48439,9 @@ var Protocol = class {
             requestId: messageId,
             reason: String(reason)
           }
-        }, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error3) => this._onerror(new Error(`Failed to send cancellation: ${error3}`)));
-        const error2 = reason instanceof McpError ? reason : new McpError(ErrorCode.RequestTimeout, String(reason));
-        reject(error2);
+        }, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error4) => this._onerror(new Error(`Failed to send cancellation: ${error4}`)));
+        const error3 = reason instanceof McpError ? reason : new McpError(ErrorCode.RequestTimeout, String(reason));
+        reject(error3);
       };
       this._responseHandlers.set(messageId, (response) => {
         if (options?.signal?.aborted) {
@@ -48406,8 +48457,8 @@ var Protocol = class {
           } else {
             resolve2(parseResult.data);
           }
-        } catch (error2) {
-          reject(error2);
+        } catch (error3) {
+          reject(error3);
         }
       });
       options?.signal?.addEventListener("abort", () => {
@@ -48431,14 +48482,14 @@ var Protocol = class {
           type: "request",
           message: jsonrpcRequest,
           timestamp: Date.now()
-        }).catch((error2) => {
+        }).catch((error3) => {
           this._cleanupTimeout(messageId);
-          reject(error2);
+          reject(error3);
         });
       } else {
-        this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error2) => {
+        this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error3) => {
           this._cleanupTimeout(messageId);
-          reject(error2);
+          reject(error3);
         });
       }
     });
@@ -48531,7 +48582,7 @@ var Protocol = class {
             }
           };
         }
-        this._transport?.send(jsonrpcNotification2, options).catch((error2) => this._onerror(error2));
+        this._transport?.send(jsonrpcNotification2, options).catch((error3) => this._onerror(error3));
       });
       return;
     }
@@ -49393,11 +49444,11 @@ var Server = class extends Protocol {
             if (!validationResult.valid) {
               throw new McpError(ErrorCode.InvalidParams, `Elicitation response content does not match requested schema: ${validationResult.errorMessage}`);
             }
-          } catch (error2) {
-            if (error2 instanceof McpError) {
-              throw error2;
+          } catch (error3) {
+            if (error3 instanceof McpError) {
+              throw error3;
             }
-            throw new McpError(ErrorCode.InternalError, `Error validating elicitation response: ${error2 instanceof Error ? error2.message : String(error2)}`);
+            throw new McpError(ErrorCode.InternalError, `Error validating elicitation response: ${error3 instanceof Error ? error3.message : String(error3)}`);
           }
         }
         return result;
@@ -49656,13 +49707,13 @@ var McpServer = class {
         }
         await this.validateToolOutput(tool, result, request.params.name);
         return result;
-      } catch (error2) {
-        if (error2 instanceof McpError) {
-          if (error2.code === ErrorCode.UrlElicitationRequired) {
-            throw error2;
+      } catch (error3) {
+        if (error3 instanceof McpError) {
+          if (error3.code === ErrorCode.UrlElicitationRequired) {
+            throw error3;
           }
         }
-        return this.createToolError(error2 instanceof Error ? error2.message : String(error2));
+        return this.createToolError(error3 instanceof Error ? error3.message : String(error3));
       }
     });
     this._toolHandlersInitialized = true;
@@ -49695,8 +49746,8 @@ var McpServer = class {
     const schemaToParse = inputObj ?? tool.inputSchema;
     const parseResult = await safeParseAsync2(schemaToParse, args);
     if (!parseResult.success) {
-      const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
-      const errorMessage3 = getParseErrorMessage(error2);
+      const error3 = "error" in parseResult ? parseResult.error : "Unknown error";
+      const errorMessage3 = getParseErrorMessage(error3);
       throw new McpError(ErrorCode.InvalidParams, `Input validation error: Invalid arguments for tool ${toolName}: ${errorMessage3}`);
     }
     return parseResult.data;
@@ -49720,8 +49771,8 @@ var McpServer = class {
     const outputObj = normalizeObjectSchema(tool.outputSchema);
     const parseResult = await safeParseAsync2(outputObj, result.structuredContent);
     if (!parseResult.success) {
-      const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
-      const errorMessage3 = getParseErrorMessage(error2);
+      const error3 = "error" in parseResult ? parseResult.error : "Unknown error";
+      const errorMessage3 = getParseErrorMessage(error3);
       throw new McpError(ErrorCode.InvalidParams, `Output validation error: Invalid structured content for tool ${toolName}: ${errorMessage3}`);
     }
   }
@@ -49933,8 +49984,8 @@ var McpServer = class {
         const argsObj = normalizeObjectSchema(prompt.argsSchema);
         const parseResult = await safeParseAsync2(argsObj, request.params.arguments);
         if (!parseResult.success) {
-          const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
-          const errorMessage3 = getParseErrorMessage(error2);
+          const error3 = "error" in parseResult ? parseResult.error : "Unknown error";
+          const errorMessage3 = getParseErrorMessage(error3);
           throw new McpError(ErrorCode.InvalidParams, `Invalid arguments for prompt ${request.params.name}: ${errorMessage3}`);
         }
         const args = parseResult.data;
@@ -50417,8 +50468,8 @@ var newRequestFromIncoming = (method, url, headers, incoming, abortController) =
             } else {
               controller.enqueue(value);
             }
-          } catch (error2) {
-            controller.error(error2);
+          } catch (error3) {
+            controller.error(error3);
           }
         }
       });
@@ -50619,8 +50670,8 @@ async function readWithoutBlocking(readPromise) {
   return Promise.race([readPromise, Promise.resolve().then(() => Promise.resolve(void 0))]);
 }
 function writeFromReadableStreamDefaultReader(reader, writable, currentReadPromise) {
-  const cancel = (error2) => {
-    reader.cancel(error2).catch(() => {
+  const cancel = (error3) => {
+    reader.cancel(error3).catch(() => {
     });
   };
   writable.on("close", cancel);
@@ -50630,9 +50681,9 @@ function writeFromReadableStreamDefaultReader(reader, writable, currentReadPromi
     writable.off("close", cancel);
     writable.off("error", cancel);
   });
-  function handleStreamError(error2) {
-    if (error2) {
-      writable.destroy(error2);
+  function handleStreamError(error3) {
+    if (error3) {
+      writable.destroy(error3);
     }
   }
   function onDrain() {
@@ -50994,13 +51045,13 @@ var WebStandardStreamableHTTPServerTransport = class {
    * Helper to create a JSON error response
    */
   createJsonErrorResponse(status, code, message, options) {
-    const error2 = { code, message };
+    const error3 = { code, message };
     if (options?.data !== void 0) {
-      error2.data = options.data;
+      error3.data = options.data;
     }
     return new Response(JSON.stringify({
       jsonrpc: "2.0",
-      error: error2,
+      error: error3,
       id: null
     }), {
       status,
@@ -51021,17 +51072,17 @@ var WebStandardStreamableHTTPServerTransport = class {
     if (this._allowedHosts && this._allowedHosts.length > 0) {
       const hostHeader = req.headers.get("host");
       if (!hostHeader || !this._allowedHosts.includes(hostHeader)) {
-        const error2 = `Invalid Host header: ${hostHeader}`;
-        this.onerror?.(new Error(error2));
-        return this.createJsonErrorResponse(403, -32e3, error2);
+        const error3 = `Invalid Host header: ${hostHeader}`;
+        this.onerror?.(new Error(error3));
+        return this.createJsonErrorResponse(403, -32e3, error3);
       }
     }
     if (this._allowedOrigins && this._allowedOrigins.length > 0) {
       const originHeader = req.headers.get("origin");
       if (originHeader && !this._allowedOrigins.includes(originHeader)) {
-        const error2 = `Invalid Origin header: ${originHeader}`;
-        this.onerror?.(new Error(error2));
-        return this.createJsonErrorResponse(403, -32e3, error2);
+        const error3 = `Invalid Origin header: ${originHeader}`;
+        this.onerror?.(new Error(error3));
+        return this.createJsonErrorResponse(403, -32e3, error3);
       }
     }
     return void 0;
@@ -51207,8 +51258,8 @@ data:
         }
       });
       return new Response(readable, { headers });
-    } catch (error2) {
-      this.onerror?.(error2);
+    } catch (error3) {
+      this.onerror?.(error3);
       return this.createJsonErrorResponse(500, -32e3, "Error replaying events");
     }
   }
@@ -51228,8 +51279,8 @@ data:
 `;
       controller.enqueue(encoder.encode(eventData));
       return true;
-    } catch (error2) {
-      this.onerror?.(error2);
+    } catch (error3) {
+      this.onerror?.(error3);
       return false;
     }
   }
@@ -51397,9 +51448,9 @@ data:
         this.onmessage?.(message, { authInfo: options?.authInfo, requestInfo, closeSSEStream, closeStandaloneSSEStream });
       }
       return new Response(readable, { status: 200, headers });
-    } catch (error2) {
-      this.onerror?.(error2);
-      return this.createJsonErrorResponse(400, -32700, "Parse error", { data: String(error2) });
+    } catch (error3) {
+      this.onerror?.(error3);
+      return this.createJsonErrorResponse(400, -32700, "Parse error", { data: String(error3) });
     }
   }
   /**
@@ -51752,8 +51803,8 @@ function sortValue(value) {
   }
   return value;
 }
-function sanitizeError(error2, redactor) {
-  const message = error2 instanceof Error ? error2.message : String(error2);
+function sanitizeError(error3, redactor) {
+  const message = error3 instanceof Error ? error3.message : String(error3);
   return redactor.redactString(message);
 }
 
@@ -51778,8 +51829,8 @@ async function executeTool(spec, rawInput, context) {
       output
     }, context.redactor));
     return output;
-  } catch (error2) {
-    if (error2 instanceof PolicyDeniedError) policyDecision = "denied";
+  } catch (error3) {
+    if (error3 instanceof PolicyDeniedError) policyDecision = "denied";
     const recordInput = {
       runId: context.runId,
       toolName: spec.name,
@@ -51789,13 +51840,13 @@ async function executeTool(spec, rawInput, context) {
       durationMs: elapsedMs(startedAt, context),
       policyDecision,
       input: rawInput,
-      error: error2
+      error: error3
     };
     await context.audit.record(createToolAuditRecord(
-      error2 instanceof ReviewbotError ? { ...recordInput, errorCode: error2.code } : recordInput,
+      error3 instanceof ReviewbotError ? { ...recordInput, errorCode: error3.code } : recordInput,
       context.redactor
     ));
-    throw error2;
+    throw error3;
   }
 }
 function validateToolInput(spec, input) {
@@ -51940,8 +51991,8 @@ async function startReviewbotMcpServer(input) {
   return {
     url: new URL(`http://127.0.0.1:${address.port}/mcp`),
     close: () => new Promise((resolve2, reject) => {
-      httpServer.close((error2) => {
-        if (error2) reject(error2);
+      httpServer.close((error3) => {
+        if (error3) reject(error3);
         else resolve2();
       });
     })
@@ -51975,10 +52026,10 @@ function createMcpServer(tools, context) {
             content: [{ type: "text", text: JSON.stringify(structuredContent) }],
             structuredContent
           };
-        } catch (error2) {
+        } catch (error3) {
           return {
             isError: true,
-            content: [{ type: "text", text: sanitizeError2(error2, context) }]
+            content: [{ type: "text", text: sanitizeError2(error3, context) }]
           };
         }
       }
@@ -52044,8 +52095,8 @@ function toStructuredContent(output) {
   }
   return { value: output };
 }
-function sanitizeError2(error2, context) {
-  const message = error2 instanceof Error ? error2.message : String(error2);
+function sanitizeError2(error3, context) {
+  const message = error3 instanceof Error ? error3.message : String(error3);
   return context.redactor.redactString(message);
 }
 var STREAMABLE_HTTP_STATELESS_OPTIONS = {
@@ -52086,12 +52137,12 @@ async function readWorkspaceFile(context, filePath, maxBytes) {
       truncated: bounded.truncated,
       bytes: bounded.bytes
     };
-  } catch (error2) {
-    if (error2 instanceof ToolExecutionError) {
-      const message = error2.message.replace("workspace file path", "read_file path").replace("workspace file read", "read_file");
-      throw new ToolExecutionError(message, { cause: error2 });
+  } catch (error3) {
+    if (error3 instanceof ToolExecutionError) {
+      const message = error3.message.replace("workspace file path", "read_file path").replace("workspace file read", "read_file");
+      throw new ToolExecutionError(message, { cause: error3 });
     }
-    throw error2;
+    throw error3;
   }
 }
 function asRecord4(value) {
@@ -53463,6 +53514,14 @@ async function main(overrides = {}) {
           policy,
           agent
         });
+      } catch (reviewError) {
+        const message = redactor.redactString(
+          reviewError instanceof Error ? reviewError.message : String(reviewError)
+        );
+        core4.error(`reviewbot review failed:
+${boundedLogTail(message)}`);
+        await writeFailureDiagnostics({ message }).catch(() => void 0);
+        throw reviewError;
       } finally {
         withPolicy = recordToolAudit(withPolicy, audit.snapshot().summary);
         await mcpServer.close();
@@ -53608,11 +53667,15 @@ async function main(overrides = {}) {
       })
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
-  } catch (error2) {
-    withPolicy = recordError(withPolicy, error2);
+  } catch (error3) {
+    withPolicy = recordError(withPolicy, error3);
     await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
-    throw error2;
+    throw error3;
   }
+}
+function boundedLogTail(message, max = 4e3) {
+  return message.length <= max ? message : `\u2026[${message.length - max} chars omitted]\u2026
+${message.slice(-max)}`;
 }
 function createReviewDriver(agentId) {
   if (agentId !== "claude-code") {
@@ -53667,8 +53730,8 @@ function buildReviewSummary(findings) {
 }
 
 // packages/action/src/entry.ts
-main().catch((error2) => {
-  const message = error2 instanceof Error ? error2.message : String(error2);
+main().catch((error3) => {
+  const message = error3 instanceof Error ? error3.message : String(error3);
   core5.setFailed(message);
 });
 /*! Bundled license information:

@@ -30,6 +30,23 @@ export async function writeReviewArtifacts(input: ReviewArtifactsInput): Promise
   return { dir, runPath, findingsPath, contextManifestPath };
 }
 
+/**
+ * Persist agent/review failure diagnostics so an opaque "Claude exited with 1"
+ * leaves an inspectable trace in the uploaded `$RUNNER_TEMP/reviewbot` artifacts
+ * (the review pipeline throws before the normal artifacts are written). The
+ * caller is responsible for redacting `message` before it reaches here.
+ */
+export async function writeFailureDiagnostics(input: {
+  runnerTemp?: string;
+  message: string;
+}): Promise<string> {
+  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "reviewbot-agent-error.txt");
+  await writeFile(path, `${input.message.trimEnd()}\n`);
+  return path;
+}
+
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }

@@ -8,7 +8,9 @@ step that says so in the run summary - see the notes on each workflow below.
 
 Review mode needs Claude credentials in addition to the GitHub token: expose
 `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via `env:`, or
-the run will fail with a Claude auth error.
+the run will fail with a Claude auth error. When the real agent fails before
+normal review artifacts are written, reviewbot logs a redacted diagnostic tail
+and persists it as `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
 
 ```yaml
 permissions:

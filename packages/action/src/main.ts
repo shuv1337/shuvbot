@@ -12,7 +12,7 @@ import {
 } from "../../core/src/run-record.ts";
 import type { RunRecord } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
-import { writeReviewArtifacts } from "./artifacts.ts";
+import { writeFailureDiagnostics, writeReviewArtifacts } from "./artifacts.ts";
 import { isSupportedEventName, normalizeEvent, type BotEvent } from "../../core/src/events.ts";
 import { findCommandInEvent } from "../../core/src/commands.ts";
 import { resolveMode } from "../../core/src/modes.ts";
@@ -195,6 +195,17 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
           policy,
           agent
         });
+      } catch (reviewError) {
+        // The driver embeds a bounded, secret-scrubbed tail of Claude's
+        // stdout+stderr in its error; redact again (defense in depth) before it
+        // reaches the step log or an artifact so a failure is diagnosable and
+        // never leaks a token value.
+        const message = redactor.redactString(
+          reviewError instanceof Error ? reviewError.message : String(reviewError)
+        );
+        core.error(`reviewbot review failed:\n${boundedLogTail(message)}`);
+        await writeFailureDiagnostics({ message }).catch(() => undefined);
+        throw reviewError;
       } finally {
         withPolicy = recordToolAudit(withPolicy, audit.snapshot().summary);
         await mcpServer.close();
@@ -354,6 +365,13 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
     throw error;
   }
+}
+
+/** Keep the step-log annotation from ballooning if the driver tail is large. */
+function boundedLogTail(message: string, max = 4000): string {
+  return message.length <= max
+    ? message
+    : `…[${message.length - max} chars omitted]…\n${message.slice(-max)}`;
 }
 
 function createReviewDriver(agentId: AgentId): AgentDriver {
