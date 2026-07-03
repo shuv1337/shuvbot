@@ -15,6 +15,7 @@ Common failures:
 - Push denied: implementation and fix-ci only push to `reviewbot/*` branches.
 - Inline comment missing: the finding line must map to a diff position; otherwise it falls back to the summary.
 - Evals failing: run `bun run evals` and inspect the markdown summary table.
+- Action startup fails with `ERR_MODULE_NOT_FOUND` for `@actions/core` or another package: the committed `dist/index.js` is not self-contained. Run `bun run build`, commit the regenerated bundle, and verify with `bun test packages/action/test/dist-bundle.test.ts`.
 
 ## Action output failures
 
