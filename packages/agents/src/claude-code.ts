@@ -125,10 +125,7 @@ function buildClaudeArgs(input: AgentRunInput): string[] {
   return args;
 }
 
-function formatFailureDiagnostics(
-  result: RunProcessResult,
-  secrets: readonly string[]
-): string {
+function formatFailureDiagnostics(result: RunProcessResult, secrets: readonly string[]): string {
   const stderrTail = boundedTail(scrubSecrets(result.stderr, secrets));
   const stdoutTail = boundedTail(scrubSecrets(result.stdout, secrets));
   return [

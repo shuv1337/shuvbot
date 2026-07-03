@@ -21,9 +21,9 @@ describe("review artifacts", () => {
       contextManifest: { sections: [], totalBytes: 0 }
     });
 
-    await expect(readFile(artifacts.runPath, "utf8")).resolves.toContain("\"runId\"");
+    await expect(readFile(artifacts.runPath, "utf8")).resolves.toContain('"runId"');
     await expect(readFile(artifacts.findingsPath, "utf8")).resolves.toBe("[]\n");
-    await expect(readFile(artifacts.contextManifestPath, "utf8")).resolves.toContain("\"sections\"");
+    await expect(readFile(artifacts.contextManifestPath, "utf8")).resolves.toContain('"sections"');
   });
 
   test("persists failure diagnostics to the reviewbot artifact directory", async () => {

@@ -369,7 +369,9 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
 
 /** Keep the step-log annotation from ballooning if the driver tail is large. */
 function boundedLogTail(message: string, max = 4000): string {
-  return message.length <= max ? message : `…[${message.length - max} chars omitted]…\n${message.slice(-max)}`;
+  return message.length <= max
+    ? message
+    : `…[${message.length - max} chars omitted]…\n${message.slice(-max)}`;
 }
 
 function createReviewDriver(agentId: AgentId): AgentDriver {
