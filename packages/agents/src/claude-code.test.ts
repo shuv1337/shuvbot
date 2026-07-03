@@ -39,6 +39,9 @@ describe("Claude Code driver", () => {
     expect(result.output).toContain("CLAUDE_CODE_OAUTH_TOKEN=[REDACTED]");
     expect(result.output).not.toContain("secret-token-value");
     expect(masked).toEqual(["secret-token-value"]);
+    const modelIndex = calls[0]?.args.indexOf("--model") ?? -1;
+    expect(modelIndex).toBeGreaterThanOrEqual(0);
+    expect(calls[0]?.args[modelIndex + 1]).toBe("claude-sonnet-4-5");
     expect(calls[0]?.args).toContain("--mcp-config");
     expect(calls[0]?.args).toContain("--strict-mcp-config");
     const toolsIndex = calls[0]?.args.indexOf("--tools") ?? -1;
@@ -49,6 +52,59 @@ describe("Claude Code driver", () => {
     expect(stdinWrites.join("")).toBe("review");
     expect(calls[0]?.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("secret-token-value");
     expect(calls[0]?.env.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  test("surfaces a bounded, scrubbed stdout+stderr tail when Claude exits non-zero", async () => {
+    // The CLI prints its real error to stdout with an empty stderr on auth /
+    // model failures; the token also appears in stdout to prove exact-value
+    // scrubbing catches values the pattern redactor might miss.
+    const driver = createClaudeCodeDriver({
+      spawnImpl() {
+        return fakeProcess(
+          "There's an issue with the selected model. leaked=secret-token-value",
+          "",
+          1
+        );
+      },
+      masker: { setSecret() {} }
+    });
+
+    const result = await driver.run({
+      prompt: "review",
+      cwd: process.cwd(),
+      model: "claude/sonnet",
+      timeoutMs: 1_000,
+      activityTimeoutMs: 1_000,
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "secret-token-value" }
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Claude exited with 1");
+    expect(result.error).toContain("issue with the selected model");
+    expect(result.error).toContain("stderr: <empty>");
+    expect(result.error).not.toContain("secret-token-value");
+  });
+
+  test("truncates an oversized failure tail", async () => {
+    const huge = `PREFIX${"x".repeat(5000)}TAILMARK`;
+    const driver = createClaudeCodeDriver({
+      spawnImpl() {
+        return fakeProcess(huge, "", 1);
+      },
+      masker: { setSecret() {} }
+    });
+
+    const result = await driver.run({
+      prompt: "review",
+      cwd: process.cwd(),
+      timeoutMs: 1_000,
+      activityTimeoutMs: 1_000,
+      env: { ANTHROPIC_API_KEY: "api-key-value" }
+    });
+
+    expect(result.error).toContain("chars omitted");
+    expect(result.error).toContain("TAILMARK");
+    expect(result.error).not.toContain("PREFIX");
   });
 
   test("routes stdin write errors through the driver failure path", async () => {

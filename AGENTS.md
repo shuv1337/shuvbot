@@ -95,6 +95,31 @@ bun run evals
   `packages/action/test/main.integration.test.ts` for the pattern.
   `core.setOutput`/`GITHUB_OUTPUT` does not have this problem - it reads the
   env var fresh on every call.
+- **Config model slugs must be resolved before hitting the Claude CLI.** The
+  config default `model` is `claude/sonnet` (a reviewbot slug), but the
+  `claude` CLI only accepts its own aliases (`sonnet`, `opus`, `haiku`) or full
+  ids (`claude-sonnet-4-5`). Passing the raw `claude/…` slug makes the CLI exit
+  `1` with **empty stderr** and its real message on **stdout** ("issue with the
+  selected model … may not exist"), even with valid auth. `claude-code.ts`'s
+  `buildClaudeArgs` runs `input.model` through `resolveModelId()`
+  (`agents/src/model-registry.ts`) before `--model`; keep the registry's
+  target ids CLI-valid. This was the root cause of production smoke #2's
+  "Claude exited with 1" (run 28684751856) - not a bad token (a freshly minted
+  token failed identically). Verified against `claude 2.1.201`; all other
+  driver flags (`--print`, `--input-format/--output-format text`,
+  `--no-session-persistence`, `--mcp-config`, `--strict-mcp-config`,
+  `--tools ""`) still exist and behave.
+- **The Claude driver surfaces failure output; keep it that way.** On non-zero
+  exit `claude-code.ts` puts a bounded, secret-scrubbed tail of stdout+stderr
+  into `AgentRunResult.error` (the CLI writes auth/model errors to stdout with
+  empty stderr, so a bare exit code is undiagnosable). `main.ts`'s review
+  branch redacts that again, logs a bounded tail via `core.error`, and writes
+  `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt` via
+  `writeFailureDiagnostics` so failures leave an artifact even though the
+  pipeline throws before normal artifacts are written. Redaction is
+  defense-in-depth: the streaming `DefaultRedactor` is pattern-based (can miss
+  a token split across stream chunks), so the driver also does an exact-value
+  scrub against the resolved auth values - never remove that.
 - The eval harness's 10 "hardening" cases (`packages/evals/cases/*`) run a
   real diff through the actual review pipeline with a scripted agent that
   only answers for the case's expected skill id - this proves skill
