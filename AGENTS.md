@@ -29,6 +29,20 @@ otherwise without checking `main.ts` directly.
   dedicated `chore(build): regenerate dist/index.js`-style commit, not on
   every source change - check `git log -- dist/index.js` before assuming it's
   in sync with source, or just rebuild and diff.
+- `dist/index.js` MUST be a fully self-contained bundle: GitHub checks out a JS
+  action's repo as-is and runs it with `node24` and **no `npm install`**, so
+  every runtime dep (e.g. `@actions/core`) has to be inlined. The first prod
+  smoke (2026-07-03) crashed with `ERR_MODULE_NOT_FOUND` because tsup leaves
+  `dependencies` external by default. `tsup.config.ts` fixes this with
+  `noExternal: [/.*/]` (inline all non-builtin deps) **plus** a `createRequire`
+  banner - several inlined deps are CommonJS and call `require()` for Node
+  built-ins, which esbuild's ESM output otherwise rejects with "Dynamic require
+  of X is not supported". Don't remove either without re-running the bundle
+  guard. `packages/action/test/dist-bundle.test.ts` enforces all of this: it
+  scans for live bare imports, loads the bundle in a bare (no-node_modules)
+  checkout, and byte-compares a fresh rebuild to catch staleness. Regenerate
+  with `bun run build`; verify self-containment with
+  `bun test packages/action/test/dist-bundle.test.ts`.
 
 ## Intended technology stack
 
