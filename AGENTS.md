@@ -42,7 +42,13 @@ otherwise without checking `main.ts` directly.
   scans for live bare imports, loads the bundle in a bare (no-node_modules)
   checkout, and byte-compares a fresh rebuild to catch staleness. Regenerate
   with `bun run build`; verify self-containment with
-  `bun test packages/action/test/dist-bundle.test.ts`.
+  `bun test packages/action/test/dist-bundle.test.ts`. Caveat: the guard only
+  byte-compares `dist/index.js`, **not** `dist/index.js.map`. The map embeds
+  source text via `sourcesContent`, so a whitespace/formatting-only change to
+  source (e.g. a prettier pass) leaves `index.js` byte-identical while the
+  committed map drifts. The map is deterministic given the source, so just run
+  `bun run build` and commit the regenerated map alongside `index.js` in the
+  same dist commit rather than chasing the diff.
 
 ## Intended technology stack
 
