@@ -52002,7 +52002,7 @@ function createMcpServer(tools, context) {
   const server = new McpServer(
     {
       name: "reviewbot-mcp",
-      version: "0.0.0"
+      version: "0.1.0"
     },
     {
       capabilities: {
