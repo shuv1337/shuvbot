@@ -6,8 +6,8 @@ the newest `0.x` release; `v0.1.0` is an immutable point release.
 
 ## [0.1.0] - 2026-07-03
 
-First tagged release of reviewbot (`shuv1337/shuvbot`). Pull-request review mode
-is production-capable and smoke-verified end-to-end against a planted
+First v0 release line for reviewbot (`shuv1337/shuvbot`). Pull-request review
+mode is production-capable and smoke-verified end-to-end against a planted
 vulnerability (real inline security findings posted; ltc-docs prod smoke #3,
 2026-07-03).
 
@@ -34,7 +34,6 @@ vulnerability (real inline security findings posted; ltc-docs prod smoke #3,
 - `implement` and `fix-ci` modes exist end-to-end (policy, branch prep,
   commit/PR tooling) but are not yet wired to a real agent — they currently
   no-op and say so in their run summary. See `docs/workflows.md`.
-- Consumers should pin `uses: shuv1337/shuvbot@v0` for the moving major line, or
-  an exact commit SHA for reproducible, paranoid pinning.
-
-[0.1.0]: https://github.com/shuv1337/shuvbot/releases/tag/v0.1.0
+- Consumers should pin `uses: shuv1337/shuvbot@v0` for the moving major line,
+  `shuv1337/shuvbot@v0.1.0` for this immutable point release, or an exact
+  commit SHA for reproducible, paranoid pinning.

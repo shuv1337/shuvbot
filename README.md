@@ -39,7 +39,7 @@ jobs:
 > release, so you pick up patch and minor updates automatically. For fully
 > reproducible builds, pin an immutable point release (`shuv1337/shuvbot@v0.1.0`)
 > or, most paranoid, an exact commit SHA
-> (`shuv1337/shuvbot@c1bf61c3...`) and update it deliberately. See
+> (`shuv1337/shuvbot@<commit-sha>`) and update it deliberately. See
 > `CHANGELOG.md` for what each release contains.
 
 Start with:
