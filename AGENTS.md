@@ -69,6 +69,13 @@ otherwise without checking `main.ts` directly.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
 
+
+## Repository automation
+
+- `.github/workflows/reviewbot.yml` dogfoods the published `shuv1337/shuvbot@v0` action on pull requests targeting `master`. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make reviewbot blocking.
+- The workflow uses `pull_request` plus a same-repository head guard so this public repository skips fork PRs that cannot receive `CLAUDE_CODE_OAUTH_TOKEN` instead of failing their auth check.
+- Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, mandatory Claude Code install/verify steps, SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/reviewbot`.
+
 ## Expected validation commands
 
 ```bash

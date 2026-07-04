@@ -14,27 +14,46 @@ fails before normal review artifacts are written, reviewbot logs a redacted
 diagnostic tail and persists it as `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
 
 ```yaml
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  checks: read
-steps:
-  - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-  - name: Install Claude Code
-    run: |
-      curl -fsSL https://claude.ai/install.sh | bash
-      echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-  - name: Verify Claude Code
-    run: claude --version
-  - uses: shuv1337/shuvbot@v0
-    with:
-      token: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+name: reviewbot
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  review:
+    # Public repos can add this guard to skip fork PRs without secrets:
+    # if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Verify Claude Code
+        run: claude --version
+      - uses: shuv1337/shuvbot@v0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Upload reviewbot artifacts
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: reviewbot
+          path: ${{ runner.temp }}/reviewbot
+          if-no-files-found: warn
 ```
 
-Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `reviewbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead.
+Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `reviewbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository` on the job when credentials are unavailable to fork PRs; those fork PRs will be skipped instead of failing the Claude auth check.
 
 ## Mention-Driven Implement
 
