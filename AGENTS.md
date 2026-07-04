@@ -72,7 +72,7 @@ otherwise without checking `main.ts` directly.
 ## Repository automation
 
 - `.github/workflows/reviewbot.yml` dogfoods the published `shuv1337/shuvbot@v0` action on pull requests targeting `master`. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make reviewbot blocking.
-- The workflow uses `pull_request` plus a same-repository head guard so this public repository skips fork PRs that cannot receive `CLAUDE_CODE_OAUTH_TOKEN` instead of failing their auth check.
+- The workflow uses `pull_request` plus a same-repository, non-draft job guard so this public repository skips fork PRs that cannot receive `CLAUDE_CODE_OAUTH_TOKEN` and waits to review draft PRs until `ready_for_review` fires.
 - Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, mandatory Claude Code install/verify steps, SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/reviewbot`.
 
 ## Expected validation commands

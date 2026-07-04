@@ -23,8 +23,8 @@ permissions: {}
 
 jobs:
   review:
-    # Public repos can add this guard to skip fork PRs without secrets:
-    # if: github.event.pull_request.head.repo.full_name == github.repository
+    # Public repos can add this guard to skip fork PRs without secrets and draft PRs:
+    # if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,7 +53,7 @@ jobs:
           if-no-files-found: warn
 ```
 
-Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `reviewbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository` on the job when credentials are unavailable to fork PRs; those fork PRs will be skipped instead of failing the Claude auth check.
+Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `reviewbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft` on the job when credentials are unavailable to fork PRs and draft PRs should wait for review; fork PRs will be skipped instead of failing the Claude auth check, and draft PRs will run when marked ready for review because `ready_for_review` is included in the trigger types.
 
 ## Mention-Driven Implement
 
