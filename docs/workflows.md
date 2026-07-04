@@ -6,11 +6,12 @@ step that says so in the run summary - see the notes on each workflow below.
 
 ## Automatic PR Review
 
-Review mode needs Claude credentials in addition to the GitHub token: expose
-`CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via `env:`, or
-the run will fail with a Claude auth error. When the real agent fails before
-normal review artifacts are written, reviewbot logs a redacted diagnostic tail
-and persists it as `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
+Review mode needs the Claude Code CLI on `PATH` and Claude credentials in
+addition to the GitHub token: install Claude Code before the shuvbot step, then
+expose `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via
+`env:`, or the run will fail with a Claude auth error. When the real agent
+fails before normal review artifacts are written, reviewbot logs a redacted
+diagnostic tail and persists it as `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
 
 ```yaml
 permissions:
@@ -20,6 +21,12 @@ permissions:
   checks: read
 steps:
   - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  - name: Install Claude Code
+    run: |
+      curl -fsSL https://claude.ai/install.sh | bash
+      echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+  - name: Verify Claude Code
+    run: claude --version
   - uses: shuv1337/shuvbot@v0
     with:
       token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +68,12 @@ permissions:
   checks: read
 steps:
   - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  - name: Install Claude Code
+    run: |
+      curl -fsSL https://claude.ai/install.sh | bash
+      echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+  - name: Verify Claude Code
+    run: claude --version
   - uses: shuv1337/shuvbot@v0
     with:
       mode: fix-ci
