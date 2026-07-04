@@ -16,17 +16,20 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  checks: read
+permissions: {}
 
 jobs:
   review:
+    # Public repos can add this guard to skip fork PRs without secrets:
+    # if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install Claude Code
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
