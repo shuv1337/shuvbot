@@ -80,9 +80,11 @@ is produced. Only `review` mode currently produces real `result`,
 
 ## Hardened SHA-Pinned Variant
 
-Replace `shuv1337/shuvbot@v0` with the release commit SHA for immutable production workflows:
+Replace `shuv1337/shuvbot@v0` with an immutable point release or exact commit SHA for reproducible production workflows:
 
 ```yaml
+- uses: shuv1337/shuvbot@v0.1.0
+# or
 - uses: shuv1337/shuvbot@<release-commit-sha>
 ```
 

@@ -2385,8 +2385,9 @@ v1
 - Fork PR policy tests pass.
 - `action.yml` points to compiled dist.
 - `dist/index.js` is committed, fresh relative to source, and passes the self-contained bundle guard.
+- `dist/index.js.map` is regenerated and committed alongside `dist/index.js`.
 - Changelog generated.
-- Release tag created.
+- Release tag created when cutting the release (not during release-note-only prep).
 
 ### 27.4 Docs
 

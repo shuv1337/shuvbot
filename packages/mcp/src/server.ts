@@ -19,7 +19,9 @@ export interface StartMcpServerInput {
   context: ToolContext;
 }
 
-export async function startReviewbotMcpServer(input: StartMcpServerInput): Promise<ReviewbotMcpServer> {
+export async function startReviewbotMcpServer(
+  input: StartMcpServerInput
+): Promise<ReviewbotMcpServer> {
   const httpServer = createServer(async (request, response) => {
     if (request.url !== "/mcp") {
       writeJson(response, 404, { error: "Not found" });
@@ -63,7 +65,8 @@ export async function startReviewbotMcpServer(input: StartMcpServerInput): Promi
   });
 
   const address = httpServer.address();
-  if (!address || typeof address === "string") throw new Error("Unable to determine MCP server address");
+  if (!address || typeof address === "string")
+    throw new Error("Unable to determine MCP server address");
 
   return {
     url: new URL(`http://127.0.0.1:${address.port}/mcp`),
@@ -77,11 +80,14 @@ export async function startReviewbotMcpServer(input: StartMcpServerInput): Promi
   };
 }
 
-function createMcpServer(tools: readonly ToolSpec<unknown, unknown>[], context: ToolContext): McpServer {
+function createMcpServer(
+  tools: readonly ToolSpec<unknown, unknown>[],
+  context: ToolContext
+): McpServer {
   const server = new McpServer(
     {
       name: "reviewbot-mcp",
-      version: "0.0.0"
+      version: "0.1.0"
     },
     {
       capabilities: {
@@ -135,7 +141,9 @@ function schemaToZod(schema: ToolSchema): z.ZodType {
       return z.array(schemaToZod(schema.items));
     case "string": {
       if (schema.enum) {
-        return z.enum(Object.fromEntries(schema.enum.map((value) => [value, value])) as Record<string, string>);
+        return z.enum(
+          Object.fromEntries(schema.enum.map((value) => [value, value])) as Record<string, string>
+        );
       }
       let stringSchema = z.string();
       if (schema.minLength !== undefined) stringSchema = stringSchema.min(schema.minLength);

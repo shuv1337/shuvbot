@@ -51987,7 +51987,8 @@ async function startReviewbotMcpServer(input) {
     });
   });
   const address = httpServer.address();
-  if (!address || typeof address === "string") throw new Error("Unable to determine MCP server address");
+  if (!address || typeof address === "string")
+    throw new Error("Unable to determine MCP server address");
   return {
     url: new URL(`http://127.0.0.1:${address.port}/mcp`),
     close: () => new Promise((resolve2, reject) => {
@@ -52002,7 +52003,7 @@ function createMcpServer(tools, context) {
   const server = new McpServer(
     {
       name: "reviewbot-mcp",
-      version: "0.0.0"
+      version: "0.1.0"
     },
     {
       capabilities: {
@@ -52053,7 +52054,9 @@ function schemaToZod(schema) {
       return array(schemaToZod(schema.items));
     case "string": {
       if (schema.enum) {
-        return _enum(Object.fromEntries(schema.enum.map((value) => [value, value])));
+        return _enum(
+          Object.fromEntries(schema.enum.map((value) => [value, value]))
+        );
       }
       let stringSchema = string2();
       if (schema.minLength !== void 0) stringSchema = stringSchema.min(schema.minLength);
