@@ -11,7 +11,7 @@ jobs:
     name: reviewbot review
     # Public repo: only run when the PR head is in this same repo (secrets are
     # available). Fork PRs are skipped rather than failing their Claude auth check.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
