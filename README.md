@@ -20,8 +20,8 @@ permissions: {}
 
 jobs:
   review:
-    # Public repos can add this guard to skip fork PRs without secrets:
-    # if: github.event.pull_request.head.repo.full_name == github.repository
+    # Public repos can add this guard to skip fork PRs without secrets and draft PRs:
+    # if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
