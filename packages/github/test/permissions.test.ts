@@ -33,10 +33,54 @@ function makePullRequest(opts: { fork: boolean }) {
   });
 }
 
+function makeIssueComment(opts: { onPullRequest: boolean }) {
+  return normalizeEvent({
+    eventName: "issue_comment",
+    payload: {
+      action: "created",
+      repository: {
+        owner: { login: "acme" },
+        name: "widget",
+        full_name: "acme/widget",
+        private: false
+      },
+      sender: { login: "alice" },
+      issue: {
+        number: 1,
+        title: "t",
+        body: "",
+        state: "open",
+        user: { login: "alice" },
+        ...(opts.onPullRequest
+          ? { pull_request: { url: "https://api.github.com/repos/acme/widget/pulls/1" } }
+          : {})
+      },
+      comment: { id: 10, body: "@shuvbot review", user: { login: "alice" } }
+    }
+  });
+}
+
 describe("permissions", () => {
   test("detectFork picks up cross-repo PR heads", () => {
     expect(detectFork(makePullRequest({ fork: true }))).toBe(true);
     expect(detectFork(makePullRequest({ fork: false }))).toBe(false);
+  });
+
+  test("detectFork fails closed for pull request comments and stays open for issues", () => {
+    // An issue_comment payload has no head repository, so fork status is
+    // unknowable. Treating it as "not a fork" would exempt comment-triggered
+    // runs on fork pull requests from every fork restriction.
+    expect(detectFork(makeIssueComment({ onPullRequest: true }))).toBe(true);
+    expect(detectFork(makeIssueComment({ onPullRequest: false }))).toBe(false);
+  });
+
+  test("an explicit isFork override beats the payload guess", async () => {
+    const context = await deriveActorContext({
+      event: makeIssueComment({ onPullRequest: true }),
+      actorPermission: "write",
+      isFork: false
+    });
+    expect(context.isFork).toBe(false);
   });
 
   test("deriveActorContext returns explicit override without calling client", async () => {

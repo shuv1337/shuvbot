@@ -17,13 +17,32 @@ export interface DeriveActorContextInput {
    * the workflow already knows the actor permission (e.g., from action context).
    */
   actorPermission?: ActorPermission;
+  /**
+   * Explicit fork status, for events whose payload cannot answer it. Supply
+   * this after fetching the pull request; see `detectFork`.
+   */
+  isFork?: boolean;
 }
 
+/**
+ * Fork status drives hard policy restrictions, so an unknown answer must be the
+ * restrictive one. `pull_request` and `pull_request_review_comment` payloads
+ * carry the head repository and can answer precisely. An `issue_comment`
+ * payload does not: it has an `issue`, not a pull request, and nothing in it
+ * identifies the head repo. For a comment on a pull request that is genuinely
+ * unknowable here, so it reports `true` (treat as a fork) and callers that need
+ * the real answer must fetch the pull request and pass `isFork` explicitly.
+ *
+ * Reporting `false` for that case would silently exempt every comment-triggered
+ * run on a fork pull request from the fork restrictions in `buildRuntimePolicy`.
+ */
 export function detectFork(event: BotEvent): boolean {
   switch (event.kind) {
     case "pull_request":
     case "pull_request_review_comment":
       return event.pullRequest.isFork;
+    case "issue_comment":
+      return event.issue.isPullRequest;
     default:
       return false;
   }
@@ -49,7 +68,7 @@ export function resolveActorLogin(event: BotEvent): string {
 
 export async function deriveActorContext(input: DeriveActorContextInput): Promise<ActorContext> {
   const login = resolveActorLogin(input.event);
-  const isFork = detectFork(input.event);
+  const isFork = input.isFork ?? detectFork(input.event);
   const isPrivateRepo = detectPrivateRepo(input.event);
 
   const explicit = input.actorPermission;

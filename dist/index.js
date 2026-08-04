@@ -34526,6 +34526,8 @@ function detectFork(event) {
     case "pull_request":
     case "pull_request_review_comment":
       return event.pullRequest.isFork;
+    case "issue_comment":
+      return event.issue.isPullRequest;
     default:
       return false;
   }
@@ -34548,7 +34550,7 @@ function resolveActorLogin(event) {
 }
 async function deriveActorContext(input) {
   const login = resolveActorLogin(input.event);
-  const isFork = detectFork(input.event);
+  const isFork = input.isFork ?? detectFork(input.event);
   const isPrivateRepo = detectPrivateRepo(input.event);
   const explicit = input.actorPermission;
   if (explicit) {
