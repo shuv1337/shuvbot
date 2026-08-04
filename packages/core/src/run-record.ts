@@ -1,6 +1,7 @@
 import type { AgentId, ReviewbotMode } from "./types.ts";
 import type { RuntimePolicy } from "./policy.ts";
 import type { ReviewFinding } from "./review-schema.ts";
+import type { ReviewerId, ReviewTier } from "../../review/src/types.ts";
 
 export interface ToolCallSummary {
   name: string;
@@ -25,6 +26,53 @@ export interface ToolAuditRunToolSummary {
   totalDurationMs: number;
 }
 
+export interface ReviewSessionSummary {
+  sessionId: string;
+  role: "coordinator" | "specialist";
+  reviewer?: ReviewerId;
+  model: string;
+  status: "queued" | "running" | "completed" | "failed" | "timed_out" | "cancelled";
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  retryCount: number;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cost?: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+  };
+}
+
+export interface ReviewRunSummary {
+  engine: "legacy" | "coordinator";
+  tier: ReviewTier;
+  decision: "clean" | "comments" | "minor_issues" | "significant_concerns" | "degraded";
+  quorumMet: boolean;
+  requiredReviewers: ReviewerId[];
+  successfulReviewers: ReviewerId[];
+  missingReviewers: ReviewerId[];
+  sessions: ReviewSessionSummary[];
+  retries: number;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cost?: number;
+  };
+  findingAccounting?: {
+    active: number;
+    new: number;
+    unresolved: number;
+    fixed: number;
+    userResolved: number;
+    dismissed: number;
+  };
+}
+
 export interface RunRecord {
   runId: string;
   repo?: string;
@@ -42,6 +90,7 @@ export interface RunRecord {
   toolCalls: ToolCallSummary[];
   toolAudit?: ToolAuditRunSummary;
   findings?: ReviewFinding[];
+  review?: ReviewRunSummary;
   postedComments?: number;
   contextManifestPath?: string;
   implementation?: {
@@ -156,6 +205,10 @@ export function recordToolAudit(record: RunRecord, audit: ToolAuditRunSummary): 
       )
     }
   };
+}
+
+export function recordReview(record: RunRecord, review: ReviewRunSummary): RunRecord {
+  return { ...record, review: structuredClone(review) };
 }
 
 export function summarizePolicy(policy: RuntimePolicy): PolicySummary {

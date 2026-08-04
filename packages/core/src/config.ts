@@ -47,7 +47,48 @@ export interface ReviewbotConfig {
     learnings: boolean;
     prSummaries: boolean;
   };
+  review: {
+    engine: "legacy" | "coordinator";
+    maxConcurrency: number;
+    overallTimeout: string;
+    incremental: boolean;
+    sensitivePaths: string[];
+    shuvcode: {
+      package: string;
+      version: string;
+      useUserAuth: boolean;
+    };
+    models: {
+      coordinator: string;
+      standard: string;
+      light: string;
+    };
+    tiers: {
+      trivial: ReviewTierConfig;
+      lite: ReviewTierConfig;
+      full: ReviewTierConfig;
+    };
+    reviewers: ReviewReviewerOverride[];
+  };
 }
+
+export interface ReviewTierConfig {
+  maxLines?: number;
+  maxFiles?: number;
+  reviewers: string[];
+}
+
+export interface ReviewReviewerOverride {
+  id: string;
+  paths: string[];
+  ignorePaths: string[];
+  promptAppend: string;
+  model?: string;
+}
+
+export const PINNED_SHUVCODE_PACKAGE = "shuvcode";
+export const SHUVCODE_SOURCE_BASELINE_VERSION = "1.18.4";
+export const APPROVED_SHUVCODE_RUNTIME_VERSION: string | null = null;
 
 export const DEFAULT_CONFIG: ReviewbotConfig = {
   agent: "claude-code",
@@ -80,8 +121,46 @@ export const DEFAULT_CONFIG: ReviewbotConfig = {
     backend: "github",
     learnings: false,
     prSummaries: true
+  },
+  review: {
+    engine: "legacy",
+    maxConcurrency: 3,
+    overallTimeout: "15m",
+    incremental: true,
+    sensitivePaths: [],
+    shuvcode: {
+      package: PINNED_SHUVCODE_PACKAGE,
+      version: APPROVED_SHUVCODE_RUNTIME_VERSION ?? SHUVCODE_SOURCE_BASELINE_VERSION,
+      useUserAuth: true
+    },
+    models: {
+      coordinator: "subscription/default-reasoning",
+      standard: "subscription/default-coding",
+      light: "subscription/default-fast"
+    },
+    tiers: {
+      trivial: { maxLines: 10, maxFiles: 20, reviewers: ["code-quality"] },
+      lite: {
+        maxLines: 100,
+        maxFiles: 20,
+        reviewers: ["code-quality", "tests", "performance", "documentation", "release"]
+      },
+      full: {
+        reviewers: ["code-quality", "security", "performance", "tests", "documentation", "release"]
+      }
+    },
+    reviewers: []
   }
 };
+
+const REVIEWER_IDS = [
+  "code-quality",
+  "security",
+  "performance",
+  "tests",
+  "documentation",
+  "release"
+] as const;
 
 const TOP_LEVEL_KEYS = new Set([
   "agent",
@@ -107,7 +186,8 @@ const TOP_LEVEL_KEYS = new Set([
   "fix_ci",
   "push",
   "paths",
-  "memory"
+  "memory",
+  "review"
 ]);
 
 export async function loadConfigFile(path: string): Promise<ReviewbotConfig> {
@@ -222,6 +302,115 @@ export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
     );
   }
 
+  if (raw.review !== undefined) {
+    const review = assertRecord(raw.review, "review");
+    config.review.engine = enumValue(
+      review.engine,
+      ["legacy", "coordinator"] as const,
+      "review.engine",
+      config.review.engine
+    );
+    config.review.maxConcurrency = boundedIntegerValue(
+      review.maxConcurrency ?? review.max_concurrency,
+      "review.max_concurrency",
+      config.review.maxConcurrency,
+      1,
+      REVIEWER_IDS.length
+    );
+    config.review.overallTimeout = stringValue(
+      review.overallTimeout ?? review.overall_timeout,
+      "review.overall_timeout",
+      config.review.overallTimeout
+    );
+    config.review.incremental = booleanValue(
+      review.incremental,
+      "review.incremental",
+      config.review.incremental
+    );
+    config.review.sensitivePaths = globList(
+      review.sensitivePaths ?? review.sensitive_paths,
+      "review.sensitive_paths",
+      config.review.sensitivePaths
+    );
+
+    if (review.shuvcode !== undefined) {
+      const shuvcode = assertRecord(review.shuvcode, "review.shuvcode");
+      config.review.shuvcode.package = stringValue(
+        shuvcode.package,
+        "review.shuvcode.package",
+        config.review.shuvcode.package
+      );
+      config.review.shuvcode.version = exactVersionValue(
+        shuvcode.version,
+        "review.shuvcode.version",
+        config.review.shuvcode.version
+      );
+      if (config.review.shuvcode.package !== PINNED_SHUVCODE_PACKAGE) {
+        throw new ConfigError(`review.shuvcode.package must be ${PINNED_SHUVCODE_PACKAGE}.`);
+      }
+      config.review.shuvcode.useUserAuth = booleanValue(
+        shuvcode.useUserAuth ?? shuvcode.use_user_auth,
+        "review.shuvcode.use_user_auth",
+        config.review.shuvcode.useUserAuth
+      );
+    }
+
+    if (review.models !== undefined) {
+      const models = assertRecord(review.models, "review.models");
+      config.review.models.coordinator = subscriptionModelValue(
+        models.coordinator,
+        "review.models.coordinator",
+        config.review.models.coordinator
+      );
+      config.review.models.standard = subscriptionModelValue(
+        models.standard,
+        "review.models.standard",
+        config.review.models.standard
+      );
+      config.review.models.light = subscriptionModelValue(
+        models.light,
+        "review.models.light",
+        config.review.models.light
+      );
+    }
+
+    if (review.tiers !== undefined) {
+      const tiers = assertRecord(review.tiers, "review.tiers");
+      config.review.tiers.trivial = tierValue(
+        tiers.trivial,
+        "review.tiers.trivial",
+        config.review.tiers.trivial
+      );
+      config.review.tiers.lite = tierValue(
+        tiers.lite,
+        "review.tiers.lite",
+        config.review.tiers.lite
+      );
+      config.review.tiers.full = tierValue(
+        tiers.full,
+        "review.tiers.full",
+        config.review.tiers.full
+      );
+      validateTierRoster("trivial", config.review.tiers.trivial.reviewers);
+      validateTierRoster("lite", config.review.tiers.lite.reviewers);
+      validateTierRoster("full", config.review.tiers.full.reviewers);
+    }
+
+    if (review.reviewers !== undefined) {
+      if (!Array.isArray(review.reviewers))
+        throw new ConfigError("review.reviewers must be an array of tables.");
+      config.review.reviewers = review.reviewers.map((value, index) =>
+        reviewerOverrideValue(value, index)
+      );
+      if (
+        new Set(config.review.reviewers.map((reviewer) => reviewer.id)).size !==
+        config.review.reviewers.length
+      ) {
+        throw new ConfigError("review.reviewers must not contain duplicate reviewer IDs.");
+      }
+    }
+  }
+
   return config;
 }
 
@@ -260,6 +449,130 @@ function integerValue(value: unknown, field: string, fallback: number): number {
   if (value === undefined) return fallback;
   if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
   throw new ConfigError(`${field} must be a positive integer.`);
+}
+
+function boundedIntegerValue(
+  value: unknown,
+  field: string,
+  fallback: number,
+  minimum: number,
+  maximum: number
+): number {
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value >= minimum && value <= maximum)
+    return value;
+  throw new ConfigError(`${field} must be an integer from ${minimum} to ${maximum}.`);
+}
+
+function exactVersionValue(value: unknown, field: string, fallback: string): string {
+  const version = stringValue(value, field, fallback);
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new ConfigError(`${field} must be an exact semantic version.`);
+  }
+  return version;
+}
+
+function tierValue(value: unknown, field: string, fallback: ReviewTierConfig): ReviewTierConfig {
+  if (value === undefined) return fallback;
+  const tier = assertRecord(value, field);
+  const result: ReviewTierConfig = {
+    reviewers: reviewerList(tier.reviewers, `${field}.reviewers`, fallback.reviewers)
+  };
+  const maxLines = optionalPositiveInteger(
+    tier.maxLines ?? tier.max_lines,
+    `${field}.max_lines`,
+    fallback.maxLines
+  );
+  const maxFiles = optionalPositiveInteger(
+    tier.maxFiles ?? tier.max_files,
+    `${field}.max_files`,
+    fallback.maxFiles
+  );
+  if (maxLines !== undefined) result.maxLines = maxLines;
+  if (maxFiles !== undefined) result.maxFiles = maxFiles;
+  return result;
+}
+
+function reviewerOverrideValue(value: unknown, index: number): ReviewReviewerOverride {
+  const field = `review.reviewers[${index}]`;
+  const reviewer = assertRecord(value, field);
+  if (reviewer.id === undefined) throw new ConfigError(`${field}.id is required.`);
+  const id = enumValue(reviewer.id, REVIEWER_IDS, `${field}.id`, "code-quality");
+  const promptAppend = reviewer.promptAppend ?? reviewer.prompt_append;
+  if (
+    promptAppend !== undefined &&
+    (typeof promptAppend !== "string" || promptAppend.length > 8_000)
+  ) {
+    throw new ConfigError(
+      `${field}.prompt_append must be a string no longer than 8000 characters.`
+    );
+  }
+  const result: ReviewReviewerOverride = {
+    id,
+    paths: globList(reviewer.paths, `${field}.paths`, []),
+    ignorePaths: globList(
+      reviewer.ignorePaths ?? reviewer.ignore_paths,
+      `${field}.ignore_paths`,
+      []
+    ),
+    promptAppend: typeof promptAppend === "string" ? promptAppend : ""
+  };
+  if (reviewer.model !== undefined) {
+    result.model = subscriptionModelValue(
+      reviewer.model,
+      `${field}.model`,
+      "subscription/default-coding"
+    );
+  }
+  return result;
+}
+
+function reviewerList(value: unknown, field: string, fallback: string[]): string[] {
+  if (value === undefined) return fallback;
+  if (!Array.isArray(value) || value.some((item) => !isOneOf(item, REVIEWER_IDS))) {
+    throw new ConfigError(
+      `${field} must contain only known reviewer IDs: ${REVIEWER_IDS.join(", ")}.`
+    );
+  }
+  if (new Set(value).size !== value.length)
+    throw new ConfigError(`${field} must not contain duplicates.`);
+  return [...value];
+}
+
+function validateTierRoster(tier: "trivial" | "lite" | "full", reviewers: readonly string[]): void {
+  const minimum = tier === "trivial" ? 1 : tier === "lite" ? 3 : 5;
+  if (!reviewers.includes("code-quality")) {
+    throw new ConfigError(`review.tiers.${tier}.reviewers must include code-quality.`);
+  }
+  if (tier === "lite" && !reviewers.includes("tests")) {
+    throw new ConfigError("review.tiers.lite.reviewers must include tests.");
+  }
+  if (tier === "full" && !reviewers.includes("security")) {
+    throw new ConfigError("review.tiers.full.reviewers must include security.");
+  }
+  if (reviewers.length < minimum) {
+    throw new ConfigError(
+      `review.tiers.${tier}.reviewers must contain at least ${minimum} reviewers.`
+    );
+  }
+}
+
+function optionalPositiveInteger(
+  value: unknown,
+  field: string,
+  fallback: number | undefined
+): number | undefined {
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  throw new ConfigError(`${field} must be a positive integer.`);
+}
+
+function subscriptionModelValue(value: unknown, field: string, fallback: string): string {
+  const model = stringValue(value, field, fallback);
+  if (!/^subscription\/[^/\s]+$/.test(model)) {
+    throw new ConfigError(`${field} must use the subscription provider.`);
+  }
+  return model;
 }
 
 function globList(value: unknown, field: string, fallback: string[]): string[] {

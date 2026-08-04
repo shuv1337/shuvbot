@@ -12,6 +12,18 @@ export interface ReviewFinding {
   endLine?: number;
   suggestedFix?: string;
   tags?: string[];
+  reviewer?: "code-quality" | "security" | "performance" | "tests" | "documentation" | "release";
+  evidence?: string;
+  fingerprint?: string;
+  disposition?: "new" | "unresolved" | "fixed" | "user_resolved" | "dismissed";
+  priorFindingId?: string;
+}
+
+export interface CoordinatorReviewFinding extends ReviewFinding {
+  reviewer: NonNullable<ReviewFinding["reviewer"]>;
+  evidence: string;
+  fingerprint: string;
+  disposition: NonNullable<ReviewFinding["disposition"]>;
 }
 
 export const REVIEW_FINDING_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
@@ -67,10 +79,34 @@ function parseFinding(value: unknown, index: number, errors: string[]): ReviewFi
   setOptionalNumber(finding, "endLine", record.endLine);
   if (record.side === "RIGHT" || record.side === "LEFT") finding.side = record.side;
   if (typeof record.suggestedFix === "string") finding.suggestedFix = record.suggestedFix;
-  if (Array.isArray(record.tags)) finding.tags = record.tags.filter((tag): tag is string => typeof tag === "string");
+  if (Array.isArray(record.tags))
+    finding.tags = record.tags.filter((tag): tag is string => typeof tag === "string");
+  if (isReviewer(record.reviewer)) finding.reviewer = record.reviewer;
+  if (typeof record.evidence === "string" && record.evidence.trim())
+    finding.evidence = record.evidence;
+  if (typeof record.fingerprint === "string" && record.fingerprint.trim())
+    finding.fingerprint = record.fingerprint;
+  if (isDisposition(record.disposition)) finding.disposition = record.disposition;
+  if (typeof record.priorFindingId === "string" && record.priorFindingId.trim()) {
+    finding.priorFindingId = record.priorFindingId;
+  }
   return finding;
 }
 
-function setOptionalNumber(target: ReviewFinding, key: "line" | "startLine" | "endLine", value: unknown): void {
+function setOptionalNumber(
+  target: ReviewFinding,
+  key: "line" | "startLine" | "endLine",
+  value: unknown
+): void {
   if (typeof value === "number" && Number.isInteger(value)) target[key] = value;
+}
+
+function isReviewer(value: unknown): value is NonNullable<ReviewFinding["reviewer"]> {
+  return ["code-quality", "security", "performance", "tests", "documentation", "release"].includes(
+    value as string
+  );
+}
+
+function isDisposition(value: unknown): value is NonNullable<ReviewFinding["disposition"]> {
+  return ["new", "unresolved", "fixed", "user_resolved", "dismissed"].includes(value as string);
 }
