@@ -306,6 +306,10 @@ describe("doctor", () => {
         calls.push("runtime.start");
         return {
           url: "http://127.0.0.1:3210",
+          async listModels() {
+            calls.push("model.list");
+            return { models: [], default: { providerID: "acme", id: "default-model" } };
+          },
           async createSession() {
             calls.push("session.create");
             return { id: "unexpected" };

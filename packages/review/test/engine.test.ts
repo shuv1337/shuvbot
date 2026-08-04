@@ -51,8 +51,10 @@ describe("local coordinator engine", () => {
 
     expect(result.status).toBe("completed");
     expect(runtime.maximumActive).toBe(3);
+    // Reviewbot's `subscription/…` names are never sent to the runtime; each one
+    // is resolved to a routable model from the runtime's own catalog first.
     expect(
-      [...runtime.configured.values()].every(({ model }) => model?.providerID === "subscription")
+      [...runtime.configured.values()].every(({ model }) => model?.providerID === "acme")
     ).toBe(true);
   });
 
@@ -84,7 +86,8 @@ describe("local coordinator engine", () => {
     const runtime = new FakeRuntime();
     await runEngine("trivial", runtime);
 
-    expect(runtime.lifecycle.slice(0, 5)).toEqual([
+    expect(runtime.lifecycle.slice(0, 6)).toEqual([
+      "listModels",
       "create:coordinator",
       "create:child-1:read",
       "configure:child-1",
@@ -107,7 +110,7 @@ describe("local coordinator engine", () => {
       })
     });
     expect(trivialRuntime.configured.get("child-1")?.model).toEqual({
-      providerID: "subscription",
+      providerID: "acme",
       id: "light"
     });
     expect(trivial.plan.assignment.reviewers[0]?.modelTier).toBe("light");
@@ -648,6 +651,17 @@ class FakeRuntime implements ShuvcodeRuntime {
       onClose?: () => void;
     } = {}
   ) {}
+
+  /** Mirrors the provider catalog the plugin config registers, under a real provider. */
+  async listModels() {
+    this.lifecycle.push("listModels");
+    return {
+      models: ["reasoning", "standard", "light", "security-override", ...BUILT_IN_REVIEWER_IDS].map(
+        (id) => ({ providerID: "acme", id })
+      ),
+      default: { providerID: "acme", id: "default-model" }
+    };
+  }
 
   async createSession(input: ShuvcodeSessionCreateInput = {}) {
     if (input.policy === undefined) {

@@ -37,9 +37,11 @@ import { ReviewSessionLog, type ReviewSessionLogEvent } from "./session-log.ts";
 import {
   REVIEW_SESSION_POLICY,
   type ShuvcodeEvent,
+  type ShuvcodeModel,
   type ShuvcodeRuntime,
   type ShuvcodeSessionPolicy
 } from "./runtime/shuvcode.ts";
+import { resolveReviewModels } from "./runtime/model-catalog.ts";
 import { ShuvcodeSessionEventAccumulator } from "./runtime/events.ts";
 import type { BuiltInReviewerId, ReviewExecutionPlan } from "./types.ts";
 import {
@@ -176,10 +178,22 @@ class CoordinatorExecutionError extends Error {
   }
 }
 
-const reviewerJsonSchema = z.toJSONSchema(reviewerResultSchema) as Record<string, unknown>;
-const coordinatorJsonSchema = z.toJSONSchema(coordinatorResultSchema, {
-  io: "input"
-}) as Record<string, unknown>;
+/**
+ * Prepares a generated JSON Schema for the runtime's structured output contract.
+ * The generator emits a `$schema` dialect declaration, which the runtime rejects
+ * with `structured_output.schema` because it resolves neither the key nor the
+ * ref. Sending it makes every structured prompt fail before the model is
+ * reached, so the dialect declaration is removed here.
+ */
+function toRuntimeJsonSchema(schema: unknown): Record<string, unknown> {
+  const { $schema: _dialect, ...rest } = schema as Record<string, unknown>;
+  return rest;
+}
+
+const reviewerJsonSchema = toRuntimeJsonSchema(z.toJSONSchema(reviewerResultSchema));
+const coordinatorJsonSchema = toRuntimeJsonSchema(
+  z.toJSONSchema(coordinatorResultSchema, { io: "input" })
+);
 const HEARTBEAT_QUIET_MS = 30_000;
 const HEARTBEAT_POLL_MS = 1_000;
 const defaultEventClock: CoordinatorEngineEventClock = {
@@ -245,11 +259,26 @@ export async function executeCoordinatorEngine(
       captureRuntimeEvent(event, captures, log, eventClock)
     );
 
+    // Reviewbot's `subscription/…` names are not routable by the runtime, so they
+    // are resolved against its catalog before any session selects a model. Doing
+    // this once, up front, turns a misconfigured model into a single actionable
+    // failure instead of an unroutable model failing every session separately.
+    const catalog = await raceAbort(runtime.listModels(), overall.signal);
+    const resolvedModels = resolveReviewModels(configuredModelRefs(input), catalog);
+    const modelFor = (ref: ModelRef): ShuvcodeModel => {
+      const model = resolvedModels.get(ref);
+      if (model === undefined) throw new TypeError(`unresolved review model: ${ref}`);
+      return model;
+    };
+
     const coordinator = await raceAbort(
+      // No agent is selected: reviewbot supplies every instruction in its own
+      // prompts, and tool authorization comes from the server-enforced session
+      // policy. Naming an agent would require one to exist in the user's runtime
+      // profile, which fails the whole review with `Agent not found`.
       runtime.createSession({
         title: "reviewbot coordinator",
-        agent: "review",
-        model: parseModelRef(input.models.coordinator),
+        model: modelFor(input.models.coordinator),
         location: { directory: input.workspace.root }
       }),
       overall.signal
@@ -270,6 +299,7 @@ export async function executeCoordinatorEngine(
           reviewer,
           input,
           runtime: runtime!,
+          modelFor,
           captures,
           allCaptures,
           specialistSessionIds,
@@ -465,6 +495,7 @@ function createSpecialistTask(options: {
   reviewer: BuiltInReviewerId;
   input: ExecuteCoordinatorEngineInput;
   runtime: ShuvcodeRuntime;
+  modelFor: (ref: ModelRef) => ShuvcodeModel;
   captures: Map<string, SessionCapture>;
   allCaptures: SessionCapture[];
   specialistSessionIds: Map<BuiltInReviewerId, Map<number, string>>;
@@ -508,8 +539,7 @@ function createSpecialistTask(options: {
         appendLogEvent(options.log, capture, "session.started");
         options.progress.emit("running", capture, startedAtMs);
         await options.runtime.configureSession(session.id, {
-          agent: "review",
-          model: parseModelRef(specialistModel(options.input, options.reviewer))
+          model: options.modelFor(specialistModel(options.input, options.reviewer))
         });
         const prompt = buildSpecialistPrompt(options.reviewer, {
           manifestPath: options.scopedWorkspace.manifestPath,
@@ -1384,6 +1414,17 @@ function validateExecutionInputs(input: ExecuteCoordinatorEngineInput): void {
     ...(input.models.light === undefined ? [] : [input.models.light])
   ];
   for (const model of configuredModels) validateConfiguredModel(input.pluginConfig, model);
+}
+
+/** Every review model reference that a session in this run could select. */
+function configuredModelRefs(input: ExecuteCoordinatorEngineInput): readonly ModelRef[] {
+  const refs = [input.models.coordinator];
+  if (input.models.standard !== undefined) refs.push(input.models.standard);
+  if (input.models.light !== undefined) refs.push(input.models.light);
+  for (const { reviewer } of input.plan.assignment.reviewers) {
+    refs.push(specialistModel(input, reviewer));
+  }
+  return [...new Set(refs)];
 }
 
 function validateConfiguredModel(config: ResolvedReviewPluginConfig, model: ModelRef): void {
