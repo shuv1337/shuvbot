@@ -33203,7 +33203,7 @@ var DEFAULT_CONFIG = {
     prSummaries: true
   },
   review: {
-    engine: "legacy",
+    engine: "coordinator",
     maxConcurrency: 3,
     overallTimeout: "15m",
     incremental: true,
