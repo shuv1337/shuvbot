@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:cli": "bun build --compile --outfile bin/reviewbot packages/cli/src/index.ts",
     "release": "bun scripts/release.ts",
     "test": "bun test",
     "lint": "eslint .",

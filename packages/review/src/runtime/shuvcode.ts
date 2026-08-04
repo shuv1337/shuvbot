@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import {
   classifyReviewError,
@@ -640,9 +641,13 @@ function clientEntry(exports: unknown): string | undefined {
  * depend on the runtime failed before it started. The runtime still runs with
  * the reviewed repository as its working directory; only the package location
  * differs.
+ *
+ * A compiled executable has no real module path, so the executable's own
+ * directory is searched too, including through a symlink, which is how a binary
+ * linked onto `PATH` still finds the runtime installed beside its real location.
  */
 async function findInstalledPackageDirectory(packageName: string, cwd: string): Promise<string> {
-  const roots = [cwd, dirname(fileURLToPath(import.meta.url))];
+  const roots = [cwd, ...reviewbotSearchRoots()];
   for (const root of roots) {
     let directory = root;
     while (true) {
@@ -657,6 +662,32 @@ async function findInstalledPackageDirectory(packageName: string, cwd: string): 
     `Cannot resolve the installed ${packageName} package from ${cwd} or from reviewbot itself. ` +
       `Install the exact configured ${packageName} release in ${cwd}.`
   );
+}
+
+/** Places reviewbot itself may be installed, most specific first. */
+function reviewbotSearchRoots(): readonly string[] {
+  const roots: string[] = [];
+  try {
+    // Absent for a compiled executable, whose modules have no real path.
+    const module = fileURLToPath(import.meta.url);
+    if (isAbsolute(module)) roots.push(dirname(module));
+  } catch {
+    // Fall through to the executable's own location.
+  }
+  for (const executable of [process.execPath, realpathIfPossible(process.execPath)]) {
+    if (executable === undefined) continue;
+    const directory = dirname(executable);
+    if (!roots.includes(directory)) roots.push(directory);
+  }
+  return roots;
+}
+
+function realpathIfPossible(path: string): string | undefined {
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
 }
 
 async function isFile(file: string): Promise<boolean> {
