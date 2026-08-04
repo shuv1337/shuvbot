@@ -25,17 +25,21 @@ reads credential values. Auth readiness is local and structural only: doctor dis
 `verification: not_performed` and does not claim that a provider has accepted the credential. If an
 older packed client has no auth-status capability, doctor fails with an exact-release diagnostic and
 does not launch it.
-With a missing config or the legacy engine, coordinator checks are skipped warnings. A passing probe
-verifies prerequisites; it does not replace the pending real coordinator compatibility smoke or
-subscription dogfood acceptance.
+With the legacy engine selected, coordinator checks are skipped warnings. A passing probe verifies
+prerequisites; it does not replace a real review.
 
-Neither production local review engine currently runs. `review.engine = "legacy"` remains the config
-default but fails closed before Git because no safe legacy driver exists. Coordinator mode also fails
-before Git because the code-approved runtime pin is `null`; the parseable `1.18.4` value is only a
-source baseline, not a corrected packed coordinator release. Do not work around this with a version
-range, workspace-private import, or guessed version.
+`review.engine` defaults to `"coordinator"` and local coordinator review runs against the approved
+`shuvcode@2.0.0-alpha-9` pin. It needs a local shuvcode profile with an authenticated provider; the
+runtime resolves from the reviewed repository first and from reviewbot's own install second. A
+configured version that differs from the code-approved pin still fails before Git, and so does the
+`legacy` engine, which has no safe production driver. Do not work around a pin mismatch with a
+version range, workspace-private import, or guessed version.
 
-To exercise the wired local route after the corrected exact package is available, run:
+If a specialist or coordinator result is refused as `REVIEW_SCHEMA_INVALID`, the refused value is
+kept, redacted and truncated, in `.reviewbot/runs/<id>/reviewbot-rejected-results.json` together with
+the validation reason.
+
+To run a local review:
 
 ```bash
 bun run dogfood:review -- --base main --head HEAD

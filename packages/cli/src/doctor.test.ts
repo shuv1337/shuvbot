@@ -10,6 +10,10 @@ import {
   type CoordinatorDiagnosticRuntime
 } from "./doctor.ts";
 
+const legacyConfig = `[review]
+engine = "legacy"
+`;
+
 const coordinatorConfig = `[review]
 engine = "coordinator"
 
@@ -26,7 +30,7 @@ light = "subscription/default-fast"
 
 describe("doctor", () => {
   test("preserves legacy checks and clearly skips coordinator diagnostics", async () => {
-    const { checks, output } = await runFixture();
+    const { checks, output } = await runFixture({ legacy: true });
 
     expect(checks.map((check) => check.name)).toEqual([
       "config",
@@ -477,12 +481,14 @@ function authStatus(overrides: Partial<CoordinatorAuthStatus> = {}): Coordinator
 async function runFixture(
   options: {
     coordinator?: boolean;
+    legacy?: boolean;
     diagnostics?: CoordinatorDiagnosticOperations;
     env?: Record<string, string | undefined>;
   } = {}
 ) {
   const cwd = await mkdtemp(join(tmpdir(), "reviewbot-doctor-"));
   if (options.coordinator) await writeFile(join(cwd, "reviewbot.toml"), coordinatorConfig);
+  if (options.legacy) await writeFile(join(cwd, "reviewbot.toml"), legacyConfig);
   let output = "";
   const checks = await runDoctor({
     cwd,

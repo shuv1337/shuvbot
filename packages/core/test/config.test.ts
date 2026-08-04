@@ -122,7 +122,7 @@ model = "subscription/sonnet"
     expect(config.timeout).toBe("1h");
     expect(config.activityTimeout).toBe("5m");
     expect(config.memory.learnings).toBe(false);
-    expect(config.review.engine).toBe("legacy");
+    expect(config.review.engine).toBe("coordinator");
     expect(config.review.shuvcode.version).toBe("2.0.0-alpha-9");
     expect(SHUVCODE_SOURCE_BASELINE_VERSION).toBe("1.18.4");
     expect(APPROVED_SHUVCODE_RUNTIME_VERSION).toBe("2.0.0-alpha-9");

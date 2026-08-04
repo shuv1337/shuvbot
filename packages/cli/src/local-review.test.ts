@@ -44,15 +44,21 @@ afterEach(async () => {
 });
 
 describe("local review CLI", () => {
-  test("rejects the default legacy engine before git or runtime work", async () => {
+  test("routes the default engine to the coordinator before git or runtime work", async () => {
     const secret = "token-do-not-print";
     let dependencyCalls = 0;
     let output = "";
+
+    // The default engine is the coordinator, so the default path must reach a
+    // coordinator precondition rather than the legacy driver.
+    const config = normalizeConfig({ review: { shuvcode: { use_user_auth: false } } });
+    expect(config.review.engine).toBe("coordinator");
 
     const review = runLocalReview({
       cwd: `/missing/${secret}`,
       base: secret,
       head: "HEAD",
+      config,
       stdout: writer((value) => (output += value)),
       dependencies: forbiddenDependencies(() => {
         dependencyCalls += 1;
@@ -62,7 +68,7 @@ describe("local review CLI", () => {
     await expect(review).rejects.toMatchObject({
       name: "ConfigError",
       code: "CONFIG_ERROR",
-      message: expect.stringContaining("Select --engine coordinator")
+      message: expect.stringContaining("use_user_auth")
     });
     try {
       await review;
@@ -98,6 +104,7 @@ describe("local review CLI", () => {
       cwd,
       base: "main",
       head: "HEAD",
+      engine: "legacy",
       stdout: writer((value) => (output += value)),
       dependencies: { createLegacyAgent: () => createFakeReviewAgent([legacyFinding]) }
     });

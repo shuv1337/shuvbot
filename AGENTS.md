@@ -28,15 +28,17 @@ otherwise without checking `main.ts` directly.
   specialist/coordinator execution, quorum, incremental state, scheduling,
   observability, and the isolated shuvcode adapter. The local CLI routes to
   this coordinator path, but the GitHub Action does not.
-- Production local `legacy` review fails closed: it remains the config default
-  but has no safe local production driver. Coordinator execution no longer
-  fails closed on the pin - the code-approved shuvcode runtime pin is
-  `2.0.0-alpha-9` (`APPROVED_SHUVCODE_RUNTIME_VERSION` in
+- **Local review runs the coordinator by default.** The code-approved shuvcode
+  runtime pin is `2.0.0-alpha-9` (`APPROVED_SHUVCODE_RUNTIME_VERSION` in
   `packages/core/src/config.ts`), verified against the published release by
-  `bun run smoke:runtime`. It still requires `review.shuvcode.use_user_auth`
-  and a local shuvcode subscription profile, and a mismatched or null pin
-  still rejects before any Git work. None of this affects the live
-  Claude-backed GitHub Action review path.
+  `bun run smoke:runtime`. It needs `review.shuvcode.use_user_auth` and a local
+  shuvcode profile; a mismatched or null pin still rejects before any Git work.
+  `shuvcode` is a devDependency, and the runtime resolves from the reviewed
+  repository first and from reviewbot's own install second, so reviewing a
+  repository that does not depend on shuvcode works. `legacy` still fails
+  closed - it has no safe production driver and only tests inject fake agents.
+  None of this affects the live Claude-backed GitHub Action review path, which
+  calls `runReview` directly and never reads `review.engine`.
 - `dist/index.js` is the compiled GitHub Action output produced by
   `bun run build`. It is committed but only regenerated periodically via a
   dedicated `chore(build): regenerate dist/index.js`-style commit, not on
@@ -82,8 +84,8 @@ otherwise without checking `main.ts` directly.
 - Prefer GitHub-native state and artifacts for v1; avoid a mandatory backend.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
-- Keep `review.engine = "legacy"` as the default until the corrected shuvcode release is published, real local subscription dogfooding passes, and the default switch is explicitly approved.
-- Do not describe either local review engine as production-ready while legacy has no safe local driver and the coordinator path has not completed real subscription dogfood. Action coordinator routing and GitHub-native coordinator writes remain future work.
+- `review.engine` defaults to `"coordinator"` (approved 2026-08-04, after the release, the packed-runtime smoke, and a real subscription dogfood). `legacy` remains selectable but has no safe production driver and fails closed, so treat it as a historical path rather than a fallback.
+- The coordinator is the working local review path, but it is not finished: the GitHub Action still does not route to it, GitHub-native coordinator writes do not exist, and the documented dogfood matrix has not been recorded. Don't describe it as production-hardened.
 
 ## Repository automation
 

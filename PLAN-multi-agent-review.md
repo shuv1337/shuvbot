@@ -43,7 +43,8 @@ Updated 2026-08-03:
 - [x] M5 quorum, resilience, and observability: tier-aware quorum and degradation, stable error classification, bounded retries/interruption, safe runtime event and usage translation, complete repair/session accounting, run-record coverage, and durable redacted run/session/result artifacts are integrated and tested. This completes the local M5 exit criterion; GitHub artifact upload remains M8 work.
 - [x] M6 incremental lifecycle: validated atomic file state, deterministic reconciliation for unresolved, fixed, degraded, user-resolved, and materially worsened findings, paginated bot-thread/reply ingestion, and a tested two-run local lifecycle complete the M6 exit criterion. GitHub-native state writes remain gated on M8 rather than being treated as local M6 completion work.
 - [ ] M7 local dogfood UX: local engine selection, strict flags, live progress, stable JSON, no-change results, incremental state, durable artifacts, and coordinator-aware doctor diagnostics are implemented. The dogfood matrix and manual acceptance criteria have not run, so M7 remains incomplete.
-- [ ] M8-M9 remain pending: the Action does not route to the coordinator, GitHub-native coordinator writes are not integrated, and no default switch is approved.
+- [x] M9 default migration: `review.engine` defaults to `coordinator`, approved on 2026-08-04 after the release, the packed-runtime smoke, and real subscription reviews. `legacy` remains selectable and still fails closed.
+- [ ] M8 remains pending: the Action does not route to the coordinator and GitHub-native coordinator writes are not integrated.
 
 ## Current Repository Assessment
 
@@ -70,7 +71,7 @@ Updated 2026-08-03:
 - Two follow-ups are open from the full-tier run. The `security` and `performance` specialists completed their model calls but their results failed reviewbot's own strict validation and were recorded as `REVIEW_SCHEMA_INVALID`; the artifacts deliberately retain no invalid payload, so diagnosing this needs a debug affordance that captures a redacted sample of a rejected result. The runtime also publishes no model list in this environment (`model.list` is empty while models route normally), so `subscription/<provider>:<model>` is currently the only usable form for naming a specific model.
 - M7 stays unchecked until the documented repository/change matrix and the manual quality, latency, degradation, and incremental acceptance criteria are recorded.
 - `packages/action/src/main.ts` still uses the legacy fake-agent pipeline and does not select the coordinator. GitHub-native coordinator posting, state writes, artifact upload, non-interactive auth, and cancellation remain M8 work.
-- The default must remain `legacy` until M3, M4, M7, and M8 evidence is reviewed and the M9 switch is explicitly approved; this default is a migration setting, not a claim that production local legacy review works.
+- The default is now `coordinator`. `legacy` stays selectable for comparison but has no safe production driver, so it fails closed rather than acting as a fallback.
 
 ## Target Architecture
 

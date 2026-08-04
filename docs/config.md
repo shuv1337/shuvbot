@@ -6,18 +6,21 @@ explicit file is an error, while a missing default file falls back to built-in d
 
 ## Coordinator status
 
-`review.engine = "legacy"` remains the migration default, and production local legacy review fails
-closed before Git because no safe driver exists; only tests inject fake agents.
+`review.engine` defaults to `"coordinator"`. `shuvcode@2.0.0-alpha-9` is published, the code-approved
+pin points at it, its packed CLI and `shuvcode/client` contracts pass `bun run smoke:runtime`, and
+real local subscription reviews return validated coordinator results.
 
-Local coordinator review runs. `shuvcode@2.0.0-alpha-9` is published, the code-approved pin points at
-it, its packed CLI and `shuvcode/client` contracts pass `bun run smoke:runtime`, and a real local
-subscription review has returned a validated coordinator result. It requires
-`review.shuvcode.use_user_auth = true`, a working local shuvcode profile, and the pinned package
-installed in the repository being reviewed.
+Running a local review needs `review.shuvcode.use_user_auth = true` (the default) and a working local
+shuvcode profile with an authenticated provider. The pinned package is a reviewbot devDependency and
+is resolved from the reviewed repository first, then from reviewbot's own installation, so reviewing
+a repository that does not itself depend on shuvcode works.
 
-The coordinator is still not supported by the GitHub Action, the documented dogfood matrix and manual
-acceptance criteria have not been recorded, and the default engine switch has not been approved, so
-the coordinator is not yet a production replacement for the Action's review path.
+`legacy` is still selectable but fails closed before Git because it has no safe production driver;
+only tests inject fake agents. Treat it as a historical path rather than a fallback.
+
+The coordinator is still not supported by the GitHub Action, and the documented dogfood matrix and
+manual acceptance criteria have not been recorded, so it is not yet a production replacement for the
+Action's review path.
 
 For a local review, resolution order is:
 
@@ -100,7 +103,7 @@ push = "restricted"
 
 [review]
 # Migration default; production local legacy review currently fails closed without a safe driver.
-engine = "legacy" # legacy | coordinator
+engine = "coordinator" # coordinator | legacy
 max_concurrency = 3 # 1-6
 overall_timeout = "15m"
 incremental = true

@@ -16,7 +16,7 @@ describe("review command routing", () => {
     expect(received.config?.review.engine).toBe("coordinator");
   });
 
-  test("uses normalized legacy defaults when reviewbot.toml is absent", async () => {
+  test("uses normalized defaults when reviewbot.toml is absent", async () => {
     const cwd = await temporaryDirectory();
     let loads = 0;
 
@@ -27,7 +27,7 @@ describe("review command routing", () => {
       }
     });
 
-    expect(received.config?.review.engine).toBe("legacy");
+    expect(received.config?.review.engine).toBe("coordinator");
     expect(loads).toBe(0);
   });
 
