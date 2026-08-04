@@ -148,6 +148,26 @@ bun run evals
   defense-in-depth: the streaming `DefaultRedactor` is pattern-based (can miss
   a token split across stream chunks), so the driver also does an exact-value
   scrub against the resolved auth values - never remove that.
+- **Real coordinator reviews work, and four prompt-path faults were only ever
+  visible in a real run.** All four are fixed and covered by tests; keep them
+  in mind before changing the session or prompt path:
+  1. **`subscription/…` is a reviewbot-owned abstract namespace, not a runtime
+     provider.** Names must be resolved against the runtime catalog
+     (`packages/review/src/runtime/model-catalog.ts`) before a session selects a
+     model. `session.switchModel` accepts _any_ model without validation, so an
+     unresolved name only fails later as `provider.no-route`. This is the same
+     bug class as the Claude CLI model-slug note above.
+  2. **Strip `$schema` from generated JSON Schemas.** `z.toJSONSchema` emits a
+     dialect declaration and the runtime rejects it with
+     `structured_output.schema`, failing every structured prompt in ~1s before
+     any model is reached. `toRuntimeJsonSchema` in `engine.ts` removes it.
+  3. **Do not select a runtime agent.** Sessions used to set `agent: "review"`;
+     nothing creates that agent, so the runtime failed with `Agent not found`.
+     Reviewbot's instructions come from its own prompts and tool authorization
+     comes from the server-enforced session policy.
+  4. **Classify failures from the source event.** `sanitizeEvent` reduces an
+     error to a category and status, so classifying the sanitized event cannot
+     tell an unroutable model from an invalid structured response.
 - **Two packed shuvcode runtime constraints the fake runtime cannot show you.**
   Both were found only by running `bun run smoke:runtime` against the real
   published release, and both are now covered by tests

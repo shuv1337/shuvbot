@@ -6,19 +6,18 @@ explicit file is an error, while a missing default file falls back to built-in d
 
 ## Coordinator status
 
-Local coordinator routing is implemented, but neither engine is currently production-operational.
 `review.engine = "legacy"` remains the migration default, and production local legacy review fails
-closed before Git because no safe driver exists; only tests inject fake agents. Coordinator execution
-also fails before Git because `APPROVED_SHUVCODE_RUNTIME_VERSION` is `null`. It becomes runnable only
-after a corrected `shuvcode` release is published, its packed CLI and `shuvcode/client` contracts pass
-the compatibility smoke, and the code-owned exact pin is updated. Real subscription dogfood and
-manual acceptance still follow. The coordinator is not supported by the GitHub Action, and `1.18.4`
-is a source baseline rather than an executable approval.
+closed before Git because no safe driver exists; only tests inject fake agents.
 
-The shuvcode source has the required structured output, packed Promise client, server-enforced
-session policy, and public `auth.status()` work. Publication is still gated on a reviewed commit,
-trusted publisher/manual workflow dispatch, and registry verification; source capability does not
-make an npm release approved or executable by shuvbot.
+Local coordinator review runs. `shuvcode@2.0.0-alpha-9` is published, the code-approved pin points at
+it, its packed CLI and `shuvcode/client` contracts pass `bun run smoke:runtime`, and a real local
+subscription review has returned a validated coordinator result. It requires
+`review.shuvcode.use_user_auth = true`, a working local shuvcode profile, and the pinned package
+installed in the repository being reviewed.
+
+The coordinator is still not supported by the GitHub Action, the documented dogfood matrix and manual
+acceptance criteria have not been recorded, and the default engine switch has not been approved, so
+the coordinator is not yet a production replacement for the Action's review path.
 
 For a local review, resolution order is:
 
@@ -110,8 +109,8 @@ sensitive_paths = []
 
 [review.shuvcode]
 package = "shuvcode"
-# Parseable source baseline; the code-approved executable pin is currently null.
-version = "1.18.4"
+# Must equal the code-approved executable pin.
+version = "2.0.0-alpha-9"
 use_user_auth = true
 
 [review.models]
@@ -198,12 +197,13 @@ the plan as excluded metadata but are not sent to reviewers. Reviewer-specific `
 
 ## Runtime, auth, and models
 
-Coordinator mode requires the exact `shuvcode` package and version approved by shuvbot. The config
-schema currently accepts `shuvcode@1.18.4` as its source-baseline value, while
-`APPROVED_SHUVCODE_RUNTIME_VERSION` is `null`; local coordinator execution therefore rejects before
-Git regardless of whether `1.18.4` is installed. After the corrected package is published and
-packed-smoked, the code-owned pin and documented value must move together. Do not substitute a range,
-local workspace build, private package export, or guessed future version.
+Coordinator mode requires the exact `shuvcode` package and version approved by shuvbot. The approved
+pin is `shuvcode@2.0.0-alpha-9` (`APPROVED_SHUVCODE_RUNTIME_VERSION`), and `review.shuvcode.version`
+must match it. Local coordinator execution rejects before Git when the configured version differs or
+no pin is approved. The package must be installed in the repository being reviewed, because the
+runtime is resolved from that directory. The code-owned pin and this documented value move together;
+verify a new pin with `bun run smoke:runtime` first. Do not substitute a range, local workspace
+build, private package export, or guessed future version.
 
 With `use_user_auth = true`, the isolated shuvcode process reuses the provider authentication already available through the user's shuvcode profile and XDG profile paths. Shuvbot passes profile locations needed by the child process but does not read, copy, log, inject, or expose subscription credential values to review sessions. This local subscription path is distinct from future non-interactive GitHub Actions authentication.
 
@@ -219,7 +219,22 @@ With `use_user_auth = false`, local coordinator review fails before git inspecti
 creation, state access, or runtime startup. Non-interactive coordinator authentication is not yet
 implemented.
 
-Model values are `provider/model` references from the allowed shuvcode catalog. The current config accepts only `subscription/<model>` references. `coordinator` selects the judge model; `standard` is the normal specialist tier; `light` is the fast specialist tier. Built-in reviewer overrides may select another known subscription model, but repository config cannot register providers or credentials.
+Model values use reviewbot's own `subscription/<name>` namespace so repository config never names
+provider credentials. `coordinator` selects the judge model; `standard` is the normal specialist
+tier; `light` is the fast specialist tier. A reviewer override may only reuse a model the
+configuration already selects for one of those roles, so repository config cannot register providers
+or credentials.
+
+Each name is resolved against the runtime's own model catalog before any session selects a model, and
+an unresolvable name fails the review once with a `REVIEW_CONFIG_INVALID` error naming the model:
+
+- `subscription/default-reasoning`, `subscription/default-coding`, and `subscription/default-fast`
+  resolve to whatever model the runtime reports as its default.
+- `subscription/<model>` resolves to a catalog model with that id, choosing deterministically when
+  several providers offer it.
+- `subscription/<provider>:<model>` names the provider explicitly, for example
+  `subscription/anthropic:claude-sonnet-4-5`. Some runtimes route models without publishing a model
+  list; this is the only form that resolves in that case.
 
 ## Coverage, state, and output
 
