@@ -24,8 +24,9 @@ interface ReviewCommandOptions {
 }
 
 interface ParsedReviewOptions {
-  base: string;
-  head: string;
+  /** Left unset when not supplied, so the detected VCS decides the default. */
+  base?: string;
+  head?: string;
   configPath?: string;
   engine?: "legacy" | "coordinator";
   json: boolean;
@@ -130,8 +131,8 @@ export async function runReviewCommand(
   }
   return dependencies.review({
     cwd: options.cwd,
-    base: parsed.base,
-    head: parsed.head,
+    ...(parsed.base === undefined ? {} : { base: parsed.base }),
+    ...(parsed.head === undefined ? {} : { head: parsed.head }),
     config,
     ...(parsed.engine === undefined ? {} : { engine: parsed.engine }),
     json: parsed.json,
@@ -140,7 +141,7 @@ export async function runReviewCommand(
 }
 
 export function parseReviewOptions(values: string[]): ParsedReviewOptions {
-  const parsed: ParsedReviewOptions = { base: "main", head: "HEAD", json: false };
+  const parsed: ParsedReviewOptions = { json: false };
   const seen = new Set<string>();
   for (let index = 0; index < values.length; index += 1) {
     const option = values[index];

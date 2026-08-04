@@ -643,7 +643,7 @@ describe("local review CLI", () => {
         config: coordinatorConfig(),
         dependencies
       })
-    ).rejects.toThrow("Invalid git ref");
+    ).rejects.toThrow("Invalid git revision");
     await expect(
       runLocalReview({
         cwd,
@@ -962,6 +962,56 @@ describe("local review CLI", () => {
 
     await expect(run(1_001)).rejects.toThrow("Changed file count exceeds");
     await expect(run(751)).rejects.toThrow("process limit");
+  });
+
+  test("reviews the Jujutsu working-copy commit through resolved git commits", async () => {
+    const cwd = await createRepository(1);
+    const jjCalls: string[][] = [];
+    const revisions = new Map([
+      ["fork_point(trunk() | @)", "1".repeat(40)],
+      ["@", "2".repeat(40)]
+    ]);
+    const gitRanges: string[] = [];
+    const dependencies = fakeDependencies(async () => completedExecution(["code-quality"]));
+    dependencies.detectVcs = async () => "jj";
+    dependencies.jj = async (args) => {
+      jjCalls.push([...args]);
+      if (args[0] === "util") return "";
+      const revision = args[args.indexOf("-r") + 1] ?? "";
+      return `${revisions.get(revision) ?? "3".repeat(40)}\n`;
+    };
+    dependencies.git = async (args, repository, limit, signal) => {
+      const range = args.find((arg) => arg.includes("..."));
+      if (range !== undefined) gitRanges.push(range);
+      // Report the reviewed range as one changed file so preprocessing proceeds.
+      if (args.includes("--name-status")) return "M\u0000a.txt\u0000";
+      if (args.includes("--numstat")) return "1\t0\ta.txt\u0000";
+      if (args.includes("--binary")) return "diff --git a/a.txt b/a.txt\n+change\n";
+      return runLocalGit(args, repository, limit, signal);
+    };
+
+    await runLocalReview({ cwd, config: coordinatorConfig(), dependencies });
+
+    // The working copy is recorded before any revision is read, so the review
+    // sees the files on disk rather than the last snapshot.
+    expect(jjCalls[0]).toEqual(["util", "snapshot"]);
+    expect(jjCalls.some((call) => call.includes("commit_id"))).toBe(true);
+    // Jujutsu revsets are never handed to git; only resolved commits are.
+    expect(gitRanges[0]).toBe(`${"1".repeat(40)}...${"2".repeat(40)}`);
+    expect(gitRanges.every((range) => !range.includes("@"))).toBe(true);
+  });
+
+  test("reports an actionable error when jj is a workspace but not installed", async () => {
+    const cwd = await createRepository(1);
+    const dependencies = fakeDependencies(async () => completedExecution(["code-quality"]));
+    dependencies.detectVcs = async () => "jj";
+    dependencies.jj = async () => {
+      throw Object.assign(new Error("spawn jj ENOENT"), { code: "ENOENT" });
+    };
+
+    await expect(
+      runLocalReview({ cwd, base: "@-", head: "@", config: coordinatorConfig(), dependencies })
+    ).rejects.toThrow(/Jujutsu workspace but the jj executable was not found/);
   });
 
   test("passes remaining budget and all configured model refs to the engine", async () => {

@@ -43,6 +43,14 @@ import {
   type StartShuvcodeRuntimeOptions
 } from "../../review/src/runtime/shuvcode.ts";
 import { FileReviewStateStore, type ReviewStateStore } from "../../review/src/state.ts";
+import {
+  defaultRevisions,
+  detectLocalVcs,
+  resolveJjCommit,
+  snapshotJjWorkingCopy,
+  type LocalCommandRunner,
+  type LocalVcs
+} from "./vcs.ts";
 import type { ChangedFileStatus } from "../../review/src/types.ts";
 import { createReviewWorkspace } from "../../review/src/workspace.ts";
 
@@ -64,6 +72,8 @@ export interface LocalReviewDependencies {
     maxOutputBytes?: number,
     signal?: AbortSignal
   ): Promise<string>;
+  jj: LocalCommandRunner;
+  detectVcs(cwd: string): Promise<LocalVcs>;
   createLegacyAgent(): ReviewAgent;
   executeCoordinator: typeof executeCoordinatorEngine;
   startRuntime(options: StartShuvcodeRuntimeOptions): Promise<ShuvcodeRuntime>;
@@ -82,8 +92,10 @@ export interface LocalReviewFileSystem {
 
 export interface LocalReviewOptions {
   cwd: string;
-  base: string;
-  head: string;
+  /** Defaults per detected VCS: `main` for Git, the trunk fork point for Jujutsu. */
+  base?: string;
+  /** Defaults per detected VCS: `HEAD` for Git, the working-copy commit `@` for Jujutsu. */
+  head?: string;
   config?: ReviewbotConfig;
   engine?: LocalReviewEngine;
   json?: boolean;
@@ -139,7 +151,14 @@ async function runLegacyLocalReview(
 ): Promise<RunReviewResult> {
   const dependencies = resolveDependencies(options.dependencies);
   const agent = dependencies.createLegacyAgent();
-  const range = safeRange(options.base, options.head);
+  const vcs = await dependencies.detectVcs(options.cwd);
+  const revisions = await resolveRevisions(options, vcs, dependencies);
+  // Resolve to commit SHAs first: a Jujutsu revset is not a Git ref, so the Git
+  // range below can only be built from resolved commits.
+  const range = safeRange(
+    await resolveCommit(revisions.base, options.cwd, vcs, dependencies),
+    await resolveCommit(revisions.head, options.cwd, vcs, dependencies)
+  );
   const diff = await dependencies.git(["diff", "--no-ext-diff", range], options.cwd);
   const filesOutput = await dependencies.git(
     ["diff", "--name-only", "--no-ext-diff", range],
@@ -184,8 +203,20 @@ async function runCoordinatorLocalReview(
   let headSha = "";
   let workspace: Awaited<ReturnType<typeof createReviewWorkspace>> | undefined;
   try {
-    baseSha = await resolveCommit(options.base, options.cwd, dependencies.git, deadline.signal);
-    headSha = await resolveCommit(options.head, options.cwd, dependencies.git, deadline.signal);
+    const vcs = await dependencies.detectVcs(options.cwd);
+    // Record the working copy first, so `@` reflects the files on disk rather
+    // than whatever the last Jujutsu command happened to snapshot.
+    if (vcs === "jj") {
+      try {
+        await snapshotJjWorkingCopy(options.cwd, dependencies.jj, deadline.signal);
+      } catch (cause) {
+        if (deadline.signal.aborted) throw cause;
+        throw missingJjError(cause) as Error;
+      }
+    }
+    const revisions = await resolveRevisions(options, vcs, dependencies, deadline.signal);
+    baseSha = await resolveCommit(revisions.base, options.cwd, vcs, dependencies, deadline.signal);
+    headSha = await resolveCommit(revisions.head, options.cwd, vcs, dependencies, deadline.signal);
     const range = `${baseSha}...${headSha}`;
     const files = await collectChangedFiles(
       range,
@@ -744,6 +775,8 @@ function resolveDependencies(
 ): LocalReviewDependencies {
   return {
     git: runLocalGit,
+    jj: runLocalJj,
+    detectVcs: detectLocalVcs,
     createLegacyAgent: unsupportedLegacyAgent,
     executeCoordinator: executeCoordinatorEngine,
     startRuntime: startShuvcodeRuntime,
@@ -807,22 +840,93 @@ export async function runLocalGit(
   }
 }
 
+/** Rethrows a missing `jj` executable as guidance rather than a spawn failure. */
+function missingJjError(cause: unknown): unknown {
+  if (!isMissingExecutableError(cause)) return cause;
+  return new ConfigError(
+    "This is a Jujutsu workspace but the jj executable was not found. Install jj, or review a specific Git commit range with --base and --head.",
+    { cause }
+  );
+}
+
+function isMissingExecutableError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "ENOENT" || error.code === "EACCES")
+  );
+}
+
+/** Applies the caller's revisions, falling back to the detected VCS defaults. */
+async function resolveRevisions(
+  options: LocalReviewOptions,
+  vcs: LocalVcs,
+  dependencies: LocalReviewDependencies,
+  signal?: AbortSignal
+): Promise<{ base: string; head: string }> {
+  if (options.base !== undefined && options.head !== undefined) {
+    return { base: options.base, head: options.head };
+  }
+  const defaults = await defaultRevisions(vcs, options.cwd, dependencies.jj, signal);
+  return { base: options.base ?? defaults.base, head: options.head ?? defaults.head };
+}
+
+export async function runLocalJj(
+  args: readonly string[],
+  cwd: string,
+  maxOutputBytes = MAX_GIT_OUTPUT_BYTES,
+  signal?: AbortSignal
+): Promise<string> {
+  try {
+    return (
+      await execFileAsync("jj", [...args], {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: maxOutputBytes,
+        signal
+      })
+    ).stdout;
+  } catch (cause) {
+    if (isMaxBufferError(cause)) throw diffLimitError(maxOutputBytes, cause);
+    throw cause;
+  }
+}
+
+/**
+ * Resolves a review revision to a commit SHA.
+ *
+ * Jujutsu revisions are resolved by Jujutsu, which writes a real Git commit for
+ * every revision including the working-copy commit. Everything downstream then
+ * reads those commits with the normal Git machinery.
+ */
 async function resolveCommit(
   ref: string,
   cwd: string,
-  git: LocalReviewDependencies["git"],
+  vcs: LocalVcs,
+  dependencies: LocalReviewDependencies,
   signal?: AbortSignal
 ): Promise<string> {
-  validateRef(ref);
+  validateRevision(ref, vcs);
   let output: string;
   try {
-    output = await git(["rev-parse", "--verify", `${ref}^{commit}`], cwd, undefined, signal);
+    output =
+      vcs === "jj"
+        ? await resolveJjCommit(ref, cwd, dependencies.jj, signal)
+        : await dependencies.git(
+            ["rev-parse", "--verify", `${ref}^{commit}`],
+            cwd,
+            undefined,
+            signal
+          );
   } catch (cause) {
     if (signal?.aborted) throw cause;
-    throw new ConfigError(`Invalid git ref: ${ref}`, { cause });
+    if (vcs === "jj" && isMissingExecutableError(cause)) throw missingJjError(cause);
+    throw new ConfigError(`Invalid ${vcs} revision: ${ref}`, { cause });
   }
   const sha = output.trim();
-  if (!/^[0-9a-f]{40,64}$/i.test(sha)) throw new ConfigError(`Invalid commit SHA for ref: ${ref}`);
+  if (!/^[0-9a-f]{40,64}$/i.test(sha)) {
+    throw new ConfigError(`Invalid commit SHA for revision: ${ref}`);
+  }
   return sha;
 }
 
@@ -931,15 +1035,27 @@ function isAlreadyExists(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }
 
-function validateRef(ref: string): void {
-  if (ref.trim().length === 0 || ref.startsWith("-") || ref.includes("\0") || /\s/.test(ref)) {
-    throw new ConfigError(`Invalid git ref: ${JSON.stringify(ref)}`);
-  }
+/**
+ * Rejects an unusable revision before it reaches the VCS.
+ *
+ * Jujutsu revsets are expressions rather than names, so they may contain spaces
+ * and punctuation, as in `fork_point(trunk() | @)`. Revisions are always passed
+ * as argument-vector entries and never through a shell, so the check only has to
+ * reject empty input, embedded NUL, and a leading dash that would be read as a
+ * flag.
+ */
+function validateRevision(revision: string, vcs: LocalVcs = "git"): void {
+  const invalid =
+    revision.trim().length === 0 ||
+    revision.startsWith("-") ||
+    revision.includes("\0") ||
+    (vcs === "git" && /\s/.test(revision));
+  if (invalid) throw new ConfigError(`Invalid ${vcs} revision: ${JSON.stringify(revision)}`);
 }
 
 function safeRange(base: string, head: string): string {
-  validateRef(base);
-  validateRef(head);
+  validateRevision(base);
+  validateRevision(head);
   return `${base}...${head}`;
 }
 
