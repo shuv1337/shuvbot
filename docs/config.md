@@ -234,17 +234,28 @@ unresolvable name fails the review once with a `REVIEW_CONFIG_INVALID` error tha
 names. The catalog is maintained by hand because the runtime does not reliably publish a model list.
 
 - `subscription/default-reasoning`, `subscription/default-coding`, and `subscription/default-fast`
-  are role aliases, so the model behind a role changes in one place.
-- `subscription/<model>` selects a curated model by name.
+  are role aliases, so the model and effort behind a role change in one place.
+- `subscription/<model>` selects a curated model at its default effort.
+- `subscription/<model>@<effort>` also selects the reasoning effort, for example
+  `subscription/grok-4.5@high`. An effort given here overrides the one an alias carries.
 - `subscription/<provider>:<model>` bypasses the catalog and names the provider explicitly, for
-  example `subscription/anthropic:claude-sonnet-4-5`. This exists so a new model can be tried before
-  it is curated. It selects any provider the local profile has authenticated, so treat it as a local
-  development affordance rather than something to accept from an untrusted repository; curate the
-  model instead once it is in regular use.
+  example `subscription/anthropic:claude-sonnet-4-5@high`. This exists so a new model or effort can
+  be tried before it is curated, and its effort cannot be checked in advance. It selects any provider
+  the local profile has authenticated, so treat it as a local development affordance rather than
+  something to accept from an untrusted repository; curate the model once it is in regular use.
 
-Current curated models: `gpt-5.6-luna` and `gpt-5.6-sol` (OpenAI), `claude-opus-5` and
-`claude-fable-5` (Anthropic), and `grok-4.5` (xAI). Roles default to `claude-opus-5` for the
-coordinator, `gpt-5.6-sol` for standard specialists, and `gpt-5.6-luna` for the light tier.
+| Curated model    | Provider  | Accepted efforts                    |
+| ---------------- | --------- | ----------------------------------- |
+| `gpt-5.6-luna`   | OpenAI    | none, low, medium, high, xhigh, max |
+| `gpt-5.6-sol`    | OpenAI    | none, low, medium, high, xhigh, max |
+| `claude-opus-5`  | Anthropic | low, medium, high, xhigh, max       |
+| `claude-fable-5` | Anthropic | low, medium, high, xhigh, max       |
+| `grok-4.5`       | xAI       | low, medium, high                   |
+
+Roles default to `claude-opus-5@medium` for the coordinator, `grok-4.5@high` for standard
+specialists, and `gpt-5.6-luna@max` for the light tier. The runtime accepts an effort it does not
+support and only rejects it when the session is prompted, so the accepted efforts are curated
+alongside each model and an unsupported effort fails before the review starts.
 
 ## Diagnosing a refused result
 

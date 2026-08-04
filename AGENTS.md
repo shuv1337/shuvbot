@@ -154,11 +154,14 @@ bun run evals
   visible in a real run.** All four are fixed and covered by tests; keep them
   in mind before changing the session or prompt path:
   1. **`subscription/…` is a reviewbot-owned abstract namespace, not a runtime
-     provider.** Names must be resolved against the runtime catalog
-     (`packages/review/src/runtime/model-catalog.ts`) before a session selects a
-     model. `session.switchModel` accepts _any_ model without validation, so an
-     unresolved name only fails later as `provider.no-route`. This is the same
-     bug class as the Claude CLI model-slug note above.
+     provider.** Names resolve through the curated catalog in
+     `packages/review/src/runtime/model-catalog.ts` before a session selects a
+     model; that file is also where models, role defaults, and each model's
+     accepted reasoning efforts are maintained. `session.switchModel` accepts
+     _any_ model **and any variant** without validation, so an unresolved name
+     only fails later as `provider.no-route`, and an unsupported effort only
+     fails as `Variant unavailable`. Both are curated so they fail before the
+     review starts. Same bug class as the Claude CLI model-slug note above.
   2. **Strip `$schema` from generated JSON Schemas.** `z.toJSONSchema` emits a
      dialect declaration and the runtime rejects it with
      `structured_output.schema`, failing every structured prompt in ~1s before

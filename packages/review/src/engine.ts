@@ -1537,8 +1537,12 @@ function configuredModelRefs(input: ExecuteCoordinatorEngineInput): readonly Mod
 
 function validateConfiguredModel(config: ResolvedReviewPluginConfig, model: ModelRef): void {
   const parsed = parseModelRef(model);
-  const provider = config.providers.find(({ id }) => id === parsed.providerID);
-  if (provider === undefined || !provider.models.includes(parsed.id)) {
+  // A trailing `@<effort>` selects a reasoning effort rather than a different
+  // model, so the catalog is matched on the model alone.
+  const separator = parsed.id.indexOf("@");
+  const id = separator === -1 ? parsed.id : parsed.id.slice(0, separator);
+  const provider = config.providers.find(({ id: providerID }) => providerID === parsed.providerID);
+  if (provider === undefined || !provider.models.includes(id)) {
     throw new TypeError(`review model is not in the configured provider catalog: ${model}`);
   }
 }

@@ -32,25 +32,69 @@ describe("runtime structured output schema", () => {
 });
 
 describe("review model resolution", () => {
-  test("resolves every role alias to a curated model", () => {
+  test("every role alias resolves to a curated model and an accepted effort", () => {
     for (const [alias, target] of Object.entries(REVIEW_MODEL_ALIASES)) {
-      expect(CURATED_REVIEW_MODELS[target]).toBeDefined();
-      expect(resolveReviewModel(`subscription/${alias}` as ModelRef)).toEqual(
-        CURATED_REVIEW_MODELS[target]!
-      );
+      const [name, effort] = target.split("@");
+      const curated = CURATED_REVIEW_MODELS[name!];
+      expect(curated).toBeDefined();
+      if (effort !== undefined) expect(curated!.efforts).toContain(effort);
+      expect(resolveReviewModel(`subscription/${alias}` as ModelRef)).toEqual({
+        providerID: curated!.providerID,
+        id: curated!.id,
+        ...(effort === undefined ? {} : { variant: effort })
+      });
     }
   });
 
-  test("resolves every curated model by name", () => {
+  test("resolves every curated model by name without an effort", () => {
     for (const [name, model] of Object.entries(CURATED_REVIEW_MODELS)) {
-      expect(resolveReviewModel(`subscription/${name}` as ModelRef)).toEqual(model);
+      expect(resolveReviewModel(`subscription/${name}` as ModelRef)).toEqual({
+        providerID: model.providerID,
+        id: model.id
+      });
     }
   });
 
-  test("curated models name a provider and a model id", () => {
+  test("resolves each curated model at each of its accepted efforts", () => {
+    for (const [name, model] of Object.entries(CURATED_REVIEW_MODELS)) {
+      for (const effort of model.efforts) {
+        expect(resolveReviewModel(`subscription/${name}@${effort}` as ModelRef)).toEqual({
+          providerID: model.providerID,
+          id: model.id,
+          variant: effort
+        });
+      }
+    }
+  });
+
+  test("rejects an effort the model does not accept", () => {
+    expect(() => resolveReviewModel("subscription/grok-4.5@xhigh" as ModelRef)).toThrow(
+      /Unknown reasoning effort xhigh for grok-4\.5/
+    );
+    expect(() => resolveReviewModel("subscription/grok-4.5@xhigh" as ModelRef)).toThrow(
+      /low, medium, high/
+    );
+  });
+
+  test("an explicit effort overrides the one a role alias carries", () => {
+    expect(resolveReviewModel("subscription/default-fast@low" as ModelRef)).toEqual({
+      providerID: "openai",
+      id: "gpt-5.6-luna",
+      variant: "low"
+    });
+  });
+
+  test("rejects an incomplete effort suffix", () => {
+    expect(() => resolveReviewModel("subscription/grok-4.5@" as ModelRef)).toThrow(
+      /both a model and an effort/
+    );
+  });
+
+  test("curated models name a provider, a model id, and at least one effort", () => {
     for (const model of Object.values(CURATED_REVIEW_MODELS)) {
       expect(model.providerID.length).toBeGreaterThan(0);
       expect(model.id.length).toBeGreaterThan(0);
+      expect(model.efforts.length).toBeGreaterThan(0);
     }
   });
 
@@ -59,6 +103,16 @@ describe("review model resolution", () => {
       providerID: "anthropic",
       id: "claude-sonnet-4-5"
     });
+  });
+
+  test("carries an effort through the uncurated escape hatch", () => {
+    expect(resolveReviewModel("subscription/anthropic:claude-sonnet-4-5@high" as ModelRef)).toEqual(
+      {
+        providerID: "anthropic",
+        id: "claude-sonnet-4-5",
+        variant: "high"
+      }
+    );
   });
 
   test("rejects an incomplete provider-qualified name", () => {

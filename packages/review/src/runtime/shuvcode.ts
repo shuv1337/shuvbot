@@ -99,10 +99,11 @@ export interface ShuvcodeClient {
   readonly event: { subscribe(options?: RequestOptions): AsyncIterable<ShuvcodeEvent> };
 }
 
-/** A concrete model the runtime can route, discovered from its public catalog. */
+/** A concrete model the runtime can route, with an optional reasoning effort. */
 export interface ShuvcodeModel {
   readonly providerID: string;
   readonly id: string;
+  readonly variant?: string;
 }
 
 export interface ShuvcodeClientModule {
@@ -896,7 +897,7 @@ function classifyFailure(event: ShuvcodeEvent): ReviewErrorCategory {
   const transient = status !== undefined && (status === 408 || status >= 500);
   if (
     !transient &&
-    /no.?route|model unavailable|unknown model|model not found|no such model|provider not found/.test(
+    /no.?route|model unavailable|unknown model|model not found|no such model|provider not found|variant unavailable/.test(
       signature
     )
   ) {

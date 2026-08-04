@@ -57,7 +57,11 @@ describe("local coordinator engine", () => {
     expect(
       [...runtime.configured.values()].every(({ model }) => model?.providerID === "acme")
     ).toBe(true);
-    expect(runtime.parents.at(0)?.model).toEqual({ providerID: "acme", id: "reasoning" });
+    expect(runtime.parents.at(0)?.model).toEqual({
+      providerID: "acme",
+      id: "reasoning",
+      variant: "high"
+    });
   });
 
   test("creates policy-scoped specialist sessions instead of forking the unprompted coordinator", async () => {
@@ -102,7 +106,7 @@ describe("local coordinator engine", () => {
     const trivialRuntime = new FakeRuntime();
     const trivial = await runEngine("trivial", trivialRuntime, {
       models: {
-        coordinator: "subscription/acme:reasoning",
+        coordinator: "subscription/acme:reasoning@high",
         standard: "subscription/acme:standard",
         light: "subscription/acme:light"
       },
@@ -119,7 +123,7 @@ describe("local coordinator engine", () => {
     const explicitRuntime = new FakeRuntime();
     await runEngine("trivial", explicitRuntime, {
       models: {
-        coordinator: "subscription/acme:reasoning",
+        coordinator: "subscription/acme:reasoning@high",
         standard: "subscription/acme:standard",
         light: "subscription/acme:light"
       },
@@ -132,7 +136,7 @@ describe("local coordinator engine", () => {
     const fullRuntime = new FakeRuntime();
     const full = await runEngine("full", fullRuntime, {
       models: {
-        coordinator: "subscription/acme:reasoning",
+        coordinator: "subscription/acme:reasoning@high",
         standard: "subscription/acme:standard",
         light: "subscription/acme:light"
       },
@@ -914,7 +918,7 @@ async function runEngine(
     plan,
     workspace,
     pluginConfig: overrides.pluginConfig ?? pluginConfig,
-    models: overrides.models ?? { coordinator: "subscription/acme:reasoning" },
+    models: overrides.models ?? { coordinator: "subscription/acme:reasoning@high" },
     runtimeFactory: async () => {
       if (overrides.runtimeFactoryDelayMs !== undefined) {
         await sleep(overrides.runtimeFactoryDelayMs);
