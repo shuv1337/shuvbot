@@ -19,7 +19,7 @@ import { resolveMode } from "../../core/src/modes.ts";
 import { buildRuntimePolicy } from "../../core/src/policy.ts";
 import { deriveActorContext, type ActorContext } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
-import { ConfigError } from "../../core/src/errors.ts";
+import { ConfigError, UnsupportedRequestError } from "../../core/src/errors.ts";
 import { MODES, type AgentId, type ShuvbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
 import { runReview } from "../../core/src/review-runner.ts";
@@ -350,13 +350,25 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       return;
     }
 
+    // Nothing above matched. Distinguish a human asking for work and getting
+    // none (a failure they must be told about) from an ambient event that
+    // simply does not apply to this mode (a quiet, explained skip).
+    const reason = explainUnhandledRun({ mode, event, hasClient: Boolean(client) });
+    if (command) {
+      throw new UnsupportedRequestError(
+        `shuvbot could not run "@shuvbot ${command.command}": ${reason}`
+      );
+    }
+    logger.log("info", "run.skipped", { mode, event: eventName, reason });
+    core.warning(`shuvbot took no action: ${reason}`);
     core.setOutput(
       "result",
       JSON.stringify({
         runId: withPolicy.runId,
-        status: "initialized",
+        status: "skipped",
         mode,
-        trigger: withPolicy.trigger
+        trigger: withPolicy.trigger,
+        reason
       })
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
@@ -381,6 +393,34 @@ function createReviewDriver(agentId: AgentId): AgentDriver {
     );
   }
   return createClaudeCodeDriver();
+}
+
+/**
+ * Explain why no handler matched, in terms the person reading the workflow log
+ * can act on. This mirrors the branch conditions in `main()`; keep them in step.
+ */
+function explainUnhandledRun(input: {
+  mode: ShuvbotMode;
+  event: BotEvent | null;
+  hasClient: boolean;
+}): string {
+  const { mode, event, hasClient } = input;
+  if (!event) return "no supported GitHub event payload was available for this run.";
+  if (!hasClient) return "no GitHub token was supplied; set the action's `token` input.";
+
+  switch (mode) {
+    case "review":
+      return (
+        `review currently runs only on \`pull_request\` events, but this run saw \`${event.kind}\`. ` +
+        "Comment-triggered review is not wired up yet."
+      );
+    case "implement":
+      return `implement requires an \`@shuvbot implement …\` mention; this run saw \`${event.kind}\` without one.`;
+    case "fix-ci":
+      return `fix-ci runs only on \`workflow_run\` events, but this run saw \`${event.kind}\`.`;
+    default:
+      return `mode \`${mode}\` is not wired to a handler in this version; see docs/workflows.md.`;
+  }
 }
 
 function isExplicitMode(value: string | undefined): value is ShuvbotMode {

@@ -269,3 +269,104 @@ describe("main() end to end (review mode)", () => {
     expect(postedReview).toBeUndefined();
   });
 });
+
+describe("main() unhandled requests", () => {
+  let cwd: string;
+  let previousEnv: Record<string, string | undefined>;
+  let eventPath: string;
+
+  beforeEach(async () => {
+    cwd = await mkdtemp(join(tmpdir(), "shuvbot-unhandled-"));
+    const outputPath = join(cwd, "output.txt");
+    eventPath = join(cwd, "event.json");
+    await writeFile(SUMMARY_PATH, "");
+    await writeFile(outputPath, "");
+
+    previousEnv = {
+      GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
+      GITHUB_EVENT_PATH: process.env.GITHUB_EVENT_PATH,
+      GITHUB_ACTOR: process.env.GITHUB_ACTOR,
+      GITHUB_STEP_SUMMARY: process.env.GITHUB_STEP_SUMMARY,
+      GITHUB_OUTPUT: process.env.GITHUB_OUTPUT,
+      RUNNER_TEMP: process.env.RUNNER_TEMP,
+      INPUT_TOKEN: process.env.INPUT_TOKEN,
+      INPUT_CWD: process.env.INPUT_CWD
+    };
+
+    process.env.GITHUB_EVENT_NAME = "issue_comment";
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_ACTOR = "alice";
+    process.env.GITHUB_STEP_SUMMARY = SUMMARY_PATH;
+    process.env.GITHUB_OUTPUT = outputPath;
+    process.env.RUNNER_TEMP = cwd;
+    process.env.INPUT_TOKEN = "test-token";
+    process.env.INPUT_CWD = cwd;
+  });
+
+  afterEach(async () => {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  async function writeCommentEvent(body: string): Promise<void> {
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        action: "created",
+        repository: {
+          owner: { login: "octo" },
+          name: "repo",
+          full_name: "octo/repo",
+          private: false
+        },
+        sender: { login: "alice" },
+        issue: {
+          number: 1,
+          title: "Add feature",
+          body: "",
+          state: "open",
+          user: { login: "alice" },
+          pull_request: { url: "https://api.github.com/repos/octo/repo/pulls/1" }
+        },
+        comment: { id: 10, body, user: { login: "alice" } }
+      })
+    );
+  }
+
+  test("fails loudly when an explicit @shuvbot review mention cannot be handled", async () => {
+    await writeCommentEvent("@shuvbot review");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      }
+    });
+
+    // The request is understood (mode resolves to review) but no handler
+    // accepts a comment event yet. That must surface, not exit green.
+    await expect(main({ fetchImpl: server.fetchImpl })).rejects.toThrow(/could not run/);
+
+    const summary = await readFile(SUMMARY_PATH, "utf8");
+    expect(summary).toContain("issue_comment");
+    expect(summary).toContain("Errors");
+  });
+
+  test("skips quietly with a reason when no mention asked for work", async () => {
+    await writeCommentEvent("just a normal comment, no mention here");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      }
+    });
+
+    await main({ fetchImpl: server.fetchImpl });
+
+    const outputs = await readFile(process.env.GITHUB_OUTPUT!, "utf8");
+    expect(outputs).toContain('"status":"skipped"');
+    expect(outputs).toContain("Comment-triggered review is not wired up yet");
+  });
+});

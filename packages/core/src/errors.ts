@@ -62,3 +62,14 @@ export class ToolExecutionError extends ShuvbotError {
     super(message, "TOOL_EXECUTION_ERROR", options);
   }
 }
+
+/**
+ * A run was explicitly requested (an `@shuvbot <command>` mention) but no
+ * handler matched the resolved mode and event. Distinct from a policy denial:
+ * nothing refused the work, the combination simply is not wired up.
+ */
+export class UnsupportedRequestError extends ShuvbotError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, "UNSUPPORTED_REQUEST", options);
+  }
+}

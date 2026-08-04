@@ -19754,10 +19754,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.error = error3;
-    function warning(message, properties = {}) {
+    function warning2(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports.warning = warning;
+    exports.warning = warning2;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -32430,6 +32430,11 @@ var StructuredOutputError = class extends ShuvbotError {
 var ToolExecutionError = class extends ShuvbotError {
   constructor(message, options) {
     super(message, "TOOL_EXECUTION_ERROR", options);
+  }
+};
+var UnsupportedRequestError = class extends ShuvbotError {
+  constructor(message, options) {
+    super(message, "UNSUPPORTED_REQUEST", options);
   }
 };
 
@@ -50031,8 +50036,8 @@ function validateToolName(name) {
 function issueToolNameWarning(name, warnings) {
   if (warnings.length > 0) {
     console.warn(`Tool name validation warning for "${name}":`);
-    for (const warning of warnings) {
-      console.warn(`  - ${warning}`);
+    for (const warning2 of warnings) {
+      console.warn(`  - ${warning2}`);
     }
     console.warn("Tool registration will proceed, but this may cause compatibility issues.");
     console.warn("Consider updating the tool name to conform to the MCP tool naming standard.");
@@ -54191,13 +54196,22 @@ ${boundedLogTail(message)}`);
       );
       return;
     }
+    const reason = explainUnhandledRun({ mode, event, hasClient: Boolean(client) });
+    if (command) {
+      throw new UnsupportedRequestError(
+        `shuvbot could not run "@shuvbot ${command.command}": ${reason}`
+      );
+    }
+    logger.log("info", "run.skipped", { mode, event: eventName, reason });
+    core4.warning(`shuvbot took no action: ${reason}`);
     core4.setOutput(
       "result",
       JSON.stringify({
         runId: withPolicy.runId,
-        status: "initialized",
+        status: "skipped",
         mode,
-        trigger: withPolicy.trigger
+        trigger: withPolicy.trigger,
+        reason
       })
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
@@ -54218,6 +54232,21 @@ function createReviewDriver(agentId) {
     );
   }
   return createClaudeCodeDriver();
+}
+function explainUnhandledRun(input) {
+  const { mode, event, hasClient } = input;
+  if (!event) return "no supported GitHub event payload was available for this run.";
+  if (!hasClient) return "no GitHub token was supplied; set the action's `token` input.";
+  switch (mode) {
+    case "review":
+      return `review currently runs only on \`pull_request\` events, but this run saw \`${event.kind}\`. Comment-triggered review is not wired up yet.`;
+    case "implement":
+      return `implement requires an \`@shuvbot implement \u2026\` mention; this run saw \`${event.kind}\` without one.`;
+    case "fix-ci":
+      return `fix-ci runs only on \`workflow_run\` events, but this run saw \`${event.kind}\`.`;
+    default:
+      return `mode \`${mode}\` is not wired to a handler in this version; see docs/workflows.md.`;
+  }
 }
 function isExplicitMode(value) {
   return typeof value === "string" && MODES.includes(value);
