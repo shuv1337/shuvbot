@@ -11,18 +11,27 @@ const REVIEWER_NAMES: Record<ReviewerId, string> = {
   release: "Release and compatibility"
 };
 
+/**
+ * The known set is the code-owned default names plus the models this
+ * configuration selects for its three roles. A reviewer override may therefore
+ * only reuse a model the configuration already selects, while the operator can
+ * still name a model the runtime actually routes. Whether the runtime can route
+ * a name is settled later, against the runtime's own catalog.
+ */
 export function createReviewerConfigPlugin(
   config: ReviewbotConfig["review"],
-  knownModels: readonly ModelRef[] = [
-    "subscription/default-reasoning",
-    "subscription/default-coding",
-    "subscription/default-fast"
-  ]
+  knownModels?: readonly ModelRef[]
 ): ReviewPlugin {
   return {
     id: "reviewer-config",
     async configure(ctx) {
-      const modelRefs = new Set(knownModels.map(asModelRef));
+      const known = knownModels ?? [
+        "subscription/default-reasoning" as ModelRef,
+        "subscription/default-coding" as ModelRef,
+        "subscription/default-fast" as ModelRef,
+        ...Object.values(config.models).map(asModelRef)
+      ];
+      const modelRefs = new Set(known.map(asModelRef));
 
       const providers = new Map<string, Set<string>>();
       for (const modelRef of modelRefs) {

@@ -117,10 +117,27 @@ describe("review plugin runner", () => {
       runReviewPlugins({ plugins: [createReviewerConfigPlugin(reviewConfig)] })
     ).rejects.toThrow("subscription provider");
 
-    reviewConfig.models.standard = "subscription/not-in-catalog";
+    // A model the configuration selects for a role is accepted here and settled
+    // against the runtime's catalog when the review resolves its models.
+    reviewConfig.models.standard = "subscription/anthropic:claude-sonnet-4-5";
+    await expect(
+      runReviewPlugins({ plugins: [createReviewerConfigPlugin(reviewConfig)] })
+    ).resolves.toBeDefined();
+
+    reviewConfig.models.standard = "subscription/default-coding";
+    reviewConfig.reviewers = [
+      {
+        id: "security",
+        paths: ["**/*"],
+        ignorePaths: [],
+        promptAppend: "",
+        model: "subscription/not-configured-anywhere"
+      }
+    ];
     await expect(
       runReviewPlugins({ plugins: [createReviewerConfigPlugin(reviewConfig)] })
     ).rejects.toThrow("Unknown review model");
+    reviewConfig.reviewers = [];
 
     reviewConfig.models.standard = "subscription/default-coding";
     reviewConfig.reviewers = [
