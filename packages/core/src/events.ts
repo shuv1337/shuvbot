@@ -330,7 +330,10 @@ function parsePullRequest(payload: Record<string, unknown>, repo: RepoRef): Pull
   const base = asRecord(pr.base, "pull_request.base");
   const headRepo = asOptionalRecord(head.repo);
   const headRepoFullName = stringField(headRepo?.full_name) ?? null;
-  const isFork = headRepoFullName !== null && headRepoFullName !== repo.fullName;
+  // GitHub reports `head.repo: null` once a fork is deleted, and fork status
+  // gates hard policy restrictions. A head repository we cannot read is not
+  // evidence of a same-repository branch, so the unknown case is a fork.
+  const isFork = headRepoFullName === null || headRepoFullName !== repo.fullName;
   const stateValue = stringField(pr.state) ?? "open";
   return {
     number: numberField(pr.number) ?? 0,

@@ -34175,7 +34175,7 @@ function parsePullRequest(payload, repo) {
   const base = asRecord(pr.base, "pull_request.base");
   const headRepo = asOptionalRecord(head.repo);
   const headRepoFullName = stringField(headRepo?.full_name) ?? null;
-  const isFork = headRepoFullName !== null && headRepoFullName !== repo.fullName;
+  const isFork = headRepoFullName === null || headRepoFullName !== repo.fullName;
   const stateValue = stringField(pr.state) ?? "open";
   return {
     number: numberField(pr.number) ?? 0,
@@ -34757,6 +34757,57 @@ function mapDiffPositions(hunks) {
 }
 function isCommentableLine(positions, path, line, side = "RIGHT") {
   return positions.get(path)?.find((position) => position.line === line && position.side === side);
+}
+
+// packages/github/src/pull-requests.ts
+var SYNTHETIC_ACTION = "synchronize";
+async function resolveReviewTarget(input) {
+  const { event, client } = input;
+  switch (event.kind) {
+    case "pull_request":
+      return fromEvent(event, "event");
+    case "pull_request_review_comment":
+      return fromEvent(synthesize(event.raw, SYNTHETIC_ACTION), "comment");
+    case "issue_comment": {
+      if (!event.issue.isPullRequest || !client) return null;
+      const response = await client.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+        {
+          params: {
+            owner: event.repo.owner,
+            repo: event.repo.name,
+            pull_number: event.issue.number
+          }
+        }
+      );
+      if (!response.data || typeof response.data !== "object") return null;
+      return fromEvent(
+        synthesize(event.raw, SYNTHETIC_ACTION, { pull_request: response.data }),
+        "comment"
+      );
+    }
+    default:
+      return null;
+  }
+}
+function fromEvent(event, trigger) {
+  return {
+    pullNumber: event.pullRequest.number,
+    isFork: event.pullRequest.isFork,
+    draft: event.pullRequest.draft,
+    state: event.pullRequest.state,
+    event,
+    trigger
+  };
+}
+function synthesize(raw, action, extra = {}) {
+  const base = raw && typeof raw === "object" ? raw : {};
+  const payload = { ...base, ...extra, action };
+  const normalized = normalizeEvent({ eventName: "pull_request", payload });
+  if (normalized.kind !== "pull_request") {
+    throw new Error("synthesized payload did not normalize to a pull_request event");
+  }
+  return normalized;
 }
 
 // packages/core/src/context/assembler.ts
@@ -53951,9 +54002,11 @@ async function main(overrides = {}) {
     token: inputs.token,
     ...overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {}
   }) : void 0;
+  const reviewTarget = event ? await resolveReviewTarget({ event, ...client ? { client } : {} }) : null;
   const actor = event ? await deriveActorContext({
     event,
-    ...client ? { client } : {}
+    ...client ? { client } : {},
+    ...reviewTarget ? { isFork: reviewTarget.isFork } : {}
   }) : fallbackActor(actorLogin);
   const eventAction = extractAction(event);
   const record2 = createRunRecord({
@@ -53995,16 +54048,18 @@ async function main(overrides = {}) {
     modeReason: resolved.reason
   });
   try {
-    if (mode === "review" && event?.kind === "pull_request" && client && policy) {
+    const reviewRequested = reviewTarget ? reviewTarget.trigger === "event" || Boolean(command) : false;
+    if (mode === "review" && event && reviewTarget && reviewRequested && client && policy) {
       const repo = { owner: event.repo.owner, name: event.repo.name };
-      const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
+      const pullNumber = reviewTarget.pullNumber;
+      const diff = await fetchPullRequestDiff(client, repo, pullNumber);
       const filesResponse = await client.request(
         "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
         {
           params: {
             owner: repo.owner,
             repo: repo.name,
-            pull_number: event.pullRequest.number,
+            pull_number: pullNumber,
             per_page: 100
           }
         }
@@ -54048,7 +54103,7 @@ async function main(overrides = {}) {
         review = await runReview({
           cwd,
           repo: event.repo.fullName,
-          event,
+          event: reviewTarget.event,
           diff: diff.raw,
           files: Array.isArray(filesResponse.data) ? filesResponse.data : [],
           config: config2,
@@ -54072,7 +54127,7 @@ ${boundedLogTail(message)}`);
         const posted = await postReview({
           client,
           repo,
-          pullNumber: event.pullRequest.number,
+          pullNumber,
           body: buildReviewSummary(review.pipeline.summaryFindings),
           event: review.pipeline.reviewEvent,
           comments: review.pipeline.inlineFindings.filter((finding) => finding.inline).map((finding) => ({
@@ -54083,6 +54138,16 @@ ${boundedLogTail(message)}`);
           }))
         });
         postedComments = posted.postedComments;
+      } else {
+        const why = actor.isFork ? "the pull request head is a fork, and shuvbot does not post reviews on fork pull requests" : `the triggering actor has no write access (permission: ${actor.actorPermission})`;
+        const notice = `Review completed but was not posted: ${why}.`;
+        logger.log("warn", "review.not_posted", {
+          isFork: actor.isFork,
+          permission: actor.actorPermission,
+          findings: review.findings.length
+        });
+        if (command) core4.error(notice);
+        else core4.warning(notice);
       }
       withPolicy = {
         ...withPolicy,
@@ -54198,7 +54263,13 @@ ${boundedLogTail(message)}`);
       );
       return;
     }
-    const reason = explainUnhandledRun({ mode, event, hasClient: Boolean(client) });
+    const reason = explainUnhandledRun({
+      mode,
+      event,
+      hasClient: Boolean(client),
+      hasReviewTarget: Boolean(reviewTarget),
+      commented: Boolean(command)
+    });
     if (command) {
       throw new UnsupportedRequestError(
         `shuvbot could not run "@shuvbot ${command.command}": ${reason}`
@@ -54236,12 +54307,15 @@ function createReviewDriver(agentId) {
   return createClaudeCodeDriver();
 }
 function explainUnhandledRun(input) {
-  const { mode, event, hasClient } = input;
+  const { mode, event, hasClient, hasReviewTarget, commented } = input;
   if (!event) return "no supported GitHub event payload was available for this run.";
   if (!hasClient) return "no GitHub token was supplied; set the action's `token` input.";
   switch (mode) {
     case "review":
-      return `review currently runs only on \`pull_request\` events, but this run saw \`${event.kind}\`. Comment-triggered review is not wired up yet.`;
+      if (hasReviewTarget && !commented) {
+        return "a comment only starts a review when it mentions `@shuvbot review`.";
+      }
+      return `review needs a pull request, but this run saw \`${event.kind}\` that does not refer to one.`;
     case "implement":
       return `implement requires an \`@shuvbot implement \u2026\` mention; this run saw \`${event.kind}\` without one.`;
     case "fix-ci":

@@ -22,6 +22,7 @@ import { createGitHubClient } from "../../github/src/octokit.ts";
 import { ConfigError, UnsupportedRequestError } from "../../core/src/errors.ts";
 import { MODES, type AgentId, type ShuvbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
+import { resolveReviewTarget } from "../../github/src/pull-requests.ts";
 import { runReview } from "../../core/src/review-runner.ts";
 import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
 import { runImplement } from "../../core/src/implement-runner.ts";
@@ -83,10 +84,17 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {})
       })
     : undefined;
+  // Resolve the target before policy: an issue_comment cannot report fork
+  // status from its payload, and policy depends on the real answer.
+  const reviewTarget = event
+    ? await resolveReviewTarget({ event, ...(client ? { client } : {}) })
+    : null;
+
   const actor = event
     ? await deriveActorContext({
         event,
-        ...(client ? { client } : {})
+        ...(client ? { client } : {}),
+        ...(reviewTarget ? { isFork: reviewTarget.isFork } : {})
       })
     : fallbackActor(actorLogin);
 
@@ -133,16 +141,24 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
   });
 
   try {
-    if (mode === "review" && event?.kind === "pull_request" && client && policy) {
+    // A pull_request event asks for a review by firing. A comment asks only if
+    // it actually mentioned the bot - otherwise every comment on every pull
+    // request would start a review.
+    const reviewRequested = reviewTarget
+      ? reviewTarget.trigger === "event" || Boolean(command)
+      : false;
+
+    if (mode === "review" && event && reviewTarget && reviewRequested && client && policy) {
       const repo = { owner: event.repo.owner, name: event.repo.name };
-      const diff = await fetchPullRequestDiff(client, repo, event.pullRequest.number);
+      const pullNumber = reviewTarget.pullNumber;
+      const diff = await fetchPullRequestDiff(client, repo, pullNumber);
       const filesResponse = await client.request(
         "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
         {
           params: {
             owner: repo.owner,
             repo: repo.name,
-            pull_number: event.pullRequest.number,
+            pull_number: pullNumber,
             per_page: 100
           }
         }
@@ -188,7 +204,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         review = await runReview({
           cwd,
           repo: event.repo.fullName,
-          event,
+          event: reviewTarget.event,
           diff: diff.raw,
           files: Array.isArray(filesResponse.data) ? filesResponse.data : [],
           config,
@@ -216,7 +232,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         const posted = await postReview({
           client,
           repo,
-          pullNumber: event.pullRequest.number,
+          pullNumber,
           body: buildReviewSummary(review.pipeline.summaryFindings),
           event: review.pipeline.reviewEvent,
           comments: review.pipeline.inlineFindings
@@ -229,6 +245,22 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
             }))
         });
         postedComments = posted.postedComments;
+      } else {
+        // The review ran; policy refused to publish it. Say so - a silent skip
+        // here looks identical to a review that found nothing.
+        const why = actor.isFork
+          ? "the pull request head is a fork, and shuvbot does not post reviews on fork pull requests"
+          : `the triggering actor has no write access (permission: ${actor.actorPermission})`;
+        const notice = `Review completed but was not posted: ${why}.`;
+        logger.log("warn", "review.not_posted", {
+          isFork: actor.isFork,
+          permission: actor.actorPermission,
+          findings: review.findings.length
+        });
+        // A human who typed `@shuvbot review` gets nothing on the pull request,
+        // so make it a red annotation rather than a warning they will not read.
+        if (command) core.error(notice);
+        else core.warning(notice);
       }
       withPolicy = {
         ...withPolicy,
@@ -353,7 +385,13 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     // Nothing above matched. Distinguish a human asking for work and getting
     // none (a failure they must be told about) from an ambient event that
     // simply does not apply to this mode (a quiet, explained skip).
-    const reason = explainUnhandledRun({ mode, event, hasClient: Boolean(client) });
+    const reason = explainUnhandledRun({
+      mode,
+      event,
+      hasClient: Boolean(client),
+      hasReviewTarget: Boolean(reviewTarget),
+      commented: Boolean(command)
+    });
     if (command) {
       throw new UnsupportedRequestError(
         `shuvbot could not run "@shuvbot ${command.command}": ${reason}`
@@ -403,16 +441,21 @@ function explainUnhandledRun(input: {
   mode: ShuvbotMode;
   event: BotEvent | null;
   hasClient: boolean;
+  hasReviewTarget: boolean;
+  commented: boolean;
 }): string {
-  const { mode, event, hasClient } = input;
+  const { mode, event, hasClient, hasReviewTarget, commented } = input;
   if (!event) return "no supported GitHub event payload was available for this run.";
   if (!hasClient) return "no GitHub token was supplied; set the action's `token` input.";
 
   switch (mode) {
     case "review":
+      if (hasReviewTarget && !commented) {
+        return "a comment only starts a review when it mentions `@shuvbot review`.";
+      }
       return (
-        `review currently runs only on \`pull_request\` events, but this run saw \`${event.kind}\`. ` +
-        "Comment-triggered review is not wired up yet."
+        `review needs a pull request, but this run saw \`${event.kind}\` ` +
+        "that does not refer to one."
       );
     case "implement":
       return `implement requires an \`@shuvbot implement …\` mention; this run saw \`${event.kind}\` without one.`;

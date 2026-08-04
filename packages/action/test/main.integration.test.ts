@@ -43,6 +43,22 @@ const PR_DIFF = [
   " }"
 ].join("\n");
 
+/** What `GET /pulls/1` returns as JSON. `headRepo` decides fork status. */
+function pullRequestPayload(headRepo = "octo/repo") {
+  return {
+    number: 1,
+    title: "Add feature",
+    body: "",
+    state: "open",
+    draft: false,
+    user: { login: "alice" },
+    head: { ref: "topic", sha: "aaa", repo: { full_name: headRepo } },
+    base: { ref: "main", sha: "bbb", repo: { full_name: "octo/repo" } }
+  };
+}
+
+const PR_PAYLOAD = pullRequestPayload();
+
 interface RecordedCall {
   method: string;
   path: string;
@@ -93,7 +109,12 @@ function fakeGitHubServer(routes: Record<string, { status: number; body: unknown
     const body =
       typeof init?.body === "string" && init.body.length > 0 ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname, body });
-    const route = routes[key];
+    // GitHub serves the same pull request path as JSON or as a unified diff
+    // depending on Accept, and shuvbot relies on both. Let a route opt into the
+    // diff representation with a "<key> [diff]" entry, falling back to the
+    // plain key so existing single-representation routes keep working.
+    const accept = new Headers(init?.headers ?? {}).get("accept") ?? "";
+    const route = (accept.includes("diff") ? routes[`${key} [diff]`] : undefined) ?? routes[key];
     if (!route) {
       return new Response(JSON.stringify({ message: `no mock route registered for ${key}` }), {
         status: 404
@@ -311,7 +332,8 @@ describe("main() unhandled requests", () => {
     await rm(cwd, { recursive: true, force: true });
   });
 
-  async function writeCommentEvent(body: string): Promise<void> {
+  async function writeCommentEvent(body: string, opts: { onPullRequest?: boolean } = {}) {
+    const onPullRequest = opts.onPullRequest ?? true;
     await writeFile(
       eventPath,
       JSON.stringify({
@@ -329,15 +351,17 @@ describe("main() unhandled requests", () => {
           body: "",
           state: "open",
           user: { login: "alice" },
-          pull_request: { url: "https://api.github.com/repos/octo/repo/pulls/1" }
+          ...(onPullRequest
+            ? { pull_request: { url: "https://api.github.com/repos/octo/repo/pulls/1" } }
+            : {})
         },
         comment: { id: 10, body, user: { login: "alice" } }
       })
     );
   }
 
-  test("fails loudly when an explicit @shuvbot review mention cannot be handled", async () => {
-    await writeCommentEvent("@shuvbot review");
+  test("fails loudly when an explicit mention refers to no pull request", async () => {
+    await writeCommentEvent("@shuvbot review", { onPullRequest: false });
     const server = fakeGitHubServer({
       "GET /repos/octo/repo/collaborators/alice/permission": {
         status: 200,
@@ -345,28 +369,92 @@ describe("main() unhandled requests", () => {
       }
     });
 
-    // The request is understood (mode resolves to review) but no handler
-    // accepts a comment event yet. That must surface, not exit green.
+    // Understood (mode resolves to review) but there is no pull request to
+    // review. A person asked and must be told, not left with a green check.
     await expect(main({ fetchImpl: server.fetchImpl })).rejects.toThrow(/could not run/);
 
     const summary = await readFile(SUMMARY_PATH, "utf8");
-    expect(summary).toContain("issue_comment");
     expect(summary).toContain("Errors");
   });
 
-  test("skips quietly with a reason when no mention asked for work", async () => {
+  test("does not review when a comment never mentioned shuvbot", async () => {
     await writeCommentEvent("just a normal comment, no mention here");
     const server = fakeGitHubServer({
       "GET /repos/octo/repo/collaborators/alice/permission": {
         status: 200,
         body: { role_name: "write" }
-      }
+      },
+      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_PAYLOAD }
     });
 
     await main({ fetchImpl: server.fetchImpl });
 
     const outputs = await readFile(process.env.GITHUB_OUTPUT!, "utf8");
     expect(outputs).toContain('"status":"skipped"');
-    expect(outputs).toContain("Comment-triggered review is not wired up yet");
+    expect(outputs).toContain("mentions `@shuvbot review`");
+
+    const postedReview = server.calls.find((call) => call.method === "POST");
+    expect(postedReview).toBeUndefined();
+  });
+
+  test("@shuvbot review on a same-repo pull request comment posts a review", async () => {
+    await writeCommentEvent("@shuvbot review");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      },
+      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_PAYLOAD },
+      "GET /repos/octo/repo/pulls/1 [diff]": { status: 200, body: PR_DIFF },
+      "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] },
+      "GET /repos/octo/repo/pulls/1/comments": { status: 200, body: [] },
+      "POST /repos/octo/repo/pulls/1/reviews": {
+        status: 200,
+        body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
+      }
+    });
+
+    await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
+
+    const postedReview = server.calls.find(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
+    expect(postedReview).toBeDefined();
+    const reviewBody = postedReview!.body as {
+      body: string;
+      comments: Array<{ path: string; body: string }>;
+    };
+    expect(reviewBody.comments[0]!.path).toBe("src/app.ts");
+    expect(JSON.stringify(reviewBody)).toContain(INJECTED_FINDING.body);
+  });
+
+  test("runs the review but refuses to post it when the head is a fork", async () => {
+    await writeCommentEvent("@shuvbot review");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      },
+      // Same pull request number, head in a different repository.
+      "GET /repos/octo/repo/pulls/1": {
+        status: 200,
+        body: pullRequestPayload("mallory/repo")
+      },
+      "GET /repos/octo/repo/pulls/1 [diff]": { status: 200, body: PR_DIFF },
+      "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] },
+      "GET /repos/octo/repo/pulls/1/comments": { status: 200, body: [] },
+      "POST /repos/octo/repo/pulls/1/reviews": {
+        status: 200,
+        body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
+      }
+    });
+
+    await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
+
+    // Fork status came from the fetched pull request, not the comment payload.
+    const postedReview = server.calls.find(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
+    expect(postedReview).toBeUndefined();
   });
 });
