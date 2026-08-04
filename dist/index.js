@@ -33169,7 +33169,7 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
 // packages/core/src/config.ts
 var PINNED_SHUVCODE_PACKAGE = "shuvcode";
 var SHUVCODE_SOURCE_BASELINE_VERSION = "1.18.4";
-var APPROVED_SHUVCODE_RUNTIME_VERSION = null;
+var APPROVED_SHUVCODE_RUNTIME_VERSION = "2.0.0-alpha-9";
 var DEFAULT_CONFIG = {
   agent: "claude-code",
   model: "claude/sonnet",
