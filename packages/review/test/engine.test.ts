@@ -52,10 +52,12 @@ describe("local coordinator engine", () => {
     expect(result.status).toBe("completed");
     expect(runtime.maximumActive).toBe(3);
     // Reviewbot's `subscription/…` names are never sent to the runtime; each one
-    // is resolved to a routable model from the runtime's own catalog first.
+    // is resolved to a routable model first. This covers the coordinator session
+    // as well as every specialist.
     expect(
       [...runtime.configured.values()].every(({ model }) => model?.providerID === "acme")
     ).toBe(true);
+    expect(runtime.parents.at(0)?.model).toEqual({ providerID: "acme", id: "reasoning" });
   });
 
   test("creates policy-scoped specialist sessions instead of forking the unprompted coordinator", async () => {
@@ -86,8 +88,7 @@ describe("local coordinator engine", () => {
     const runtime = new FakeRuntime();
     await runEngine("trivial", runtime);
 
-    expect(runtime.lifecycle.slice(0, 6)).toEqual([
-      "listModels",
+    expect(runtime.lifecycle.slice(0, 5)).toEqual([
       "create:coordinator",
       "create:child-1:read",
       "configure:child-1",
@@ -101,12 +102,12 @@ describe("local coordinator engine", () => {
     const trivialRuntime = new FakeRuntime();
     const trivial = await runEngine("trivial", trivialRuntime, {
       models: {
-        coordinator: "subscription/reasoning",
-        standard: "subscription/standard",
-        light: "subscription/light"
+        coordinator: "subscription/acme:reasoning",
+        standard: "subscription/acme:standard",
+        light: "subscription/acme:light"
       },
       pluginConfig: pluginConfigWith({
-        "code-quality": { model: "subscription/standard", modelOverride: false }
+        "code-quality": { model: "subscription/acme:standard", modelOverride: false }
       })
     });
     expect(trivialRuntime.configured.get("child-1")?.model).toEqual({
@@ -118,12 +119,12 @@ describe("local coordinator engine", () => {
     const explicitRuntime = new FakeRuntime();
     await runEngine("trivial", explicitRuntime, {
       models: {
-        coordinator: "subscription/reasoning",
-        standard: "subscription/standard",
-        light: "subscription/light"
+        coordinator: "subscription/acme:reasoning",
+        standard: "subscription/acme:standard",
+        light: "subscription/acme:light"
       },
       pluginConfig: pluginConfigWith({
-        "code-quality": { model: "subscription/standard", modelOverride: true }
+        "code-quality": { model: "subscription/acme:standard", modelOverride: true }
       })
     });
     expect(explicitRuntime.configured.get("child-1")?.model?.id).toBe("standard");
@@ -131,13 +132,13 @@ describe("local coordinator engine", () => {
     const fullRuntime = new FakeRuntime();
     const full = await runEngine("full", fullRuntime, {
       models: {
-        coordinator: "subscription/reasoning",
-        standard: "subscription/standard",
-        light: "subscription/light"
+        coordinator: "subscription/acme:reasoning",
+        standard: "subscription/acme:standard",
+        light: "subscription/acme:light"
       },
       pluginConfig: pluginConfigWith(
-        { security: { model: "subscription/security-override" } },
-        "subscription/standard"
+        { security: { model: "subscription/acme:security-override" } },
+        "subscription/acme:standard"
       )
     });
     expect(fullRuntime.configured.get("child-1")?.model?.id).toBe("standard");
@@ -154,7 +155,7 @@ describe("local coordinator engine", () => {
     await expect(
       runEngine("trivial", new FakeRuntime(), {
         pluginConfig: pluginConfigWith({
-          "code-quality": { model: "subscription/not-in-catalog", modelOverride: true }
+          "code-quality": { model: "subscription/acme:not-in-catalog", modelOverride: true }
         })
       })
     ).rejects.toThrow("configured provider catalog");
@@ -486,6 +487,33 @@ describe("local coordinator engine", () => {
     });
   });
 
+  test("keeps a redacted sample of every refused result", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-rejected-"));
+    await runEngine("trivial", new FakeRuntime({ invalidSpecialistAlways: "code-quality" }), {
+      artifactDirectory
+    });
+
+    const rejected = JSON.parse(
+      await readFile(join(artifactDirectory, "reviewbot-rejected-results.json"), "utf8")
+    ) as { rejected: { role: string; repair: boolean; reason: string; sample: string }[] };
+
+    // Both the first result and its repair are kept, so a rejection can be
+    // diagnosed instead of only appearing as REVIEW_SCHEMA_INVALID.
+    expect(rejected.rejected).toHaveLength(2);
+    expect(rejected.rejected.map(({ repair }) => repair)).toEqual([false, true]);
+    for (const sample of rejected.rejected) {
+      expect(sample.role).toBe("specialist");
+      expect(sample.reason.length).toBeGreaterThan(0);
+      expect(sample.sample.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("does not write a rejected-result artifact when nothing was refused", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-rejected-none-"));
+    await runEngine("trivial", new FakeRuntime(), { artifactDirectory });
+    expect(existsSync(join(artifactDirectory, "reviewbot-rejected-results.json"))).toBe(false);
+  });
+
   test("flushes durable secret-free artifacts before workspace cleanup", async () => {
     const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-artifacts-"));
     const { result, root } = await runEngine(
@@ -651,17 +679,6 @@ class FakeRuntime implements ShuvcodeRuntime {
       onClose?: () => void;
     } = {}
   ) {}
-
-  /** Mirrors the provider catalog the plugin config registers, under a real provider. */
-  async listModels() {
-    this.lifecycle.push("listModels");
-    return {
-      models: ["reasoning", "standard", "light", "security-override", ...BUILT_IN_REVIEWER_IDS].map(
-        (id) => ({ providerID: "acme", id })
-      ),
-      default: { providerID: "acme", id: "default-model" }
-    };
-  }
 
   async createSession(input: ShuvcodeSessionCreateInput = {}) {
     if (input.policy === undefined) {
@@ -897,7 +914,7 @@ async function runEngine(
     plan,
     workspace,
     pluginConfig: overrides.pluginConfig ?? pluginConfig,
-    models: overrides.models ?? { coordinator: "subscription/reasoning" },
+    models: overrides.models ?? { coordinator: "subscription/acme:reasoning" },
     runtimeFactory: async () => {
       if (overrides.runtimeFactoryDelayMs !== undefined) {
         await sleep(overrides.runtimeFactoryDelayMs);
@@ -949,14 +966,20 @@ const pluginConfig: ResolvedReviewPluginConfig = Object.freeze({
     id,
     name: id,
     description: id,
-    model: `subscription/${id}` as const,
+    model: `subscription/acme:${id}` as const,
     tools: ["filesystem.read", "repository.read", "git.diff"] as const,
     promptSections: []
   })),
   providers: [
     {
       id: "subscription",
-      models: ["reasoning", "standard", "light", "security-override", ...BUILT_IN_REVIEWER_IDS]
+      models: [
+        "acme:reasoning",
+        "acme:standard",
+        "acme:light",
+        "acme:security-override",
+        ...BUILT_IN_REVIEWER_IDS.map((id) => `acme:${id}`)
+      ]
     }
   ],
   tiers: {

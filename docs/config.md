@@ -225,16 +225,32 @@ tier; `light` is the fast specialist tier. A reviewer override may only reuse a 
 configuration already selects for one of those roles, so repository config cannot register providers
 or credentials.
 
-Each name is resolved against the runtime's own model catalog before any session selects a model, and
-an unresolvable name fails the review once with a `REVIEW_CONFIG_INVALID` error naming the model:
+Each name resolves through a short curated catalog in
+`packages/review/src/runtime/model-catalog.ts` before any session selects a model, and an
+unresolvable name fails the review once with a `REVIEW_CONFIG_INVALID` error that lists the curated
+names. The catalog is maintained by hand because the runtime does not reliably publish a model list.
 
 - `subscription/default-reasoning`, `subscription/default-coding`, and `subscription/default-fast`
-  resolve to whatever model the runtime reports as its default.
-- `subscription/<model>` resolves to a catalog model with that id, choosing deterministically when
-  several providers offer it.
-- `subscription/<provider>:<model>` names the provider explicitly, for example
-  `subscription/anthropic:claude-sonnet-4-5`. Some runtimes route models without publishing a model
-  list; this is the only form that resolves in that case.
+  are role aliases, so the model behind a role changes in one place.
+- `subscription/<model>` selects a curated model by name.
+- `subscription/<provider>:<model>` bypasses the catalog and names the provider explicitly, for
+  example `subscription/anthropic:claude-sonnet-4-5`. This exists so a new model can be tried before
+  it is curated. It selects any provider the local profile has authenticated, so treat it as a local
+  development affordance rather than something to accept from an untrusted repository; curate the
+  model instead once it is in regular use.
+
+Current curated models: `gpt-5.6-luna` and `gpt-5.6-sol` (OpenAI), `claude-opus-5` and
+`claude-fable-5` (Anthropic), and `grok-4.5` (xAI). Roles default to `claude-opus-5` for the
+coordinator, `gpt-5.6-sol` for standard specialists, and `gpt-5.6-luna` for the light tier.
+
+## Diagnosing a refused result
+
+When a specialist or coordinator returns a structured result the review refuses, the run reports
+`REVIEW_SCHEMA_INVALID`. The refused value itself is kept in
+`.reviewbot/runs/<id>/reviewbot-rejected-results.json`, redacted and truncated, with the validation
+reason, the role, the reviewer, and whether the sample came from the first attempt or its repair. The
+file is written only when something was refused. Without it a refusal is undiagnosable, because the
+offending value is otherwise discarded.
 
 ## Coverage, state, and output
 

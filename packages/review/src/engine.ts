@@ -81,6 +81,53 @@ export interface CoordinatorEngineFileSystem {
   writeFile: typeof writeFile;
 }
 
+/**
+ * A structured result the review refused, kept so a rejection can actually be
+ * diagnosed. Without it a rejected result is only ever reported as
+ * `REVIEW_SCHEMA_INVALID`, with the offending value already discarded.
+ */
+export interface RejectedResultSample {
+  readonly role: "specialist" | "coordinator";
+  readonly reviewer?: BuiltInReviewerId;
+  readonly sessionId?: string;
+  readonly attempt: number;
+  readonly repair: boolean;
+  readonly reason: string;
+  readonly sample: string;
+}
+
+const MAX_REJECTED_SAMPLES = 12;
+const MAX_REJECTED_SAMPLE_BYTES = 8_000;
+
+/** Records a refused result, redacted and bounded, for the run artifacts. */
+function recordRejectedResult(
+  samples: RejectedResultSample[],
+  redactor: Redactor,
+  entry: Omit<RejectedResultSample, "reason" | "sample"> & {
+    readonly error: unknown;
+    readonly value: unknown;
+  }
+): void {
+  if (samples.length >= MAX_REJECTED_SAMPLES) return;
+  const { error, value, ...rest } = entry;
+  let serialized: string;
+  try {
+    serialized = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  } catch {
+    serialized = String(value);
+  }
+  serialized ??= String(value);
+  const bounded =
+    serialized.length > MAX_REJECTED_SAMPLE_BYTES
+      ? `${serialized.slice(0, MAX_REJECTED_SAMPLE_BYTES)}\n…truncated`
+      : serialized;
+  samples.push({
+    ...rest,
+    reason: redactor.redactString(error instanceof Error ? error.message : String(error)),
+    sample: redactor.redactString(bounded)
+  });
+}
+
 export interface CoordinatorEngineEventClock {
   now(): number;
   setInterval(callback: () => void, intervalMs: number): unknown;
@@ -185,7 +232,7 @@ class CoordinatorExecutionError extends Error {
  * ref. Sending it makes every structured prompt fail before the model is
  * reached, so the dialect declaration is removed here.
  */
-function toRuntimeJsonSchema(schema: unknown): Record<string, unknown> {
+export function toRuntimeJsonSchema(schema: unknown): Record<string, unknown> {
   const { $schema: _dialect, ...rest } = schema as Record<string, unknown>;
   return rest;
 }
@@ -237,6 +284,7 @@ export async function executeCoordinatorEngine(
   let unsubscribe = (): void => {};
   const captures = new Map<string, SessionCapture>();
   const allCaptures: SessionCapture[] = [];
+  const rejectedSamples: RejectedResultSample[] = [];
   const heartbeatTimer = eventClock.setInterval(() => {
     const now = eventClock.now();
     for (const capture of captures.values()) {
@@ -260,11 +308,10 @@ export async function executeCoordinatorEngine(
     );
 
     // Reviewbot's `subscription/…` names are not routable by the runtime, so they
-    // are resolved against its catalog before any session selects a model. Doing
-    // this once, up front, turns a misconfigured model into a single actionable
-    // failure instead of an unroutable model failing every session separately.
-    const catalog = await raceAbort(runtime.listModels(), overall.signal);
-    const resolvedModels = resolveReviewModels(configuredModelRefs(input), catalog);
+    // are resolved through the curated catalog before any session selects a
+    // model. Doing this once, up front, turns a misconfigured model into a single
+    // actionable failure instead of an unroutable model failing every session.
+    const resolvedModels = resolveReviewModels(configuredModelRefs(input));
     const modelFor = (ref: ModelRef): ShuvcodeModel => {
       const model = resolvedModels.get(ref);
       if (model === undefined) throw new TypeError(`unresolved review model: ${ref}`);
@@ -300,6 +347,7 @@ export async function executeCoordinatorEngine(
           input,
           runtime: runtime!,
           modelFor,
+          rejectedSamples,
           captures,
           allCaptures,
           specialistSessionIds,
@@ -364,6 +412,7 @@ export async function executeCoordinatorEngine(
         sessionID: coordinator.id,
         prepared,
         log,
+        rejectedSamples,
         captures,
         allCaptures,
         signal: overall.signal,
@@ -443,7 +492,8 @@ export async function executeCoordinatorEngine(
         log,
         result,
         input,
-        overallDeadlineAtMs
+        overallDeadlineAtMs,
+        rejectedSamples
       );
       result = {
         ...result,
@@ -496,6 +546,7 @@ function createSpecialistTask(options: {
   input: ExecuteCoordinatorEngineInput;
   runtime: ShuvcodeRuntime;
   modelFor: (ref: ModelRef) => ShuvcodeModel;
+  rejectedSamples: RejectedResultSample[];
   captures: Map<string, SessionCapture>;
   allCaptures: SessionCapture[];
   specialistSessionIds: Map<BuiltInReviewerId, Map<number, string>>;
@@ -566,14 +617,34 @@ function createSpecialistTask(options: {
         try {
           parsed = parseSpecialistOutput(firstOutput, options.reviewer);
         } catch (validationError) {
+          recordRejectedResult(options.rejectedSamples, options.input.redactor, {
+            role: "specialist",
+            reviewer: options.reviewer,
+            sessionId: session.id,
+            attempt: context.attempt,
+            repair: false,
+            error: validationError,
+            value: firstOutput
+          });
           capture.repairAttempted = true;
           appendLogEvent(options.log, capture, "session.retrying");
-          parsed = parseSpecialistOutput(
-            await runPrompt(
-              `${prompt}\n\nYour previous JSON failed structured result validation: ${options.input.redactor.redactString(String(validationError))}\nReturn one corrected JSON value only.`
-            ),
-            options.reviewer
+          const repairOutput = await runPrompt(
+            `${prompt}\n\nYour previous JSON failed structured result validation: ${options.input.redactor.redactString(String(validationError))}\nReturn one corrected JSON value only.`
           );
+          try {
+            parsed = parseSpecialistOutput(repairOutput, options.reviewer);
+          } catch (repairError) {
+            recordRejectedResult(options.rejectedSamples, options.input.redactor, {
+              role: "specialist",
+              reviewer: options.reviewer,
+              sessionId: session.id,
+              attempt: context.attempt,
+              repair: true,
+              error: repairError,
+              value: repairOutput
+            });
+            throw repairError;
+          }
         }
         const value =
           parsed.usage === undefined && captureUsage(capture) !== undefined
@@ -623,6 +694,7 @@ async function runCoordinator(options: {
   sessionID: string;
   prepared: ReturnType<typeof prepareCoordinator>;
   log: ReviewSessionLog;
+  rejectedSamples: RejectedResultSample[];
   captures: Map<string, SessionCapture>;
   allCaptures: SessionCapture[];
   signal: AbortSignal;
@@ -661,16 +733,43 @@ async function runCoordinator(options: {
   };
   try {
     const output = await prompt(options.prepared.prompt);
-    const finalized = await finalizeCoordinator({
-      prepared: options.prepared,
-      output,
-      repair: async ({ validationError }) => {
-        attempt = 2;
-        return prompt(
-          `${options.prepared.prompt}\n\nYour previous JSON failed schema validation: ${options.input.redactor.redactString(String(validationError))}\nReturn one corrected JSON value only.`
-        );
+    let repairedOutput: unknown;
+    let repaired = false;
+    let finalized: FinalizedCoordinator;
+    try {
+      finalized = await finalizeCoordinator({
+        prepared: options.prepared,
+        output,
+        repair: async ({ validationError, invalidOutput }) => {
+          recordRejectedResult(options.rejectedSamples, options.input.redactor, {
+            role: "coordinator",
+            sessionId: options.sessionID,
+            attempt: 1,
+            repair: false,
+            error: validationError,
+            value: invalidOutput
+          });
+          attempt = 2;
+          repaired = true;
+          repairedOutput = await prompt(
+            `${options.prepared.prompt}\n\nYour previous JSON failed schema validation: ${options.input.redactor.redactString(String(validationError))}\nReturn one corrected JSON value only.`
+          );
+          return repairedOutput;
+        }
+      });
+    } catch (finalizeError) {
+      if (repaired) {
+        recordRejectedResult(options.rejectedSamples, options.input.redactor, {
+          role: "coordinator",
+          sessionId: options.sessionID,
+          attempt: 2,
+          repair: true,
+          error: finalizeError,
+          value: repairedOutput
+        });
       }
-    });
+      throw finalizeError;
+    }
     const capture = options.captures.get(options.sessionID);
     if (capture !== undefined) {
       const usage = captureUsage(capture);
@@ -1218,7 +1317,8 @@ async function flushEngineArtifacts(
   log: ReviewSessionLog,
   result: CoordinatorEngineResult,
   input: ExecuteCoordinatorEngineInput,
-  deadlineAtMs: number
+  deadlineAtMs: number,
+  rejectedSamples: readonly RejectedResultSample[] = []
 ): Promise<void> {
   const fileSystem = input.fileSystem ?? defaultFileSystem;
   const destination = resolve(directory);
@@ -1256,6 +1356,14 @@ async function flushEngineArtifacts(
     fileSystem,
     deadlineAtMs
   );
+  if (rejectedSamples.length > 0) {
+    await writeAtomicJson(
+      join(destination, "reviewbot-rejected-results.json"),
+      { version: 1, rejected: rejectedSamples },
+      fileSystem,
+      deadlineAtMs
+    );
+  }
 }
 
 async function writeAtomicJson(
