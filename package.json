@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "evals": "bun packages/evals/src/harness.ts",
+    "dogfood:review": "bun packages/cli/src/index.ts review --engine coordinator",
     "format": "prettier --write ."
   },
   "dependencies": {

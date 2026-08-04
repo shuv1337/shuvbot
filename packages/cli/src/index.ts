@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
-import { loadConfigFile } from "../../core/src/config.ts";
+import { access } from "node:fs/promises";
+import { resolve } from "node:path";
+import { loadConfigFile, normalizeConfig, type ReviewbotConfig } from "../../core/src/config.ts";
 import { ConfigError } from "../../core/src/errors.ts";
 import { runDoctor } from "./doctor.ts";
 import { runClaudeSetupToken } from "./auth/claude-setup-token.ts";
@@ -8,6 +10,31 @@ import { runLocalReview } from "./local-review.ts";
 import { runReplay } from "./replay.ts";
 
 const [, , ...args] = process.argv;
+
+interface ReviewCommandDependencies {
+  configExists(path: string): Promise<boolean>;
+  loadConfig(path: string): Promise<ReviewbotConfig>;
+  review: typeof runLocalReview;
+}
+
+interface ReviewCommandOptions {
+  cwd: string;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+  dependencies?: Partial<ReviewCommandDependencies>;
+}
+
+interface ParsedReviewOptions {
+  base: string;
+  head: string;
+  configPath?: string;
+  engine?: "legacy" | "coordinator";
+  json: boolean;
+}
+
+interface DoctorCommandOptions {
+  stdout: Pick<NodeJS.WriteStream, "write">;
+  doctor?: typeof runDoctor;
+}
 
 async function run(): Promise<void> {
   const command = args[0];
@@ -22,17 +49,18 @@ async function run(): Promise<void> {
 
   if (command === "init") return stub("reviewbot init");
   if (command === "review") {
-    await runLocalReview({
+    const result = await runReviewCommand(args.slice(1), {
       cwd: process.cwd(),
-      base: optionValue(args, "--base") ?? "main",
-      head: optionValue(args, "--head") ?? "HEAD",
       stdout: process.stdout
     });
+    if ("engine" in result && ["failed", "timed_out", "cancelled"].includes(result.status)) {
+      process.exitCode = 1;
+    }
     return;
   }
   if (command === "run") return stub("reviewbot run");
   if (command === "doctor") {
-    await runDoctor({ stdout: process.stdout });
+    process.exitCode = await runDoctorCommand({ stdout: process.stdout });
     return;
   }
   if (command === "replay") {
@@ -46,12 +74,124 @@ async function run(): Promise<void> {
     return;
   }
   if (command === "auth" && subcommand === "claude" && args[2] === "import") {
-    await runClaudeImport({ ...parseRepoSecretArgs(args.slice(3)), stdin: process.stdin, stdout: process.stdout });
+    await runClaudeImport({
+      ...parseRepoSecretArgs(args.slice(3)),
+      stdin: process.stdin,
+      stdout: process.stdout
+    });
     return;
   }
 
   printHelp();
   process.exitCode = command === undefined ? 0 : 1;
+}
+
+export async function runDoctorCommand(options: DoctorCommandOptions): Promise<0 | 1> {
+  const checks = await (options.doctor ?? runDoctor)({ stdout: options.stdout });
+  return checks.some((check) => check.status === "fail") ? 1 : 0;
+}
+
+export async function runReviewCommand(
+  values: string[],
+  options: ReviewCommandOptions
+): Promise<Awaited<ReturnType<typeof runLocalReview>>> {
+  const parsed = parseReviewOptions(values);
+  const dependencies: ReviewCommandDependencies = {
+    configExists: async (path) => {
+      try {
+        await access(path);
+        return true;
+      } catch (error) {
+        if (isMissingFileError(error)) return false;
+        throw new ConfigError(`Unable to check for review config at ${JSON.stringify(path)}.`, {
+          cause: error
+        });
+      }
+    },
+    loadConfig: loadConfigFile,
+    review: runLocalReview,
+    ...options.dependencies
+  };
+  const explicitConfigPath = parsed.configPath;
+  const configPath = resolve(options.cwd, explicitConfigPath ?? "reviewbot.toml");
+  const shouldLoad =
+    explicitConfigPath !== undefined || (await dependencies.configExists(configPath));
+  let config = normalizeConfig({});
+  if (shouldLoad) {
+    try {
+      config = await dependencies.loadConfig(configPath);
+    } catch (error) {
+      const detail = configLoadErrorDetail(error);
+      throw new ConfigError(
+        `Unable to load review config at ${JSON.stringify(configPath)}. ${detail}`,
+        { cause: error }
+      );
+    }
+  }
+  return dependencies.review({
+    cwd: options.cwd,
+    base: parsed.base,
+    head: parsed.head,
+    config,
+    ...(parsed.engine === undefined ? {} : { engine: parsed.engine }),
+    json: parsed.json,
+    stdout: options.stdout
+  });
+}
+
+export function parseReviewOptions(values: string[]): ParsedReviewOptions {
+  const parsed: ParsedReviewOptions = { base: "main", head: "HEAD", json: false };
+  const seen = new Set<string>();
+  for (let index = 0; index < values.length; index += 1) {
+    const option = values[index];
+    if (option === "--json") {
+      rejectDuplicateOption(seen, option);
+      parsed.json = true;
+      continue;
+    }
+    if (
+      option !== "--base" &&
+      option !== "--head" &&
+      option !== "--config" &&
+      option !== "--engine"
+    ) {
+      throw new ConfigError(`Unknown review option: ${JSON.stringify(option)}.`);
+    }
+    rejectDuplicateOption(seen, option);
+    const value = values[index + 1];
+    if (value === undefined || value.length === 0 || value.startsWith("-")) {
+      throw new ConfigError(`${option} requires a value.`);
+    }
+    index += 1;
+    if (option === "--base") parsed.base = value;
+    if (option === "--head") parsed.head = value;
+    if (option === "--config") parsed.configPath = value;
+    if (option === "--engine") {
+      if (value !== "legacy" && value !== "coordinator") {
+        throw new ConfigError("--engine must be legacy or coordinator.");
+      }
+      parsed.engine = value;
+    }
+  }
+  return parsed;
+}
+
+function rejectDuplicateOption(seen: Set<string>, option: string): void {
+  if (seen.has(option)) throw new ConfigError(`${option} may only be specified once.`);
+  seen.add(option);
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function configLoadErrorDetail(error: unknown): string {
+  if (error instanceof ConfigError) return error.message;
+  if (isMissingFileError(error)) return "The file does not exist.";
+  if (error instanceof Error && "code" in error && error.code === "EACCES") {
+    return "Permission denied.";
+  }
+  return "Check that the file is readable and valid TOML.";
 }
 
 function stub(name: string): void {
@@ -63,7 +203,8 @@ function printHelp(): void {
 
 Commands:
   init
-  review
+  review [--base <ref>] [--head <ref>] [--config <path>]
+         [--engine legacy|coordinator] [--json]
   run
   auth claude setup-token
   auth claude import
@@ -95,11 +236,13 @@ function optionValue(values: string[], name: string): string | undefined {
   return index >= 0 ? values[index + 1] : undefined;
 }
 
-run().catch((error: unknown) => {
-  if (error instanceof ConfigError) {
-    console.error(error.message);
-  } else {
-    console.error(error instanceof Error ? error.message : String(error));
-  }
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  run().catch((error: unknown) => {
+    if (error instanceof ConfigError) {
+      console.error(error.message);
+    } else {
+      console.error(error instanceof Error ? error.message : String(error));
+    }
+    process.exitCode = 1;
+  });
+}
