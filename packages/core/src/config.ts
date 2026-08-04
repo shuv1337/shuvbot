@@ -88,7 +88,7 @@ export interface ReviewReviewerOverride {
 
 export const PINNED_SHUVCODE_PACKAGE = "shuvcode";
 export const SHUVCODE_SOURCE_BASELINE_VERSION = "1.18.4";
-export const APPROVED_SHUVCODE_RUNTIME_VERSION: string | null = null;
+export const APPROVED_SHUVCODE_RUNTIME_VERSION: string | null = "2.0.0-alpha-9";
 
 export const DEFAULT_CONFIG: ReviewbotConfig = {
   agent: "claude-code",

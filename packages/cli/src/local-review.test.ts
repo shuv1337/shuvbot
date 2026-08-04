@@ -15,7 +15,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, test } from "bun:test";
-import { normalizeConfig } from "../../core/src/config.ts";
+import { APPROVED_SHUVCODE_RUNTIME_VERSION, normalizeConfig } from "../../core/src/config.ts";
+
+/** Mirrors the code-approved runtime pin so these fixtures track it as it moves. */
+const approvedRuntimeVersion = APPROVED_SHUVCODE_RUNTIME_VERSION ?? "unapproved";
 import { createFakeReviewAgent } from "../../core/src/review-runner.ts";
 import { evaluateQuorum } from "../../review/src/quorum.ts";
 import type {
@@ -716,7 +719,7 @@ describe("local review CLI", () => {
     });
 
     expect(startedPackage).toBe("shuvcode");
-    expect(startedVersion).toBe("1.18.4");
+    expect(startedVersion).toBe(approvedRuntimeVersion);
     expect(closed).toBe(true);
   });
 
@@ -788,7 +791,7 @@ describe("local review CLI", () => {
       json: true,
       stdout: writer((value) => (output += value)),
       dependencies: {
-        approvedShuvcodeVersion: "1.18.4",
+        approvedShuvcodeVersion: approvedRuntimeVersion,
         executeCoordinator: async () => {
           calls += 1;
           return completedExecution([]);
@@ -828,7 +831,7 @@ describe("local review CLI", () => {
         head: "HEAD",
         config: coordinatorConfig(),
         dependencies: {
-          approvedShuvcodeVersion: "1.18.4",
+          approvedShuvcodeVersion: approvedRuntimeVersion,
           git: (args, repository) => runLocalGit(args, repository, 256)
         }
       })
@@ -849,7 +852,7 @@ describe("local review CLI", () => {
         head: "HEAD",
         config: coordinatorConfig(),
         dependencies: {
-          approvedShuvcodeVersion: "1.18.4",
+          approvedShuvcodeVersion: approvedRuntimeVersion,
           git: async (args, repository) =>
             args[0] === "rev-parse" ? runLocalGit(args, repository) : "R100\0old.ts\0",
           executeCoordinator: async () => {
@@ -862,7 +865,7 @@ describe("local review CLI", () => {
     expect(executions).toBe(0);
   });
 
-  test("rejects the unpublished runtime pin before any Git work", async () => {
+  test("rejects an unapproved runtime pin before any Git work", async () => {
     let calls = 0;
     await expect(
       runLocalReview({
@@ -870,9 +873,12 @@ describe("local review CLI", () => {
         base: "main",
         head: "HEAD",
         config: coordinatorConfig(),
-        dependencies: forbiddenDependencies(() => {
-          calls += 1;
-        })
+        dependencies: {
+          ...forbiddenDependencies(() => {
+            calls += 1;
+          }),
+          approvedShuvcodeVersion: null
+        }
       })
     ).rejects.toThrow("corrected published shuvcode release");
     expect(calls).toBe(0);
@@ -910,7 +916,7 @@ describe("local review CLI", () => {
         head: "HEAD",
         config: coordinatorConfig({ overallTimeout: "10ms", incremental: false }),
         dependencies: {
-          approvedShuvcodeVersion: "1.18.4",
+          approvedShuvcodeVersion: approvedRuntimeVersion,
           git: async (args, _cwd, _limit, signal) => {
             if (args[0] === "rev-parse") return "a".repeat(40);
             await new Promise<void>((_resolve, reject) => {
@@ -939,7 +945,7 @@ describe("local review CLI", () => {
         head: "HEAD",
         config: coordinatorConfig({ incremental: false }),
         dependencies: {
-          approvedShuvcodeVersion: "1.18.4",
+          approvedShuvcodeVersion: approvedRuntimeVersion,
           git: async (args) =>
             args[0] === "rev-parse"
               ? "a".repeat(40)
@@ -989,7 +995,7 @@ describe("local review CLI", () => {
       json: true,
       stdout: writer((value) => (output += value)),
       dependencies: {
-        approvedShuvcodeVersion: "1.18.4",
+        approvedShuvcodeVersion: approvedRuntimeVersion,
         executeCoordinator: async () => {
           executions += 1;
           return completedExecution([]);
@@ -1181,7 +1187,7 @@ function fakeDependencies(
   return {
     executeCoordinator: execute,
     now: () => new Date((now += 1_000)),
-    approvedShuvcodeVersion: "1.18.4"
+    approvedShuvcodeVersion: approvedRuntimeVersion
   };
 }
 
