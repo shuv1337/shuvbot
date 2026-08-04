@@ -1,1 +1,4 @@
 node_modules/
+
+# Local review run artifacts and incremental state written by `reviewbot review`
+.reviewbot/
