@@ -285,7 +285,7 @@ function safeErrorMessage(category: Parameters<typeof classifyReviewError>[0]["c
     schema: "Structured response was invalid",
     policy: "Runtime policy denied the operation",
     cancellation: "Review session was cancelled",
-    config: "Review configuration was invalid"
+    config: "Configured review model is not routable by the runtime"
   } as const;
   return messages[category];
 }

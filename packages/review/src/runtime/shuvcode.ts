@@ -96,7 +96,22 @@ export interface ShuvcodeClient {
     prompt(input: ShuvcodePromptInput, options?: RequestOptions): Promise<unknown>;
     interrupt(input: { readonly sessionID: string }, options?: RequestOptions): Promise<void>;
   };
+  readonly model?: {
+    list?(options?: RequestOptions): Promise<unknown>;
+    default?(options?: RequestOptions): Promise<unknown>;
+  };
   readonly event: { subscribe(options?: RequestOptions): AsyncIterable<ShuvcodeEvent> };
+}
+
+/** A concrete model the runtime can route, discovered from its public catalog. */
+export interface ShuvcodeModel {
+  readonly providerID: string;
+  readonly id: string;
+}
+
+export interface ShuvcodeModelCatalog {
+  readonly models: readonly ShuvcodeModel[];
+  readonly default?: ShuvcodeModel;
 }
 
 export interface ShuvcodeClientModule {
@@ -168,6 +183,12 @@ export interface ShuvcodeRuntime {
       };
     }
   ): Promise<void>;
+  /**
+   * Reads the runtime's routable model catalog. Reviewbot configuration names
+   * models in its own `subscription/…` namespace, so those names must be
+   * resolved against this catalog before a session model is selected.
+   */
+  listModels(): Promise<ShuvcodeModelCatalog>;
   prompt(input: ShuvcodePromptInput): Promise<unknown>;
   wait(sessionID: string, options?: { readonly signal?: AbortSignal }): Promise<ShuvcodeEvent>;
   interrupt(sessionID: string): Promise<void>;
@@ -323,7 +344,7 @@ export async function startShuvcodeRuntime(
       for (const listener of listeners) listener(event);
       const sessionID = event.data?.sessionID;
       if (sessionID === undefined) return;
-      const terminal = terminalResult(event, structuredSessions.has(sessionID));
+      const terminal = terminalResult(sourceEvent, structuredSessions.has(sessionID), event);
       if (terminal === undefined) return;
       activeSessions.delete(sessionID);
       structuredSessions.delete(sessionID);
@@ -391,6 +412,18 @@ export async function startShuvcodeRuntime(
         ensureOpen(closePromise);
         sessionPolicies.set(session.id, policy);
         return session;
+      },
+      async listModels() {
+        ensureOpen(closePromise);
+        const catalog = runtimeClient.model;
+        const [listed, fallback] = await Promise.all([
+          catalog?.list?.({ signal: eventController.signal }).catch(() => undefined),
+          catalog?.default?.({ signal: eventController.signal }).catch(() => undefined)
+        ]);
+        ensureOpen(closePromise);
+        const models = modelEntries(listed);
+        const preferred = modelEntries(fallback)[0];
+        return preferred === undefined ? { models } : { models, default: preferred };
       },
       async configureSession(sessionID, input) {
         ensureOpen(closePromise);
@@ -791,16 +824,28 @@ async function pumpEvents(
   for await (const event of client.event.subscribe({ signal })) receive(event);
 }
 
+/**
+ * Decides whether an event ends a session. Failures are classified from the
+ * source event because sanitization intentionally reduces an error payload to a
+ * category and status, which is enough to log but not enough to tell an
+ * unroutable model apart from an invalid structured response. Successful
+ * terminals still resolve with the sanitized event so callers only ever observe
+ * the public value.
+ */
 function terminalResult(
   event: ShuvcodeEvent,
-  structured: boolean
+  structured: boolean,
+  sanitized: ShuvcodeEvent = event
 ): ShuvcodeEvent | ShuvcodeSessionError | undefined {
-  if (event.type === "session.structured.completed") return event;
+  if (event.type === "session.structured.completed") return sanitized;
   if (event.type === "session.execution.interrupted") {
     return new ShuvcodeSessionError("cancellation");
   }
-  if (event.type === "session.structured.failed") return new ShuvcodeSessionError("schema");
-  if (event.type === "session.execution.failed" || event.type === "session.error") {
+  if (
+    event.type === "session.structured.failed" ||
+    event.type === "session.execution.failed" ||
+    event.type === "session.error"
+  ) {
     return new ShuvcodeSessionError(classifyFailure(event));
   }
   if (event.type !== "session.idle" && event.type !== "session.execution.succeeded") {
@@ -808,7 +853,7 @@ function terminalResult(
   }
   return structured
     ? new ShuvcodeSessionError("schema", "Session completed without a structured result")
-    : event;
+    : sanitized;
 }
 
 function sanitizeEvent(event: ShuvcodeEvent): ShuvcodeEvent {
@@ -850,8 +895,29 @@ function sanitizeUsage(data: ShuvcodeEvent["data"]): Record<string, unknown> | u
   };
 }
 
+/**
+ * Reads model entries out of a runtime catalog response. The runtime wraps
+ * results in `{ location, data }`, where `data` is either a list of models or a
+ * single default model, so both shapes are accepted and anything unrecognized is
+ * ignored rather than trusted.
+ */
+function modelEntries(response: unknown): readonly ShuvcodeModel[] {
+  const payload = isRecord(response) && "data" in response ? response.data : response;
+  const candidates = Array.isArray(payload) ? payload : [payload];
+  const models: ShuvcodeModel[] = [];
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+    const providerID = candidate.providerID;
+    const id = candidate.id ?? candidate.modelID;
+    if (typeof providerID !== "string" || typeof id !== "string") continue;
+    if (providerID.length === 0 || id.length === 0) continue;
+    if (models.some((model) => model.providerID === providerID && model.id === id)) continue;
+    models.push({ providerID, id });
+  }
+  return models;
+}
+
 function classifyFailure(event: ShuvcodeEvent): ReviewErrorCategory {
-  if (event.type === "session.structured.failed") return "schema";
   if (event.type === "session.execution.interrupted") return "cancellation";
   const error = isRecord(event.data?.error) ? event.data.error : undefined;
   const data = isRecord(error?.data) ? error.data : undefined;
@@ -860,6 +926,17 @@ function classifyFailure(event: ShuvcodeEvent): ReviewErrorCategory {
     .filter((value): value is string => typeof value === "string")
     .join(" ")
     .toLowerCase();
+  // A model the runtime cannot route is a configuration fault, not a transient
+  // provider outage and not an invalid structured response. It must stay
+  // non-retryable so the operator is pointed at the configured model.
+  if (
+    /no.?route|model unavailable|unknown model|model not found|no such model|provider not found/.test(
+      signature
+    )
+  ) {
+    return "config";
+  }
+  if (event.type === "session.structured.failed") return "schema";
   if (
     status === 401 ||
     status === 403 ||
@@ -914,7 +991,7 @@ function safeFailureMessage(category: ReviewErrorCategory): string {
     schema: "Structured response was invalid",
     policy: "Runtime policy denied the operation",
     cancellation: "Review session was cancelled",
-    config: "Review configuration was invalid"
+    config: "Configured review model is not routable by the runtime"
   }[category];
 }
 

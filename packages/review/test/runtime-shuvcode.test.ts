@@ -84,6 +84,25 @@ function fixture(
     }
   };
   const client: ShuvcodeClient = {
+    model: {
+      // Mirrors the runtime's `{ location, data }` envelope, with entries the
+      // adapter must ignore rather than trust.
+      list: async () => ({
+        location: { directory: "/tmp" },
+        data: [
+          { providerID: "acme", id: "fast" },
+          { providerID: "acme", modelID: "deep" },
+          { providerID: "acme", id: "fast" },
+          { providerID: "", id: "blank" },
+          { id: "no-provider" },
+          "not-a-model"
+        ]
+      }),
+      default: async () => ({
+        location: { directory: "/tmp" },
+        data: { providerID: "acme", id: "house" }
+      })
+    },
     health: {
       get: async () => {
         calls.health += 1;
@@ -433,7 +452,10 @@ describe("shuvcode isolated runtime", () => {
       ["cancellation", { name: "MessageAbortedError", data: { message: "cancelled" } }],
       ["rateLimit", { name: "APIError", data: { message: "quota", statusCode: 429 } }],
       ["service", { name: "APIError", data: { message: "unavailable", statusCode: 503 } }],
-      ["provider", { name: "UnknownError", data: { message: "provider exploded" } }]
+      ["provider", { name: "UnknownError", data: { message: "provider exploded" } }],
+      // Observed from the published runtime when a configured model is not routable.
+      ["config", { type: "provider.no-route", message: "Model unavailable: subscription/coding" }],
+      ["config", { name: "ProviderNotFoundError", data: { message: "Provider not found: acme" } }]
     ] as const;
 
     for (const [category, error] of cases) {
@@ -449,6 +471,50 @@ describe("shuvcode isolated runtime", () => {
       expect(failure).toMatchObject({ category });
       await runtime.close();
     }
+  });
+
+  test("reports an unroutable model as configuration rather than schema failure", async () => {
+    const subject = fixture();
+    const runtime = await subject.start();
+
+    const plain = runtime.wait("plain");
+    subject.events.push({ type: "session.structured.failed", data: { sessionID: "plain" } });
+    expect(await plain.catch((value: unknown) => value)).toMatchObject({
+      category: "schema",
+      retryable: false
+    });
+
+    // A structured failure caused by an unroutable model must not send an
+    // operator after the reviewer schema.
+    const unroutable = runtime.wait("unroutable");
+    subject.events.push({
+      type: "session.structured.failed",
+      data: {
+        sessionID: "unroutable",
+        error: { type: "provider.no-route", message: "Model unavailable: subscription/coding" }
+      }
+    });
+    expect(await unroutable.catch((value: unknown) => value)).toMatchObject({
+      category: "config",
+      retryable: false
+    });
+
+    await runtime.close();
+  });
+
+  test("reads the routable model catalog and tolerates unusable entries", async () => {
+    const subject = fixture();
+    const runtime = await subject.start();
+
+    expect(await runtime.listModels()).toEqual({
+      models: [
+        { providerID: "acme", id: "fast" },
+        { providerID: "acme", id: "deep" }
+      ],
+      default: { providerID: "acme", id: "house" }
+    });
+
+    await runtime.close();
   });
 
   test("uses only structured completion as success and preserves its public value", async () => {
