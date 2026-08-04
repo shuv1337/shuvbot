@@ -1,9 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
   classifyReviewError,
   type ClassifiedReviewError,
@@ -36,6 +35,11 @@ export interface ShuvcodeSessionCreateInput {
   readonly agent?: string;
   readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string };
   readonly location?: { readonly directory: string; readonly workspaceID?: string };
+  /**
+   * Optional narrowing of the code-owned review policy. Omitted requests receive
+   * the full read-only review policy; supplied policies may only narrow it.
+   */
+  readonly policy?: ShuvcodeSessionPolicy;
 }
 
 interface ShuvcodeClientSessionCreateInput extends ShuvcodeSessionCreateInput {
@@ -145,6 +149,13 @@ export interface StartShuvcodeRuntimeOptions {
 export interface ShuvcodeRuntime {
   readonly url: string;
   createSession(input?: ShuvcodeSessionCreateInput): Promise<ShuvcodeSession>;
+  /**
+   * Forks an existing review session. The runtime resolves the fork boundary from
+   * the parent's persisted messages, so the parent must already have been prompted;
+   * forking a freshly created session fails with an `empty_session` request error.
+   * Review specialists therefore use {@link ShuvcodeRuntime.createSession} with an
+   * explicitly narrowed policy instead of forking the unprompted coordinator.
+   */
   forkSession(sessionID: string, policy: ShuvcodeSessionPolicy): Promise<ShuvcodeSession>;
   configureSession(
     sessionID: string,
@@ -345,16 +356,19 @@ export async function startShuvcodeRuntime(
       url,
       async createSession(input) {
         ensureOpen(closePromise);
+        const { policy: requested, ...rest } = input ?? {};
+        const policy = requested ?? REVIEW_SESSION_POLICY;
+        assertReviewPolicy(policy, REVIEW_SESSION_POLICY);
         const session = await runtimeClient.session.create(
-          { ...input, policy: REVIEW_SESSION_POLICY },
+          { ...rest, policy },
           {
             signal: eventController.signal
           }
         );
         activeSessions.add(session.id);
-        assertInstalledPolicy(session, REVIEW_SESSION_POLICY, options.packageName, options.version);
+        assertInstalledPolicy(session, policy, options.packageName, options.version);
         ensureOpen(closePromise);
-        sessionPolicies.set(session.id, REVIEW_SESSION_POLICY);
+        sessionPolicies.set(session.id, policy);
         return session;
       },
       async forkSession(sessionID, policy) {
@@ -563,42 +577,76 @@ const defaultDependencies: ShuvcodeRuntimeDependencies = {
   password: () => randomBytes(32).toString("base64url")
 };
 
+/**
+ * Resolves the installed runtime from its packed manifest instead of Node module
+ * resolution. The published package exports `./client` under the `import`
+ * condition only, so CJS `require.resolve` can never match it, and `import.meta`
+ * resolution cannot be re-parented onto the review directory. Reading the packed
+ * manifest consumes the same public contract without depending on either
+ * resolver's conditions.
+ */
 async function resolveInstalledPackage(
   packageName: string,
   cwd: string
 ): Promise<ResolvedShuvcodePackage> {
-  const require = createRequire(join(cwd, "package.json"));
-  let clientFile: string;
-  try {
-    clientFile = require.resolve(`${packageName}/client`);
-  } catch (cause) {
-    throw new Error(`Cannot resolve ${packageName}/client from ${cwd}`, { cause });
+  const directory = await findInstalledPackageDirectory(packageName, resolve(cwd));
+  const manifest: unknown = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+  if (!isRecord(manifest) || manifest.name !== packageName) {
+    throw new Error(`Installed ${packageName} manifest is invalid at ${directory}`);
   }
-  let directory = dirname(clientFile);
+  const version = typeof manifest.version === "string" ? manifest.version : "unknown";
+  const bin = isRecord(manifest.bin) ? manifest.bin[packageName] : undefined;
+  if (typeof bin !== "string") throw new Error(`${packageName} does not declare its binary`);
+  const client = clientEntry(manifest.exports);
+  if (client === undefined) {
+    throw new Error(
+      `${packageName}@${version} does not export its packed ${packageName}/client entry. ` +
+        "Install the exact corrected release configured by review.shuvcode.version."
+    );
+  }
+  return {
+    name: packageName,
+    version,
+    bin: resolve(directory, bin),
+    client: pathToFileURL(resolve(directory, client)).href
+  };
+}
+
+/** Selects the packed `./client` module target from a manifest export map. */
+function clientEntry(exports: unknown): string | undefined {
+  if (!isRecord(exports)) return undefined;
+  const entry = exports["./client"];
+  if (typeof entry === "string") return entry;
+  if (!isRecord(entry)) return undefined;
+  for (const condition of ["import", "default", "node"]) {
+    const target = entry[condition];
+    if (typeof target === "string") return target;
+  }
+  return undefined;
+}
+
+/** Walks `node_modules` from the review directory upward, as Node resolution would. */
+async function findInstalledPackageDirectory(packageName: string, cwd: string): Promise<string> {
+  let directory = cwd;
   while (true) {
-    let source: string | undefined;
-    try {
-      source = await readFile(join(directory, "package.json"), "utf8");
-    } catch {
-      source = undefined;
-    }
-    const manifest = source === undefined ? undefined : (JSON.parse(source) as unknown);
-    if (isRecord(manifest) && manifest.name === packageName) {
-      const version = typeof manifest.version === "string" ? manifest.version : "unknown";
-      const bin = isRecord(manifest.bin) ? manifest.bin[packageName] : undefined;
-      if (typeof bin !== "string") throw new Error(`${packageName} does not declare its binary`);
-      return {
-        name: packageName,
-        version,
-        bin: resolve(directory, bin),
-        client: pathToFileURL(clientFile).href
-      };
-    }
+    const candidate = join(directory, "node_modules", packageName);
+    if (await isFile(join(candidate, "package.json"))) return candidate;
     const parent = dirname(directory);
     if (parent === directory) break;
     directory = parent;
   }
-  throw new Error(`Cannot locate the installed ${packageName} package manifest`);
+  throw new Error(
+    `Cannot resolve the installed ${packageName} package from ${cwd}. ` +
+      `Install the exact configured ${packageName} release in ${cwd}.`
+  );
+}
+
+async function isFile(file: string): Promise<boolean> {
+  try {
+    return (await stat(file)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 async function readStartupUrl(
