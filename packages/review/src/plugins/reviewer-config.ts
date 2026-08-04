@@ -37,7 +37,12 @@ export function createReviewerConfigPlugin(
       for (const modelRef of modelRefs) {
         const separator = modelRef.indexOf("/");
         const provider = modelRef.slice(0, separator);
-        const model = modelRef.slice(separator + 1);
+        // A trailing `@<effort>` selects a reasoning effort on the same model, so
+        // the catalog records the model alone. Whether the effort is supported is
+        // settled by model resolution, which can report the accepted efforts.
+        const name = modelRef.slice(separator + 1);
+        const effort = name.indexOf("@");
+        const model = effort === -1 ? name : name.slice(0, effort);
         const models = providers.get(provider) ?? new Set<string>();
         models.add(model);
         providers.set(provider, models);

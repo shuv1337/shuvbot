@@ -261,6 +261,17 @@ export async function executeCoordinatorEngine(
   }
   validateExecutionInputs(input);
 
+  // Reviewbot's `subscription/…` names are not routable by the runtime, so they
+  // are resolved through the curated catalog before any review work starts. A
+  // misconfigured model or effort then fails once, with a message naming what is
+  // accepted, instead of being reported as an incomplete review.
+  const resolvedModels = resolveReviewModels(configuredModelRefs(input));
+  const modelFor = (ref: ModelRef): ShuvcodeModel => {
+    const model = resolvedModels.get(ref);
+    if (model === undefined) throw new TypeError(`unresolved review model: ${ref}`);
+    return model;
+  };
+
   const log = new ReviewSessionLog({ redactor: input.redactor });
   const eventClock = input.eventClock ?? defaultEventClock;
   const progress = new EngineProgressEmitter(input);
@@ -306,17 +317,6 @@ export async function executeCoordinatorEngine(
     unsubscribe = runtime.subscribe((event) =>
       captureRuntimeEvent(event, captures, log, eventClock)
     );
-
-    // Reviewbot's `subscription/…` names are not routable by the runtime, so they
-    // are resolved through the curated catalog before any session selects a
-    // model. Doing this once, up front, turns a misconfigured model into a single
-    // actionable failure instead of an unroutable model failing every session.
-    const resolvedModels = resolveReviewModels(configuredModelRefs(input));
-    const modelFor = (ref: ModelRef): ShuvcodeModel => {
-      const model = resolvedModels.get(ref);
-      if (model === undefined) throw new TypeError(`unresolved review model: ${ref}`);
-      return model;
-    };
 
     const coordinator = await raceAbort(
       // No agent is selected: reviewbot supplies every instruction in its own

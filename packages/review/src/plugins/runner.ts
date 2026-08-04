@@ -168,7 +168,12 @@ function validateModel(
 ): void {
   const separator = modelRef.indexOf("/");
   const providerId = modelRef.slice(0, separator);
-  const model = modelRef.slice(separator + 1);
+  const name = modelRef.slice(separator + 1);
+  // A trailing `@<effort>` selects a reasoning effort on the same model. Whether
+  // the effort is supported is settled by model resolution, which can name the
+  // accepted efforts; the catalog only knows models.
+  const effort = name.indexOf("@");
+  const model = effort === -1 ? name : name.slice(0, effort);
   const provider = providers.get(providerId);
   if (!provider) throw new Error(`Unknown provider in model assignment: ${providerId}`);
   if (!provider.models.includes(model)) {

@@ -64,6 +64,21 @@ describe("local coordinator engine", () => {
     });
   });
 
+  test("rejects an unsupported reasoning effort before starting a runtime", async () => {
+    let started = false;
+    await expect(
+      runEngine("trivial", new FakeRuntime(), {
+        models: {
+          coordinator: "subscription/acme:reasoning@high",
+          standard: "subscription/grok-4.5@xhigh"
+        },
+        onRuntimeStart: () => (started = true)
+      })
+    ).rejects.toThrow(/Unknown reasoning effort xhigh for grok-4\.5/);
+    // Nothing may be spawned for a configuration fault the catalog can settle.
+    expect(started).toBe(false);
+  });
+
   test("creates policy-scoped specialist sessions instead of forking the unprompted coordinator", async () => {
     const runtime = new FakeRuntime();
     await runEngine("trivial", runtime);
@@ -874,6 +889,7 @@ async function runEngine(
     artifactDirectory: string;
     interruptTimeoutMs: number;
     runtimeFactoryDelayMs: number;
+    onRuntimeStart: () => void;
     onWorkspaceCleanup: () => void;
     workspaceCleanupDelayMs: number;
     fileSystem: CoordinatorEngineFileSystem;
@@ -920,6 +936,7 @@ async function runEngine(
     pluginConfig: overrides.pluginConfig ?? pluginConfig,
     models: overrides.models ?? { coordinator: "subscription/acme:reasoning@high" },
     runtimeFactory: async () => {
+      overrides.onRuntimeStart?.();
       if (overrides.runtimeFactoryDelayMs !== undefined) {
         await sleep(overrides.runtimeFactoryDelayMs);
       }
@@ -982,6 +999,8 @@ const pluginConfig: ResolvedReviewPluginConfig = Object.freeze({
         "acme:standard",
         "acme:light",
         "acme:security-override",
+        // A curated name, so a bad effort on it reaches model resolution.
+        "grok-4.5",
         ...BUILT_IN_REVIEWER_IDS.map((id) => `acme:${id}`)
       ]
     }
