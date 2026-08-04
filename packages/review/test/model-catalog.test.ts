@@ -1,120 +1,112 @@
 import { describe, expect, test } from "bun:test";
-import { resolveReviewModel, resolveReviewModels } from "../src/runtime/model-catalog.ts";
+import { z } from "zod";
+import { toRuntimeJsonSchema } from "../src/engine.ts";
+import { coordinatorResultSchema, reviewerResultSchema } from "../src/results.ts";
+import {
+  CURATED_REVIEW_MODELS,
+  REVIEW_MODEL_ALIASES,
+  curatedModelNames,
+  resolveReviewModel,
+  resolveReviewModels
+} from "../src/runtime/model-catalog.ts";
 import type { ModelRef } from "../src/plugins/types.ts";
 
-const catalog = {
-  models: [
-    { providerID: "zeta", id: "shared-model" },
-    { providerID: "acme", id: "shared-model" },
-    { providerID: "acme", id: "fast-model" }
-  ],
-  default: { providerID: "acme", id: "house-default" }
-};
+describe("runtime structured output schema", () => {
+  // The runtime rejects a dialect declaration with `structured_output.schema`,
+  // which failed every structured prompt before any model was reached.
+  test("carries no dialect declaration for either result schema", () => {
+    for (const schema of [
+      z.toJSONSchema(reviewerResultSchema),
+      z.toJSONSchema(coordinatorResultSchema, { io: "input" })
+    ]) {
+      expect(schema).toHaveProperty("$schema");
+      expect(toRuntimeJsonSchema(schema)).not.toHaveProperty("$schema");
+    }
+  });
+
+  test("keeps the rest of the schema intact", () => {
+    const prepared = toRuntimeJsonSchema(z.toJSONSchema(reviewerResultSchema));
+    expect(prepared.type).toBe("object");
+    expect(prepared.properties).toBeDefined();
+  });
+});
 
 describe("review model resolution", () => {
-  test("resolves default names to the runtime default model", () => {
-    for (const ref of ["subscription/default-reasoning", "subscription/default-fast"] as const) {
-      expect(resolveReviewModel(ref, catalog)).toEqual({
-        providerID: "acme",
-        id: "house-default"
-      });
+  test("resolves every role alias to a curated model", () => {
+    for (const [alias, target] of Object.entries(REVIEW_MODEL_ALIASES)) {
+      expect(CURATED_REVIEW_MODELS[target]).toBeDefined();
+      expect(resolveReviewModel(`subscription/${alias}` as ModelRef)).toEqual(
+        CURATED_REVIEW_MODELS[target]!
+      );
     }
   });
 
-  test("resolves a named model from the runtime catalog", () => {
-    expect(resolveReviewModel("subscription/fast-model" as ModelRef, catalog)).toEqual({
-      providerID: "acme",
-      id: "fast-model"
-    });
-  });
-
-  test("chooses deterministically when several providers offer the same model", () => {
-    expect(resolveReviewModel("subscription/shared-model" as ModelRef, catalog)).toEqual({
-      providerID: "acme",
-      id: "shared-model"
-    });
-  });
-
-  test("resolves default names when the runtime lists no models", () => {
-    expect(
-      resolveReviewModel("subscription/default-coding" as ModelRef, {
-        models: [],
-        default: { providerID: "solo", id: "only-model" }
-      })
-    ).toEqual({ providerID: "solo", id: "only-model" });
-  });
-
-  test("fails with a configuration error when the runtime reports no default", () => {
-    expect(() =>
-      resolveReviewModel("subscription/default-coding" as ModelRef, { models: [] })
-    ).toThrow(/reported no default model/);
-  });
-
-  test("fails with a configuration error naming the unroutable model", () => {
-    let caught: unknown;
-    try {
-      resolveReviewModel("subscription/missing-model" as ModelRef, catalog);
-    } catch (error) {
-      caught = error;
+  test("resolves every curated model by name", () => {
+    for (const [name, model] of Object.entries(CURATED_REVIEW_MODELS)) {
+      expect(resolveReviewModel(`subscription/${name}` as ModelRef)).toEqual(model);
     }
-    expect((caught as Error).message).toContain("missing-model");
-    expect((caught as { code?: string }).code).toBe("REVIEW_CONFIG_INVALID");
-    expect((caught as { retryable?: boolean }).retryable).toBe(false);
   });
 
-  test("lists available models in the diagnostic", () => {
-    expect(() => resolveReviewModel("subscription/missing-model" as ModelRef, catalog)).toThrow(
-      /fast-model/
-    );
+  test("curated models name a provider and a model id", () => {
+    for (const model of Object.values(CURATED_REVIEW_MODELS)) {
+      expect(model.providerID.length).toBeGreaterThan(0);
+      expect(model.id.length).toBeGreaterThan(0);
+    }
   });
 
-  test("resolves an explicitly named provider when the runtime lists no models", () => {
-    expect(
-      resolveReviewModel("subscription/anthropic:claude-sonnet-4-5" as ModelRef, { models: [] })
-    ).toEqual({ providerID: "anthropic", id: "claude-sonnet-4-5" });
-  });
-
-  test("validates an explicitly named provider against a published catalog", () => {
-    expect(resolveReviewModel("subscription/acme:fast-model" as ModelRef, catalog)).toEqual({
-      providerID: "acme",
-      id: "fast-model"
+  test("resolves an explicit provider without curating it", () => {
+    expect(resolveReviewModel("subscription/anthropic:claude-sonnet-4-5" as ModelRef)).toEqual({
+      providerID: "anthropic",
+      id: "claude-sonnet-4-5"
     });
-    expect(() => resolveReviewModel("subscription/acme:absent" as ModelRef, catalog)).toThrow(
-      /does not route acme\/absent/
-    );
   });
 
   test("rejects an incomplete provider-qualified name", () => {
-    expect(() => resolveReviewModel("subscription/anthropic:" as ModelRef, catalog)).toThrow(
+    expect(() => resolveReviewModel("subscription/anthropic:" as ModelRef)).toThrow(
       /must name both a provider and a model/
     );
   });
 
-  test("suggests the provider-qualified form when the catalog is empty", () => {
-    expect(() =>
-      resolveReviewModel("subscription/claude-sonnet-4-5" as ModelRef, { models: [] })
-    ).toThrow(/subscription\/<provider>:claude-sonnet-4-5/);
+  test("fails with a configuration error that lists the curated models", () => {
+    let caught: unknown;
+    try {
+      resolveReviewModel("subscription/not-curated" as ModelRef);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).message).toContain("not-curated");
+    expect((caught as Error).message).toContain("claude-opus-5");
+    expect((caught as { code?: string }).code).toBe("REVIEW_CONFIG_INVALID");
+    expect((caught as { retryable?: boolean }).retryable).toBe(false);
+  });
+
+  test("suggests the provider-qualified escape hatch", () => {
+    expect(() => resolveReviewModel("subscription/some-new-model" as ModelRef)).toThrow(
+      /subscription\/<provider>:some-new-model/
+    );
   });
 
   test("rejects a reference outside the subscription namespace", () => {
-    expect(() => resolveReviewModel("anthropic/claude" as ModelRef, catalog)).toThrow(
+    expect(() => resolveReviewModel("anthropic/claude" as ModelRef)).toThrow(
       /must use the subscription provider/
     );
   });
 
+  test("reports every accepted name", () => {
+    expect(curatedModelNames()).toContain("default-reasoning");
+    expect(curatedModelNames()).toContain("grok-4.5");
+  });
+
   test("resolves each distinct reference once", () => {
-    const resolved = resolveReviewModels(
-      [
-        "subscription/fast-model",
-        "subscription/fast-model",
-        "subscription/default-reasoning"
-      ] as ModelRef[],
-      catalog
-    );
+    const resolved = resolveReviewModels([
+      "subscription/default-fast",
+      "subscription/default-fast",
+      "subscription/grok-4.5"
+    ] as ModelRef[]);
     expect(resolved.size).toBe(2);
-    expect(resolved.get("subscription/fast-model" as ModelRef)).toEqual({
-      providerID: "acme",
-      id: "fast-model"
+    expect(resolved.get("subscription/grok-4.5" as ModelRef)).toEqual({
+      providerID: "xai",
+      id: "grok-4.5"
     });
   });
 });

@@ -96,10 +96,6 @@ export interface ShuvcodeClient {
     prompt(input: ShuvcodePromptInput, options?: RequestOptions): Promise<unknown>;
     interrupt(input: { readonly sessionID: string }, options?: RequestOptions): Promise<void>;
   };
-  readonly model?: {
-    list?(options?: RequestOptions): Promise<unknown>;
-    default?(options?: RequestOptions): Promise<unknown>;
-  };
   readonly event: { subscribe(options?: RequestOptions): AsyncIterable<ShuvcodeEvent> };
 }
 
@@ -107,11 +103,6 @@ export interface ShuvcodeClient {
 export interface ShuvcodeModel {
   readonly providerID: string;
   readonly id: string;
-}
-
-export interface ShuvcodeModelCatalog {
-  readonly models: readonly ShuvcodeModel[];
-  readonly default?: ShuvcodeModel;
 }
 
 export interface ShuvcodeClientModule {
@@ -183,12 +174,6 @@ export interface ShuvcodeRuntime {
       };
     }
   ): Promise<void>;
-  /**
-   * Reads the runtime's routable model catalog. Reviewbot configuration names
-   * models in its own `subscription/…` namespace, so those names must be
-   * resolved against this catalog before a session model is selected.
-   */
-  listModels(): Promise<ShuvcodeModelCatalog>;
   prompt(input: ShuvcodePromptInput): Promise<unknown>;
   wait(sessionID: string, options?: { readonly signal?: AbortSignal }): Promise<ShuvcodeEvent>;
   interrupt(sessionID: string): Promise<void>;
@@ -412,18 +397,6 @@ export async function startShuvcodeRuntime(
         ensureOpen(closePromise);
         sessionPolicies.set(session.id, policy);
         return session;
-      },
-      async listModels() {
-        ensureOpen(closePromise);
-        const catalog = runtimeClient.model;
-        const [listed, fallback] = await Promise.all([
-          catalog?.list?.({ signal: eventController.signal }).catch(() => undefined),
-          catalog?.default?.({ signal: eventController.signal }).catch(() => undefined)
-        ]);
-        ensureOpen(closePromise);
-        const models = modelEntries(listed);
-        const preferred = modelEntries(fallback)[0];
-        return preferred === undefined ? { models } : { models, default: preferred };
       },
       async configureSession(sessionID, input) {
         ensureOpen(closePromise);
@@ -895,28 +868,6 @@ function sanitizeUsage(data: ShuvcodeEvent["data"]): Record<string, unknown> | u
   };
 }
 
-/**
- * Reads model entries out of a runtime catalog response. The runtime wraps
- * results in `{ location, data }`, where `data` is either a list of models or a
- * single default model, so both shapes are accepted and anything unrecognized is
- * ignored rather than trusted.
- */
-function modelEntries(response: unknown): readonly ShuvcodeModel[] {
-  const payload = isRecord(response) && "data" in response ? response.data : response;
-  const candidates = Array.isArray(payload) ? payload : [payload];
-  const models: ShuvcodeModel[] = [];
-  for (const candidate of candidates) {
-    if (!isRecord(candidate)) continue;
-    const providerID = candidate.providerID;
-    const id = candidate.id ?? candidate.modelID;
-    if (typeof providerID !== "string" || typeof id !== "string") continue;
-    if (providerID.length === 0 || id.length === 0) continue;
-    if (models.some((model) => model.providerID === providerID && model.id === id)) continue;
-    models.push({ providerID, id });
-  }
-  return models;
-}
-
 function classifyFailure(event: ShuvcodeEvent): ReviewErrorCategory {
   if (event.type === "session.execution.interrupted") return "cancellation";
   const error = isRecord(event.data?.error) ? event.data.error : undefined;
@@ -928,8 +879,12 @@ function classifyFailure(event: ShuvcodeEvent): ReviewErrorCategory {
     .toLowerCase();
   // A model the runtime cannot route is a configuration fault, not a transient
   // provider outage and not an invalid structured response. It must stay
-  // non-retryable so the operator is pointed at the configured model.
+  // non-retryable so the operator is pointed at the configured model. A
+  // transport status still wins, because a 5xx or timeout carrying similar
+  // wording is an outage that should stay retryable.
+  const transient = status !== undefined && (status === 408 || status >= 500);
   if (
+    !transient &&
     /no.?route|model unavailable|unknown model|model not found|no such model|provider not found/.test(
       signature
     )

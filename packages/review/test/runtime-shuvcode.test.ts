@@ -84,25 +84,6 @@ function fixture(
     }
   };
   const client: ShuvcodeClient = {
-    model: {
-      // Mirrors the runtime's `{ location, data }` envelope, with entries the
-      // adapter must ignore rather than trust.
-      list: async () => ({
-        location: { directory: "/tmp" },
-        data: [
-          { providerID: "acme", id: "fast" },
-          { providerID: "acme", modelID: "deep" },
-          { providerID: "acme", id: "fast" },
-          { providerID: "", id: "blank" },
-          { id: "no-provider" },
-          "not-a-model"
-        ]
-      }),
-      default: async () => ({
-        location: { directory: "/tmp" },
-        data: { providerID: "acme", id: "house" }
-      })
-    },
     health: {
       get: async () => {
         calls.health += 1;
@@ -455,7 +436,12 @@ describe("shuvcode isolated runtime", () => {
       ["provider", { name: "UnknownError", data: { message: "provider exploded" } }],
       // Observed from the published runtime when a configured model is not routable.
       ["config", { type: "provider.no-route", message: "Model unavailable: subscription/coding" }],
-      ["config", { name: "ProviderNotFoundError", data: { message: "Provider not found: acme" } }]
+      ["config", { name: "ProviderNotFoundError", data: { message: "Provider not found: acme" } }],
+      // A transport status wins: an outage worded like a routing fault stays retryable.
+      [
+        "service",
+        { type: "provider.internal", message: "model unavailable", data: { statusCode: 503 } }
+      ]
     ] as const;
 
     for (const [category, error] of cases) {
@@ -497,21 +483,6 @@ describe("shuvcode isolated runtime", () => {
     expect(await unroutable.catch((value: unknown) => value)).toMatchObject({
       category: "config",
       retryable: false
-    });
-
-    await runtime.close();
-  });
-
-  test("reads the routable model catalog and tolerates unusable entries", async () => {
-    const subject = fixture();
-    const runtime = await subject.start();
-
-    expect(await runtime.listModels()).toEqual({
-      models: [
-        { providerID: "acme", id: "fast" },
-        { providerID: "acme", id: "deep" }
-      ],
-      default: { providerID: "acme", id: "house" }
     });
 
     await runtime.close();

@@ -1,43 +1,62 @@
 import { classifyReviewError, type ClassifiedReviewError } from "../errors.ts";
 import type { ModelRef } from "../plugins/types.ts";
-import type { ShuvcodeModel, ShuvcodeModelCatalog } from "./shuvcode.ts";
+import type { ShuvcodeModel } from "./shuvcode.ts";
 
 const SUBSCRIPTION_PREFIX = "subscription/";
 
 /**
- * Reviewbot names review models in its own `subscription/…` namespace so that
- * repository configuration never has to name a provider or carry provider
- * credentials. The runtime cannot route those names, so every configured name
- * must be resolved against the runtime's own catalog before a session model is
- * selected. Passing an unresolved name through produces a `provider.no-route`
- * failure at prompt time, which is far harder to diagnose than failing here.
+ * The curated set of models a review may select, kept short on purpose.
  *
- * `subscription/default-*` names resolve to the runtime's default model. Any
- * other name resolves to a catalog model with the same model id, choosing
- * deterministically when several providers offer it.
+ * Reviewbot names models in its own `subscription/…` namespace so repository
+ * configuration never names a provider or carries credentials, and the runtime
+ * cannot route those names. This table is the mapping, maintained by hand: the
+ * runtime does not reliably publish a model list, and a curated set is easier to
+ * reason about than whatever a profile happens to expose.
+ *
+ * Add an entry when a model has actually been used for a review.
  */
+export const CURATED_REVIEW_MODELS: Readonly<Record<string, ShuvcodeModel>> = Object.freeze({
+  "gpt-5.6-luna": { providerID: "openai", id: "gpt-5.6-luna" },
+  "gpt-5.6-sol": { providerID: "openai", id: "gpt-5.6-sol" },
+  "claude-opus-5": { providerID: "anthropic", id: "claude-opus-5" },
+  "claude-fable-5": { providerID: "anthropic", id: "claude-fable-5" },
+  "grok-4.5": { providerID: "xai", id: "grok-4.5" }
+});
+
+/**
+ * Role defaults, so the configured names stay stable while the model behind a
+ * role can change in one place.
+ */
+export const REVIEW_MODEL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  "default-reasoning": "claude-opus-5",
+  "default-coding": "gpt-5.6-sol",
+  "default-fast": "gpt-5.6-luna"
+});
+
+/** Every name this build accepts, for configuration validation and diagnostics. */
+export function curatedModelNames(): readonly string[] {
+  return [...Object.keys(REVIEW_MODEL_ALIASES), ...Object.keys(CURATED_REVIEW_MODELS)];
+}
+
 export function resolveReviewModels(
-  refs: Iterable<ModelRef>,
-  catalog: ShuvcodeModelCatalog
+  refs: Iterable<ModelRef>
 ): ReadonlyMap<ModelRef, ShuvcodeModel> {
   const resolved = new Map<ModelRef, ShuvcodeModel>();
   for (const ref of refs) {
-    if (resolved.has(ref)) continue;
-    resolved.set(ref, resolveReviewModel(ref, catalog));
+    if (!resolved.has(ref)) resolved.set(ref, resolveReviewModel(ref));
   }
   return resolved;
 }
 
-export function resolveReviewModel(ref: ModelRef, catalog: ShuvcodeModelCatalog): ShuvcodeModel {
+export function resolveReviewModel(ref: ModelRef): ShuvcodeModel {
   if (!ref.startsWith(SUBSCRIPTION_PREFIX)) {
     throw modelConfigError(`Review model must use the subscription provider: ${ref}`);
   }
   const name = ref.slice(SUBSCRIPTION_PREFIX.length);
   if (name.length === 0) throw modelConfigError(`Review model is missing a name: ${ref}`);
 
-  // `subscription/<provider>:<model>` names the runtime provider explicitly. The
-  // runtime does not always publish a model list, so this is the only form that
-  // can be resolved when the catalog is empty.
+  // `subscription/<provider>:<model>` bypasses the curated table, so a new model
+  // can be tried without a code change before it is curated.
   const separator = name.indexOf(":");
   if (separator !== -1) {
     const providerID = name.slice(0, separator);
@@ -47,51 +66,17 @@ export function resolveReviewModel(ref: ModelRef, catalog: ShuvcodeModelCatalog)
         `Review model must name both a provider and a model as subscription/<provider>:<model>: ${ref}`
       );
     }
-    const known = catalog.models.some(
-      (model) => model.providerID === providerID && model.id === id
-    );
-    if (!known && catalog.models.length > 0) {
-      throw modelConfigError(
-        `The runtime does not route ${providerID}/${id} for ${ref}. ` +
-          `Available models: ${describeCatalog(catalog)}.`
-      );
-    }
     return { providerID, id };
   }
 
-  if (name.startsWith("default-")) {
-    if (catalog.default === undefined) {
-      throw modelConfigError(
-        `The runtime reported no default model, so ${ref} cannot be resolved. ` +
-          "Configure a default model in the shuvcode profile, or set review.models to a model the runtime lists."
-      );
-    }
-    return catalog.default;
-  }
-
-  const matches = catalog.models
-    .filter((model) => model.id === name)
-    .sort((left, right) => left.providerID.localeCompare(right.providerID));
-  const match = matches[0];
-  if (match === undefined) {
+  const curated = CURATED_REVIEW_MODELS[REVIEW_MODEL_ALIASES[name] ?? name];
+  if (curated === undefined) {
     throw modelConfigError(
-      `The runtime does not route a model named ${name} for ${ref}. ` +
-        `Available models: ${describeCatalog(catalog)}. ` +
-        `Name the provider explicitly as subscription/<provider>:${name} if the runtime does not publish a model list.`
+      `Unknown review model ${name}. Curated models: ${curatedModelNames().join(", ")}. ` +
+        `Use subscription/<provider>:${name} to select an uncurated model.`
     );
   }
-  return match;
-}
-
-function describeCatalog(catalog: ShuvcodeModelCatalog): string {
-  const names = [...new Set(catalog.models.map((model) => model.id))].sort();
-  if (names.length === 0) {
-    return catalog.default === undefined
-      ? "none reported by the runtime"
-      : `none listed; the runtime default is ${catalog.default.id}`;
-  }
-  const shown = names.slice(0, 20);
-  return names.length > shown.length ? `${shown.join(", ")}, …` : shown.join(", ");
+  return curated;
 }
 
 function modelConfigError(message: string): Error & ClassifiedReviewError {
