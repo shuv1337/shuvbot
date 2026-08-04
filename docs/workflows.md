@@ -13,11 +13,17 @@ expose `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via
 fails before normal review artifacts are written, shuvbot logs a redacted
 diagnostic tail and persists it as `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt`.
 
+Review runs from two triggers: a `pull_request` event, and an `@shuvbot review` comment on a pull
+request. The comment path is opt-in - add the `issue_comment` trigger below, and see
+"Comment-triggered review" for its guards.
+
 ```yaml
 name: shuvbot
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment: # optional: enables `@shuvbot review`
+    types: [created, edited]
 
 permissions: {}
 
@@ -54,6 +60,32 @@ jobs:
 ```
 
 Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `shuvbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft` on the job when credentials are unavailable to fork PRs and draft PRs should wait for review; fork PRs will be skipped instead of failing the Claude auth check, and draft PRs will run when marked ready for review because `ready_for_review` is included in the trigger types.
+
+## Comment-Triggered Review
+
+Commenting `@shuvbot review` on a pull request reviews it on demand. This is the same review that
+the `pull_request` trigger runs; only the way it starts differs.
+
+The action resolves which pull request a comment refers to, then presents it to the review pipeline
+as a `pull_request` event. That indirection is not cosmetic: review skills trigger on
+`pull_request` actions, so a comment event would otherwise select no skills and review nothing.
+
+Guards, and why each exists:
+
+| Guard                                          | Reason                                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Comment must mention the bot                   | Otherwise every comment on a pull request starts a review.                                                                |
+| Author must have write access                  | Checked in the workflow to avoid spending a run. The action re-derives permission itself and does not trust the workflow. |
+| Fork heads are reviewed, never posted to       | `canReview` refuses to publish on a fork. The run reports the refusal instead of looking like a clean review.             |
+| Merge ref checked out only for same-repo heads | Fork code must never enter a job holding `CLAUDE_CODE_OAUTH_TOKEN`. Fork pull requests keep the default checkout.         |
+
+An `issue_comment` payload contains an `issue`, not a pull request, and nothing identifying the head
+repository, so fork status is unknowable from the event alone. `detectFork` therefore reports the
+restrictive answer for pull request comments, and the real answer comes from fetching the pull
+request before policy is built. Do not "simplify" that back to reading the payload.
+
+Serialize runs per pull request with a `concurrency` group. Prefer leaving `cancel-in-progress`
+off, so a review someone explicitly asked for finishes rather than being cancelled by a later push.
 
 ## Mention-Driven Implement
 

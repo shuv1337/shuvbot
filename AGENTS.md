@@ -205,6 +205,40 @@ bun run evals
      specialists finish, so specialists must be created with
      `createSession({ policy })`, not forked. `createSession` rejects any policy
      that widens `REVIEW_SESSION_POLICY` before the server enforces it.
+- **Comment-triggered review has three couplings that are easy to break.**
+  `@shuvbot review` on a pull request is live (verified end to end on PR #22:
+  the `issue_comment` run resolved `refs/pull/22/merge`, checked it out, and
+  posted inline findings).
+  1. **Review skills trigger on `pull_request` actions**
+     (`core/src/skills/*.ts`), so a comment event selects _no_ skills and
+     reviews nothing. `resolveReviewTarget`
+     (`packages/github/src/pull-requests.ts`) therefore re-runs
+     `normalizeEvent` to present a comment as a synthesized `pull_request`
+     event with action `synchronize`. Synthesis exists so fork/draft/head/base
+     keep coming from `parsePullRequest` instead of a second, drifting copy.
+  2. **Fork status is unknowable from an `issue_comment` payload** - it carries
+     an `issue`, no head repository. `detectFork` deliberately reports `true`
+     for a comment on a pull request so the unknown case is the restrictive
+     one, and the real answer comes from fetching the pull request _before_
+     policy is built (`deriveActorContext` takes an `isFork` override).
+     `parsePullRequest` treats a null `head.repo` (a deleted fork) as a fork
+     for the same reason. Both were permissive before and neither is cosmetic:
+     they gate shell, push, secrets, and `canReview`.
+  3. **A comment must mention the bot to start a review.** Without that guard
+     every comment on every pull request starts one. The workflow additionally
+     requires write access purely to avoid spending a run; the action does not
+     trust it.
+     The workflow checks out `refs/pull/N/merge` **only for a same-repo head** -
+     fork code must never land in a job holding `CLAUDE_CODE_OAUTH_TOKEN`. Fork
+     pull requests are still reviewed but never posted to, and that refusal is now
+     reported rather than silent.
+- **`main()` no longer exits green when nothing handled the run.** The
+  fall-through used to emit `status: "initialized"` and a success summary, so
+  an `@shuvbot` mention that matched no handler produced no review, no error,
+  and a green check. An explicit mention now throws `UnsupportedRequestError`;
+  an ambient event logs a reason and reports `status: "skipped"`.
+  `explainUnhandledRun` mirrors the branch conditions in `main()` - keep the
+  two in step when adding a mode.
 - The eval harness's 10 "hardening" cases (`packages/evals/cases/*`) run a
   real diff through the actual review pipeline with a scripted agent that
   only answers for the case's expected skill id - this proves skill

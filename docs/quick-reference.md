@@ -201,8 +201,24 @@ fail_on = "high"        # severity that counts
 Only **review** mode runs a real agent. `implement`, `improve`, `fix-ci`, `ask`, and `describe` run
 their policy and tooling path and stop at a documented no-op. See `docs/workflows.md`.
 
-Mention commands like `@shuvbot review` are handled by the action, but this workflow only listens
-to `pull_request`. Add an `issue_comment` trigger to use them.
+### Asking for a review by comment
+
+Comment `@shuvbot review` on any pull request to review it on demand, instead of waiting for a
+push. It needs an `issue_comment` trigger in the workflow; see
+`.github/workflows/shuvbot.yml` in this repository for the shape.
+
+Four things are worth knowing:
+
+- A comment starts a review only when it **mentions the bot**. Ordinary comments are ignored, so
+  discussion on a pull request does not spend a run.
+- The comment author must already have **write access**. The workflow checks this to avoid
+  spending a run, and the action re-derives permission itself rather than trusting it.
+- **Fork pull requests are reviewed but not posted to.** `canReview` refuses to publish on a fork
+  head. The run says so explicitly rather than looking like a review that found nothing.
+- The workflow checks out the pull request's merge ref **only for a same-repository head**, so the
+  agent reads the changed files rather than the base branch. A fork head keeps the default
+  checkout, because checking out fork code in a job holding `CLAUDE_CODE_OAUTH_TOKEN` is the one
+  thing this trigger must not do.
 
 ## Choosing a path
 
