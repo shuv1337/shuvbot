@@ -648,7 +648,7 @@ async function persistLocalArtifacts(input: {
       repo: "local/repo",
       event: "local_review",
       actor: "local",
-      trigger: "reviewbot review",
+      trigger: "shuvbot review",
       mode: input.config.mode,
       agent: input.config.agent,
       model: input.config.review.models.coordinator

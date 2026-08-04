@@ -4,4 +4,4 @@ node_modules/
 .reviewbot/
 
 # Compiled local CLI executable
-bin/reviewbot
+bin/shuvbot

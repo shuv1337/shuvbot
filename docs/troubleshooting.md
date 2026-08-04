@@ -3,7 +3,7 @@
 Run diagnostics:
 
 ```bash
-reviewbot doctor
+shuvbot doctor
 ```
 
 From this repository without an installed `reviewbot` binary, use:
@@ -51,7 +51,7 @@ supplies `--engine coordinator`; duplicate flags are rejected, so do not append 
 
 Common failures:
 
-- Config rejected: run `reviewbot config validate reviewbot.toml`.
+- Config rejected: run `shuvbot config validate reviewbot.toml`.
 - Claude CLI missing (`claude: not found`): install Claude Code before the shuvbot action step and add `$HOME/.local/bin` to `GITHUB_PATH` as shown in `docs/workflows.md`.
 - No Claude auth: set `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. Review-mode agent failures include a redacted stdout/stderr tail in the step log and in `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt` when the pipeline fails before normal review artifacts are written.
 - No comments posted: check job `permissions`, runtime policy reasons, and fork status.

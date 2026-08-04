@@ -1,21 +1,21 @@
 {
-  "name": "reviewbot",
+  "name": "shuvbot",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "reviewbot": "./packages/cli/src/index.ts"
+    "shuvbot": "./packages/cli/src/index.ts"
   },
   "scripts": {
     "build": "tsup",
-    "build:cli": "bun build --compile --outfile bin/reviewbot packages/cli/src/index.ts",
+    "build:cli": "bun build --compile --outfile bin/shuvbot packages/cli/src/index.ts",
     "release": "bun scripts/release.ts",
     "test": "bun test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "evals": "bun packages/evals/src/harness.ts",
     "smoke:runtime": "bun scripts/runtime-compat-smoke.ts",
-    "dogfood:review": "bun packages/cli/src/index.ts review --engine coordinator",
+    "dogfood:review": "bun packages/cli/src/index.ts review",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -19,13 +19,13 @@ Changing local models does not change what the Action does.
 Build the executable once, then put it on `PATH`:
 
 ```bash
-bun run build:cli                                   # -> bin/reviewbot
-ln -sf "$PWD/bin/reviewbot" ~/.local/bin/reviewbot
+bun run build:cli                                   # -> bin/shuvbot
+ln -sf "$PWD/bin/shuvbot" ~/.local/bin/shuvbot
 ```
 
 ```bash
-reviewbot review                          # current work, in any repository
-reviewbot review --base main --head HEAD
+shuvbot review                          # current work, in any repository
+shuvbot review --base main --head HEAD
 ```
 
 Without building, run from source with `bun packages/cli/src/index.ts review`.
@@ -58,15 +58,15 @@ would skip the change being worked on.
 | Git     | `main`                                              | `HEAD`       |
 
 **Under Jujutsu there is no uncommitted work.** The working copy is the commit `@`, so a bare
-`reviewbot review` reviews what you are working on right now, edits included. The working copy is
+`shuvbot review` reviews what you are working on right now, edits included. The working copy is
 recorded before the review reads it, so what is on disk is what gets reviewed. Both flags accept any
 revset:
 
 ```bash
-reviewbot review                              # trunk through current work
-reviewbot review --base '@-' --head '@'       # just this change
-reviewbot review --base 'trunk()' --head '@'  # the whole stack
-reviewbot review --base 'xyzabcd' --head '@'  # from a change id
+shuvbot review                              # trunk through current work
+shuvbot review --base '@-' --head '@'       # just this change
+shuvbot review --base 'trunk()' --head '@'  # the whole stack
+shuvbot review --base 'xyzabcd' --head '@'  # from a change id
 ```
 
 Because `@` keeps its change id across amends, rerunning after an edit reuses the same incremental
@@ -201,7 +201,7 @@ fail_on = "high"        # severity that counts
 Only **review** mode runs a real agent. `implement`, `improve`, `fix-ci`, `ask`, and `describe` run
 their policy and tooling path and stop at a documented no-op. See `docs/workflows.md`.
 
-Mention commands like `@reviewbot review` are handled by the action, but this workflow only listens
+Mention commands like `@shuvbot review` are handled by the action, but this workflow only listens
 to `pull_request`. Add an `issue_comment` trigger to use them.
 
 ## Choosing a path

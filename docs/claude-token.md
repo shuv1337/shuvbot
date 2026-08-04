@@ -16,25 +16,25 @@ If both are present, `CLAUDE_CODE_OAUTH_TOKEN` wins. Blank values are ignored.
 Use the local Claude CLI to create a long-lived token:
 
 ```bash
-reviewbot auth claude setup-token
+shuvbot auth claude setup-token
 ```
 
 To store it directly as a GitHub secret:
 
 ```bash
-reviewbot auth claude setup-token --repo owner/repo
+shuvbot auth claude setup-token --repo owner/repo
 ```
 
 The default secret name is `CLAUDE_CODE_OAUTH_TOKEN`. Override it with:
 
 ```bash
-reviewbot auth claude setup-token --repo owner/repo --secret CLAUDE_CODE_OAUTH_TOKEN
+shuvbot auth claude setup-token --repo owner/repo --secret CLAUDE_CODE_OAUTH_TOKEN
 ```
 
 You can also pipe an existing token:
 
 ```bash
-claude setup-token | reviewbot auth claude import --repo owner/repo
+claude setup-token | shuvbot auth claude import --repo owner/repo
 ```
 
 ## Runtime handling
@@ -51,7 +51,7 @@ claude setup-token | reviewbot auth claude import --repo owner/repo
 Run:
 
 ```bash
-reviewbot doctor
+shuvbot doctor
 ```
 
 The doctor checks config validity, `gh` auth, Claude CLI availability, Claude auth source, git state, Bun/Node versions, MCP server startup, and redaction behavior.

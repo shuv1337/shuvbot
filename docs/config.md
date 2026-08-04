@@ -210,7 +210,7 @@ build, private package export, or guessed future version.
 
 With `use_user_auth = true`, the isolated shuvcode process reuses the provider authentication already available through the user's shuvcode profile and XDG profile paths. Shuvbot passes profile locations needed by the child process but does not read, copy, log, inject, or expose subscription credential values to review sessions. This local subscription path is distinct from future non-interactive GitHub Actions authentication.
 
-`reviewbot doctor` inspects this auth through the packed public `auth.status()` API. The response is
+`shuvbot doctor` inspects this auth through the packed public `auth.status()` API. The response is
 secret-safe and local-only: it reports configured source/type, structural usability, detectable OAuth
 expiry, and storage availability with `verification: not_performed`. A passing check means usable
 local auth is configured, not that a provider remotely accepted it. The check performs no refresh,

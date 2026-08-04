@@ -2,7 +2,7 @@
 
 Mention commands use the `@reviewbot` prefix:
 
-- `@reviewbot review` maps to review mode. Runs a real agent.
+- `@shuvbot review` maps to review mode. Runs a real agent.
 - `@reviewbot implement <task>` maps to trusted implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
 - `@reviewbot improve <task>` maps to implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
 - `@reviewbot fix-ci` maps to CI repair mode. Not yet wired to a real agent - see `docs/workflows.md`.
@@ -12,12 +12,12 @@ Mention commands use the `@reviewbot` prefix:
 
 CLI commands:
 
-- `reviewbot review [--base <rev>] [--head <rev>] [--config <path>] [--engine legacy|coordinator] [--json]`
-- `reviewbot replay --fixture fixtures/events/pull_request.opened.json --dry-run`
-- `reviewbot doctor`
-- `reviewbot auth claude setup-token`
-- `reviewbot auth claude import`
-- `reviewbot config validate [path]`
+- `shuvbot review [--base <rev>] [--head <rev>] [--config <path>] [--engine legacy|coordinator] [--json]`
+- `shuvbot replay --fixture fixtures/events/pull_request.opened.json --dry-run`
+- `shuvbot doctor`
+- `shuvbot auth claude setup-token`
+- `shuvbot auth claude import`
+- `shuvbot config validate [path]`
 
 `review` uses a three-dot range and detects the VCS. Under Git it defaults to `main...HEAD`. Under
 Jujutsu, including a colocated repository, it defaults to the trunk fork point through the

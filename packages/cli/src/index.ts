@@ -48,7 +48,7 @@ async function run(): Promise<void> {
     return;
   }
 
-  if (command === "init") return stub("reviewbot init");
+  if (command === "init") return stub("shuvbot init");
   if (command === "review") {
     const result = await runReviewCommand(args.slice(1), {
       cwd: process.cwd(),
@@ -59,14 +59,14 @@ async function run(): Promise<void> {
     }
     return;
   }
-  if (command === "run") return stub("reviewbot run");
+  if (command === "run") return stub("shuvbot run");
   if (command === "doctor") {
     process.exitCode = await runDoctorCommand({ stdout: process.stdout });
     return;
   }
   if (command === "replay") {
     const fixture = optionValue(args, "--fixture") ?? args[1];
-    if (!fixture) throw new ConfigError("reviewbot replay requires --fixture <path>.");
+    if (!fixture) throw new ConfigError("shuvbot replay requires --fixture <path>.");
     await runReplay({ fixture, dryRun: args.includes("--dry-run"), stdout: process.stdout });
     return;
   }
@@ -200,18 +200,27 @@ function stub(name: string): void {
 }
 
 function printHelp(): void {
-  console.log(`reviewbot
+  console.log(`shuvbot - GitHub-native code review and coding agent
 
-Commands:
-  init
-  review [--base <ref>] [--head <ref>] [--config <path>]
-         [--engine legacy|coordinator] [--json]
-  run
-  auth claude setup-token
-  auth claude import
-  doctor
-  replay
-  config validate [path]
+Usage: shuvbot <command> [options]
+
+Review:
+  review [--base <rev>] [--head <rev>] [--config <path>]
+         [--engine coordinator|legacy] [--json]
+         Review a range. Defaults to main...HEAD under Git, and the trunk
+         fork point through the working-copy commit @ under Jujutsu.
+
+Setup:
+  doctor                    Check prerequisites, auth, runtime, and models
+  auth claude setup-token   Mint a Claude Code OAuth token
+  auth claude import        Import a token from stdin
+  config validate [path]    Validate a shuvbot config file
+
+Development:
+  replay --fixture <path> [--dry-run]   Replay a recorded GitHub event
+
+Not implemented yet:
+  init, run
 `);
 }
 
