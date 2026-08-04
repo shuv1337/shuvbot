@@ -12,14 +12,16 @@ Mention commands use the `@reviewbot` prefix:
 
 CLI commands:
 
-- `reviewbot review --base main --head HEAD [--config <path>] [--engine legacy|coordinator] [--json]`
+- `reviewbot review [--base <rev>] [--head <rev>] [--config <path>] [--engine legacy|coordinator] [--json]`
 - `reviewbot replay --fixture fixtures/events/pull_request.opened.json --dry-run`
 - `reviewbot doctor`
 - `reviewbot auth claude setup-token`
 - `reviewbot auth claude import`
 - `reviewbot config validate [path]`
 
-`review` uses a three-dot Git range and defaults to `main...HEAD`. A local `reviewbot.toml` is loaded
+`review` uses a three-dot range and detects the VCS. Under Git it defaults to `main...HEAD`. Under
+Jujutsu, including a colocated repository, it defaults to the trunk fork point through the
+working-copy commit `@`, so work in progress is reviewed; `--base`/`--head` accept revsets there. A local `reviewbot.toml` is loaded
 when present; an explicit missing `--config` is an error. Flags are strict: unknown, positional,
 missing-value, invalid, and duplicate options fail rather than being ignored.
 

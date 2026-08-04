@@ -16,41 +16,73 @@ Changing local models does not change what the Action does.
 
 ## Local reviews
 
-```bash
-bun packages/cli/src/index.ts review --base main --head HEAD
-```
-
-From another repository, point at this checkout:
+Build the executable once, then put it on `PATH`:
 
 ```bash
-cd ~/repos/some-project
-bun ~/repos/shuvbot/packages/cli/src/index.ts review --base main --head HEAD
+bun run build:cli                                   # -> bin/reviewbot
+ln -sf "$PWD/bin/reviewbot" ~/.local/bin/reviewbot
 ```
 
-The runtime is found in the reviewed repository first, then in reviewbot's own install, so the
-reviewed project does not need to depend on `shuvcode`.
+```bash
+reviewbot review                          # current work, in any repository
+reviewbot review --base main --head HEAD
+```
+
+Without building, run from source with `bun packages/cli/src/index.ts review`.
+
+Keep the binary in this checkout, or symlink it as above: it finds `shuvcode` next to its real
+location, so a symlink on `PATH` works but a copy moved elsewhere does not. The runtime is looked up
+in the reviewed repository first and beside reviewbot second, so the reviewed project does not need
+to depend on `shuvcode`.
 
 | Flag                           | Meaning                                                                       |
 | ------------------------------ | ----------------------------------------------------------------------------- |
-| `--base <ref>`                 | Range start. Defaults to `main`.                                              |
-| `--head <ref>`                 | Range end. Defaults to `HEAD`.                                                |
+| `--base <rev>`                 | Range start. Defaults per VCS, see below.                                     |
+| `--head <rev>`                 | Range end. Defaults per VCS, see below.                                       |
 | `--config <path>`              | Load a specific TOML instead of `./reviewbot.toml`. Missing file is an error. |
 | `--engine coordinator\|legacy` | Override the configured engine. `legacy` fails closed.                        |
 | `--json`                       | Stable machine-readable report instead of progress output.                    |
 
-The range is three-dot, so `--base main --head HEAD` reviews what your branch adds relative to
-`main`. Flags are strict: unknown, duplicate, or valueless options fail rather than being ignored.
+The range is three-dot, so it reviews what your side adds rather than what the other side moved on
+to. Flags are strict: unknown, duplicate, or valueless options fail rather than being ignored.
 
-Reviews read **committed** history. Uncommitted work is invisible, so commit before reviewing or the
-feedback describes the previous state.
+### Jujutsu and Git
 
-Common ranges:
+Reviewbot detects the VCS and picks defaults to match. A colocated repository counts as Jujutsu,
+because Git's `HEAD` there is the _parent_ of the working-copy commit, so reading it through Git
+would skip the change being worked on.
+
+| VCS     | Default base                                        | Default head |
+| ------- | --------------------------------------------------- | ------------ |
+| Jujutsu | `fork_point(trunk() \| @)`, or `@-` without a trunk | `@`          |
+| Git     | `main`                                              | `HEAD`       |
+
+**Under Jujutsu there is no uncommitted work.** The working copy is the commit `@`, so a bare
+`reviewbot review` reviews what you are working on right now, edits included. The working copy is
+recorded before the review reads it, so what is on disk is what gets reviewed. Both flags accept any
+revset:
+
+```bash
+reviewbot review                              # trunk through current work
+reviewbot review --base '@-' --head '@'       # just this change
+reviewbot review --base 'trunk()' --head '@'  # the whole stack
+reviewbot review --base 'xyzabcd' --head '@'  # from a change id
+```
+
+Because `@` keeps its change id across amends, rerunning after an edit reuses the same incremental
+state, so findings you fixed are recognised as fixed instead of reported again.
+
+**Under Git, reviews read committed history only.** Uncommitted work is invisible, so commit first or
+the feedback describes the previous state.
 
 ```bash
 --base HEAD~1 --head HEAD   # last commit
 --base main   --head HEAD   # whole branch
---base origin/master --head HEAD
 ```
+
+Jujutsu revisions are resolved by `jj` into ordinary Git commits, so everything after resolution is
+identical for both. `jj` must be on `PATH` in a Jujutsu workspace; if it is missing, reviewbot says
+so and suggests an explicit Git range.
 
 ### Reading the result
 
@@ -131,10 +163,11 @@ bun run smoke:runtime                    # drive the pinned runtime end to end
 | ----------------------------------------------- | ------------------------------------------------------------------------------ |
 | `REVIEW_CONFIG_INVALID` naming a model          | Model or effort is not curated. The message lists the accepted ones.           |
 | `REVIEW_SCHEMA_INVALID`                         | A result failed validation. The value is in `reviewbot-rejected-results.json`. |
-| `Cannot resolve the installed shuvcode package` | Run `bun install` in this checkout.                                            |
+| `Cannot resolve the installed shuvcode package` | Run `bun install` here; a binary copied elsewhere cannot find it.              |
+| `jj` executable not found                       | Install jj, or pass an explicit `--base`/`--head` Git range.                   |
 | Runtime pin mismatch                            | `review.shuvcode.version` must equal the code-approved pin.                    |
 | `no_changes` / `no_reviewable_changes`          | The range is empty or entirely ignored by `[paths]`.                           |
-| Review describes code you already fixed         | Uncommitted work. Commit and rerun.                                            |
+| Review describes code you already fixed         | Git only: uncommitted work. Commit and rerun, or use Jujutsu.                  |
 
 ## GitHub reviews
 

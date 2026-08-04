@@ -150,6 +150,19 @@ bun run evals
   defense-in-depth: the streaming `DefaultRedactor` is pattern-based (can miss
   a token split across stream chunks), so the driver also does an exact-value
   scrub against the resolved auth values - never remove that.
+- **Local review is VCS-aware, and Jujutsu is authoritative in a colocated
+  repo.** `packages/cli/src/vcs.ts` detects a `.jj` workspace. This matters
+  because Git's `HEAD` in a colocated repo is the **parent** of the working-copy
+  commit, so reading through Git silently omits the change being worked on -
+  which is exactly the "reviews only see committed work" complaint. Under
+  Jujutsu the default range is `fork_point(trunk() | @)`..`@` (or `@-`..`@`
+  without a trunk), the working copy is recorded with `jj util snapshot` first,
+  and revisions are resolved with `jj log -T commit_id`. Jujutsu writes a real
+  Git commit for every revision **including `@`**, so once resolved, the entire
+  existing Git diff pipeline is reused unchanged - don't reimplement diffing
+  against `jj diff`. `--base`/`--head` accept revsets, so revision validation
+  permits spaces and parentheses under Jujutsu; nothing is ever passed through a
+  shell.
 - **Real coordinator reviews work, and four prompt-path faults were only ever
   visible in a real run.** All four are fixed and covered by tests; keep them
   in mind before changing the session or prompt path:
