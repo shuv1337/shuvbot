@@ -28,10 +28,15 @@ otherwise without checking `main.ts` directly.
   specialist/coordinator execution, quorum, incremental state, scheduling,
   observability, and the isolated shuvcode adapter. The local CLI routes to
   this coordinator path, but the GitHub Action does not.
-- Production local review currently fails closed: `legacy` remains the config
-  default but has no safe local production driver, and coordinator execution
-  rejects before Git while the code-approved shuvcode runtime pin is `null`.
-  This does not affect the live Claude-backed GitHub Action review path.
+- Production local `legacy` review fails closed: it remains the config default
+  but has no safe local production driver. Coordinator execution no longer
+  fails closed on the pin - the code-approved shuvcode runtime pin is
+  `2.0.0-alpha-9` (`APPROVED_SHUVCODE_RUNTIME_VERSION` in
+  `packages/core/src/config.ts`), verified against the published release by
+  `bun run smoke:runtime`. It still requires `review.shuvcode.use_user_auth`
+  and a local shuvcode subscription profile, and a mismatched or null pin
+  still rejects before any Git work. None of this affects the live
+  Claude-backed GitHub Action review path.
 - `dist/index.js` is the compiled GitHub Action output produced by
   `bun run build`. It is committed but only regenerated periodically via a
   dedicated `chore(build): regenerate dist/index.js`-style commit, not on
@@ -78,7 +83,7 @@ otherwise without checking `main.ts` directly.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
 - Keep `review.engine = "legacy"` as the default until the corrected shuvcode release is published, real local subscription dogfooding passes, and the default switch is explicitly approved.
-- Do not describe either local review engine as production-ready while legacy has no safe local driver and the coordinator runtime pin is unapproved. Action coordinator routing and GitHub-native coordinator writes remain future work.
+- Do not describe either local review engine as production-ready while legacy has no safe local driver and the coordinator path has not completed real subscription dogfood. Action coordinator routing and GitHub-native coordinator writes remain future work.
 
 ## Repository automation
 
@@ -143,6 +148,25 @@ bun run evals
   defense-in-depth: the streaming `DefaultRedactor` is pattern-based (can miss
   a token split across stream chunks), so the driver also does an exact-value
   scrub against the resolved auth values - never remove that.
+- **Two packed shuvcode runtime constraints the fake runtime cannot show you.**
+  Both were found only by running `bun run smoke:runtime` against the real
+  published release, and both are now covered by tests
+  (`packages/review/test/runtime-package-resolution.test.ts` and the
+  fork-precondition case in `packages/review/test/engine.test.ts`):
+  1. The release's manifest exports `shuvcode/client` under the **`import`
+     condition only**, so CJS `require.resolve("shuvcode/client")` always fails
+     with `ERR_PACKAGE_PATH_NOT_EXPORTED`. `resolveInstalledPackage` therefore
+     walks `node_modules` and reads the packed manifest's own `bin`/`exports`
+     fields instead of using any condition-dependent resolver. Don't "simplify"
+     it back to `createRequire().resolve`.
+  2. `Session.fork` resolves its boundary from the parent's rows in
+     `SessionMessageTable`, so **forking a session that has never been prompted
+     fails** with `InvalidRequestError … kind: "empty_session"`. `session.synthetic`
+     does not satisfy it (different record type) and `session.message` is a
+     getter, not an append. The coordinator session is prompted only _after_
+     specialists finish, so specialists must be created with
+     `createSession({ policy })`, not forked. `createSession` rejects any policy
+     that widens `REVIEW_SESSION_POLICY` before the server enforces it.
 - The eval harness's 10 "hardening" cases (`packages/evals/cases/*`) run a
   real diff through the actual review pipeline with a scripted agent that
   only answers for the case's expected skill id - this proves skill

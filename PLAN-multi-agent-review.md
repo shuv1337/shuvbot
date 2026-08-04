@@ -14,7 +14,7 @@ Primary external reference:
 
 1. Multi-agent review is a subsystem of the broader shuvbot agent bridge.
 2. Review orchestration uses OpenCode through the shuvcode fork, not a new shuvbot-owned agent scheduler.
-3. The runtime is an isolated process pinned to a tested shuvcode release. `1.18.4` is the current source baseline in `~/repos/shuvcode`; the executable pin must move to the first corrected release whose packed artifacts pass the M3 smoke test.
+3. The runtime is an isolated process pinned to a tested shuvcode release. `1.18.4` remains the historical source baseline in `~/repos/shuvcode`; the approved executable pin is `2.0.0-alpha-9`, the first corrected release whose packed artifacts pass the M3 smoke test.
 4. Missing generic runtime capabilities belong in upstreamable shuvcode APIs. Review policy and reviewer behavior remain in shuvbot.
 5. Local CLI is the first delivery target. GitHub Actions follows after local dogfooding.
 6. Local provider authentication is delegated to the user's shuvcode profile. Shuvbot does not read or inject local subscription credentials.
@@ -38,8 +38,8 @@ Updated 2026-08-03:
 
 - [x] M1 contracts and deterministic preprocessing: coordinator config, diff filtering, shared workspace, risk tiers, content-relevant lite assignment, deterministic fingerprints, canonical finding metadata, and deeply immutable execution plans are implemented with tests.
 - [x] M2 plugin core: lifecycle ordering, failure semantics, immutable assembly, six built-ins, bounded repo overrides, code-owned provider/model catalogs, and narrowing-only read tools are implemented with tests. Runtime-discovered catalog values will be supplied by M4 execution.
-- [ ] M3 shuvcode runtime prerequisites: shuvcode source now has general v2 structured output, a version-matched packed Promise client, server-enforced session policy, public `auth.status()`, and pack/install/stdio coverage. Release dispatch is still blocked on a reviewed commit, trusted publisher/manual workflow, and registry verification. Shuvbot's approved executable runtime pin is therefore `null`; `1.18.4` remains only the source baseline. Remaining work is to publish the corrected release, packed-smoke it, update the code pin, and run the real compatibility smoke.
-- [ ] M4 coordinator execution: all six specialist prompts, shared mandatory rules, strict typed reviewer/coordinator results, bounded scheduling, specialist/coordinator/overall hard deadlines, cancellation, one bounded structured-output repair, provenance validation, deterministic finalization, server-enforced read-only session policy integration, and the isolated runtime adapter are implemented with fake-runtime end-to-end coverage. The exit criterion remains unmet because no real local subscription session can run before M3 approves a release.
+- [x] M3 shuvcode runtime prerequisites: `shuvcode@2.0.0-alpha-9` is published to npm across all 19 fork packages with matching dist-tags and a GitHub release on tag `v2.0.0-alpha-9`. The code-approved executable pin is `2.0.0-alpha-9`, and `bun run smoke:runtime` passes 9/9 against the published artifacts: the pinned isolated process starts, the coordinator session and narrowed specialist sessions are created and server-enforced, widening is rejected, an active session is interrupted, and shutdown leaks no process. Two defects found by that smoke are fixed: the adapter resolved the packed client with CJS `require.resolve`, which can never match the release's `import`-only export map, and specialists forked an unprompted coordinator session, which the runtime rejects with `empty_session`.
+- [ ] M4 coordinator execution: all six specialist prompts, shared mandatory rules, strict typed reviewer/coordinator results, bounded scheduling, specialist/coordinator/overall hard deadlines, cancellation, one bounded structured-output repair, provenance validation, deterministic finalization, server-enforced read-only session policy integration, and the isolated runtime adapter are implemented with fake-runtime end-to-end coverage. Session creation, policy enforcement, and shutdown are now proven against the published runtime by the M3 smoke. The exit criterion remains unmet because `reviewbot review --engine coordinator` has not yet returned a validated coordinator result from a real local subscription session, which needs an authenticated provider run.
 - [x] M5 quorum, resilience, and observability: tier-aware quorum and degradation, stable error classification, bounded retries/interruption, safe runtime event and usage translation, complete repair/session accounting, run-record coverage, and durable redacted run/session/result artifacts are integrated and tested. This completes the local M5 exit criterion; GitHub artifact upload remains M8 work.
 - [x] M6 incremental lifecycle: validated atomic file state, deterministic reconciliation for unresolved, fixed, degraded, user-resolved, and materially worsened findings, paginated bot-thread/reply ingestion, and a tested two-run local lifecycle complete the M6 exit criterion. GitHub-native state writes remain gated on M8 rather than being treated as local M6 completion work.
 - [ ] M7 local dogfood UX: local engine selection, strict flags, live progress, stable JSON, no-change results, incremental state, durable artifacts, and coordinator-aware doctor diagnostics are implemented. The dogfood matrix and manual acceptance criteria have not run, so M7 remains incomplete.
@@ -61,7 +61,7 @@ Updated 2026-08-03:
 ### Remaining release and integration gates
 
 - Local `legacy` remains the config default but fails closed before Git because no safe production legacy driver exists. Tests can inject a fake `ReviewAgent`; production does not silently return fake findings.
-- Local coordinator routing and execution are implemented, but the approved shuvcode runtime version is `null`. Coordinator mode fails before Git until a corrected release is published, its packed public contracts pass smoke testing, and the code-owned exact pin is updated.
+- Local coordinator routing and execution are implemented and the approved shuvcode runtime pin is `2.0.0-alpha-9`, so coordinator mode no longer fails closed on the pin. It still requires `review.shuvcode.use_user_auth = true` and a working local shuvcode subscription profile; an unapproved or mismatched pin continues to fail before any Git work.
 - Real subscription dogfood has not run. M7 remains unchecked until the documented repository/change matrix and manual quality, latency, degradation, and incremental acceptance criteria are recorded.
 - `packages/action/src/main.ts` still uses the legacy fake-agent pipeline and does not select the coordinator. GitHub-native coordinator posting, state writes, artifact upload, non-interactive auth, and cancellation remain M8 work.
 - The default must remain `legacy` until M3, M4, M7, and M8 evidence is reviewed and the M9 switch is explicitly approved; this default is a migration setting, not a claim that production local legacy review works.
@@ -457,6 +457,17 @@ Work in shuvbot:
 Exit criteria:
 
 - A shuvbot test starts the pinned isolated process, creates parent and child sessions, receives events, interrupts a session, and shuts down without leaked processes.
+
+Status: met by `bun run smoke:runtime` against `shuvcode@2.0.0-alpha-9` (9/9). Two
+constraints were discovered and are now encoded in the adapter and its tests:
+
+- The release exports `shuvcode/client` under the `import` condition only, so the
+  packed package must be resolved from its manifest rather than by CJS
+  `require.resolve`.
+- `Session.fork` resolves its boundary from the parent's persisted messages, so an
+  unprompted session cannot be forked. Specialists are therefore independent
+  sessions created with an explicitly narrowed, server-enforced policy rather than
+  forks of the coordinator.
 
 ### M4: Coordinator and specialist execution
 
