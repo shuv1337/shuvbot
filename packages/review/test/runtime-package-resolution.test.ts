@@ -101,12 +101,41 @@ describe("packed shuvcode package resolution", () => {
     }
   });
 
-  test("fails closed when the package is not installed", async () => {
+  test("fails closed when the package is installed nowhere", async () => {
     const root = await mkdtemp(join(tmpdir(), "reviewbot-packed-missing-"));
     try {
       await expect(
-        startShuvcodeRuntime({ packageName: "shuvcode", version: "2.0.0-alpha-9", cwd: root })
-      ).rejects.toThrow(/Cannot resolve the installed shuvcode package/);
+        startShuvcodeRuntime({
+          packageName: "shuvcode-not-installed-anywhere",
+          version: "2.0.0-alpha-9",
+          cwd: root
+        })
+      ).rejects.toThrow(/Cannot resolve the installed shuvcode-not-installed-anywhere package/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to reviewbot's own installation for a repository without the runtime", async () => {
+    // Reviewing a repository that does not itself depend on the runtime must work.
+    const root = await mkdtemp(join(tmpdir(), "reviewbot-packed-fallback-"));
+    try {
+      const observed: string[] = [];
+      const controller = new AbortController();
+      await startShuvcodeRuntime({
+        packageName: "shuvcode",
+        version: "2.0.0-alpha-9",
+        cwd: root,
+        signal: controller.signal,
+        dependencies: {
+          spawn: (command) => {
+            observed.push(command);
+            controller.abort();
+            throw new Error("stop after resolution");
+          }
+        }
+      }).catch(() => undefined);
+      expect(observed[0]).toContain(join("node_modules", "shuvcode"));
     } finally {
       await rm(root, { recursive: true, force: true });
     }

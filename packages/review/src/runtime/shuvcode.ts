@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFile, stat } from "node:fs/promises";
 import {
   classifyReviewError,
@@ -632,17 +632,28 @@ function clientEntry(exports: unknown): string | undefined {
 }
 
 /** Walks `node_modules` from the review directory upward, as Node resolution would. */
+/**
+ * Finds the installed runtime, preferring the reviewed repository and falling
+ * back to reviewbot's own installation. Only the reviewed repository was
+ * searched before, which meant reviewing any repository that did not itself
+ * depend on the runtime failed before it started. The runtime still runs with
+ * the reviewed repository as its working directory; only the package location
+ * differs.
+ */
 async function findInstalledPackageDirectory(packageName: string, cwd: string): Promise<string> {
-  let directory = cwd;
-  while (true) {
-    const candidate = join(directory, "node_modules", packageName);
-    if (await isFile(join(candidate, "package.json"))) return candidate;
-    const parent = dirname(directory);
-    if (parent === directory) break;
-    directory = parent;
+  const roots = [cwd, dirname(fileURLToPath(import.meta.url))];
+  for (const root of roots) {
+    let directory = root;
+    while (true) {
+      const candidate = join(directory, "node_modules", packageName);
+      if (await isFile(join(candidate, "package.json"))) return candidate;
+      const parent = dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
   }
   throw new Error(
-    `Cannot resolve the installed ${packageName} package from ${cwd}. ` +
+    `Cannot resolve the installed ${packageName} package from ${cwd} or from reviewbot itself. ` +
       `Install the exact configured ${packageName} release in ${cwd}.`
   );
 }

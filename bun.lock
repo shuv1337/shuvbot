@@ -16,6 +16,7 @@
         "@types/node": "^22.15.19",
         "eslint": "^9.27.0",
         "prettier": "^3.5.3",
+        "shuvcode": "2.0.0-alpha-9",
         "tsup": "^8.4.0",
         "typescript": "^5.8.3",
         "typescript-eslint": "^8.32.1",
@@ -516,6 +517,32 @@
     "shebang-command": ["shebang-command@2.0.0", "", { "dependencies": { "shebang-regex": "^3.0.0" } }, "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA=="],
 
     "shebang-regex": ["shebang-regex@3.0.0", "", {}, "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A=="],
+
+    "shuvcode": ["shuvcode@2.0.0-alpha-9", "", { "optionalDependencies": { "shuvcode-darwin-arm64": "2.0.0-alpha-9", "shuvcode-darwin-x64": "2.0.0-alpha-9", "shuvcode-darwin-x64-baseline": "2.0.0-alpha-9", "shuvcode-linux-arm64": "2.0.0-alpha-9", "shuvcode-linux-arm64-musl": "2.0.0-alpha-9", "shuvcode-linux-x64": "2.0.0-alpha-9", "shuvcode-linux-x64-baseline": "2.0.0-alpha-9", "shuvcode-linux-x64-baseline-musl": "2.0.0-alpha-9", "shuvcode-linux-x64-musl": "2.0.0-alpha-9", "shuvcode-windows-arm64": "2.0.0-alpha-9", "shuvcode-windows-x64": "2.0.0-alpha-9", "shuvcode-windows-x64-baseline": "2.0.0-alpha-9" }, "os": [ "linux", "win32", "darwin", ], "cpu": [ "x64", "arm64", ], "bin": { "shuvcode": "bin/launcher.mjs" } }, "sha512-Xmj8LNnX2IAfRI59+KOEeKjgpEnxGVLxzdXJlZ8KiaX/5odU7g3ZkiB1kiGMuaWfR1PTTyrjyd9/x5r6+qBLhw=="],
+
+    "shuvcode-darwin-arm64": ["shuvcode-darwin-arm64@2.0.0-alpha-9", "", { "os": "darwin", "cpu": "arm64" }, "sha512-SCNmdgPZ/aUhg9MXdtKCBwE38H50bP2XCeOLCsLdUYvyKanagwv7c1alt8ivGScsWpQ1sNZvXQ2e3Oor7LRaFg=="],
+
+    "shuvcode-darwin-x64": ["shuvcode-darwin-x64@2.0.0-alpha-9", "", { "os": "darwin", "cpu": "x64" }, "sha512-FiRVx/38AfQEPmlKRhVSvcA1NNrslM0Mx+Wy17CEVGFCAvh8CQXG86UsoSckrgVbWBQBSDrbL1xkCrsZ9PAtdA=="],
+
+    "shuvcode-darwin-x64-baseline": ["shuvcode-darwin-x64-baseline@2.0.0-alpha-9", "", { "os": "darwin", "cpu": "x64" }, "sha512-QPtCrBnSB1B/HCBQdSVUBfoyx4IsIAWch3MhaOXQ6AlcdMWH0vxaqSYzL4VSwxyGaqtf4C9laDR5V32rsRIB9Q=="],
+
+    "shuvcode-linux-arm64": ["shuvcode-linux-arm64@2.0.0-alpha-9", "", { "os": "linux", "cpu": "arm64" }, "sha512-GdYxUM+mEV7fb03JhclzxJbWeod/WrEGMEcqidfZ3GhiIAtDXJAxQfu6e7HRwf6x7MsmpOYWejPDe4dhDKdXZQ=="],
+
+    "shuvcode-linux-arm64-musl": ["shuvcode-linux-arm64-musl@2.0.0-alpha-9", "", { "os": "linux", "cpu": "arm64" }, "sha512-0gIm8x058Nxj+QeJdLm8ETPHC+SNjSdf8I2AMNhRMQSN/Ewe2VkkIVZhGt032T+P/js7xhmGMK6PXFzPGCG7fg=="],
+
+    "shuvcode-linux-x64": ["shuvcode-linux-x64@2.0.0-alpha-9", "", { "os": "linux", "cpu": "x64" }, "sha512-QYuyJZ8j4ccyKPo1hQGo8NfbCpfxKozuYs0iMS2RFHjEXBrXL0QZZRHAeK+OAPAWe3brCSs3xtd7TCvsX9UcBg=="],
+
+    "shuvcode-linux-x64-baseline": ["shuvcode-linux-x64-baseline@2.0.0-alpha-9", "", { "os": "linux", "cpu": "x64" }, "sha512-LzS0+1/NrbxeFYVKG37ibSC7/MykfQoCZO9SHAhyKhqEKR2HhvgCWp7qFcW3I0C554g4OUQWzGDfGBivTsyyYw=="],
+
+    "shuvcode-linux-x64-baseline-musl": ["shuvcode-linux-x64-baseline-musl@2.0.0-alpha-9", "", { "os": "linux", "cpu": "x64" }, "sha512-x/6L9N3fLAnwEVEIECvVuswQpmu77XJ7BLmdCnRtaP5rDndFRWrxFgVMi8xnIWwN/C6tipp8Cq2p/VwrUUScDw=="],
+
+    "shuvcode-linux-x64-musl": ["shuvcode-linux-x64-musl@2.0.0-alpha-9", "", { "os": "linux", "cpu": "x64" }, "sha512-YeYqjgVZifZ14Zf2h/vDt+ZbEJaS2Kp18A4nVFtr7hymea+Dx+MChRpVJvHTba3h2FH37pwqOnBlA9PM1PoCIA=="],
+
+    "shuvcode-windows-arm64": ["shuvcode-windows-arm64@2.0.0-alpha-9", "", { "os": "win32", "cpu": "arm64" }, "sha512-z5ph1caB4AyImf2N2n0iBKMgoHI7GINZviD3TlQ2pAWqXqc8IKvauWZB5ay7cX+qNTmAnA8tHXv3AIE92F0sjQ=="],
+
+    "shuvcode-windows-x64": ["shuvcode-windows-x64@2.0.0-alpha-9", "", { "os": "win32", "cpu": "x64" }, "sha512-wyup9ld2z5PiP1Imfh+fJtgOcO7kujT60w+PbOJleEs/h9qBctpJMHVtVRKtGmTN+R0i3pb0c8+Qso1EHRgoIA=="],
+
+    "shuvcode-windows-x64-baseline": ["shuvcode-windows-x64-baseline@2.0.0-alpha-9", "", { "os": "win32", "cpu": "x64" }, "sha512-tQv/YTlGkXyzBHo9jP0dOeOo+KJ6C34p6vow1sFGsiBSayc6W9tX6ROvRe5JF3kIWKnfc0ZGoU8BjJYhguYn0w=="],
 
     "side-channel": ["side-channel@1.1.0", "", { "dependencies": { "es-errors": "^1.3.0", "object-inspect": "^1.13.3", "side-channel-list": "^1.0.0", "side-channel-map": "^1.0.1", "side-channel-weakmap": "^1.0.2" } }, "sha512-ZX99e6tRweoUXqR+VBrslhda51Nh5MTQwou5tnUDgbtyM0dBgmhEDtWGP/xbKn6hqfPRHujUNwz5fy/wbbhnpw=="],
 
