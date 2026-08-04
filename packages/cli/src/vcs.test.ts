@@ -27,6 +27,20 @@ function recorder(reply: (args: readonly string[]) => string): {
   };
 }
 
+describe("review artifact isolation", () => {
+  // Jujutsu records every file in the working-copy commit, so a review would
+  // otherwise report on the artifacts the previous review wrote.
+  test("the default ignore list excludes reviewbot's own artifacts", async () => {
+    const { DEFAULT_CONFIG } = await import("../../core/src/config.ts");
+    expect(DEFAULT_CONFIG.paths.ignore).toContain(".reviewbot/**");
+  });
+
+  test("a normalized config keeps artifacts ignored", async () => {
+    const { normalizeConfig } = await import("../../core/src/config.ts");
+    expect(normalizeConfig({}).paths.ignore).toContain(".reviewbot/**");
+  });
+});
+
 describe("local VCS detection", () => {
   test("detects a Jujutsu workspace", async () => {
     const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));

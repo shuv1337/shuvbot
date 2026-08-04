@@ -33194,7 +33194,10 @@ var DEFAULT_CONFIG = {
   },
   paths: {
     include: ["**/*"],
-    ignore: []
+    // A review writes its run artifacts and state into the reviewed repository.
+    // Jujutsu records every file in the working-copy commit, so without this a
+    // review would report on the output of the previous one.
+    ignore: [".reviewbot/**"]
   },
   memory: {
     enabled: false,
