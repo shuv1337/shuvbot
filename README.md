@@ -82,4 +82,5 @@ learnings = false
 
 `model` can be a reviewbot alias such as `claude/sonnet` or a direct provider model ID; Claude aliases are resolved before invoking the Claude CLI.
 
-See `docs/config.md`, `docs/security.md`, `docs/workflows.md`, and `docs/claude-token.md`.
+`docs/quick-reference.md` covers day-to-day review usage, locally and on GitHub. See also
+`docs/config.md`, `docs/security.md`, `docs/workflows.md`, and `docs/claude-token.md`.

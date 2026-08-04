@@ -23,15 +23,15 @@ CLI commands:
 when present; an explicit missing `--config` is an error. Flags are strict: unknown, positional,
 missing-value, invalid, and duplicate options fail rather than being ignored.
 
-`legacy` remains the config default but the production local command has no safe legacy driver and
-fails closed before Git. `coordinator` routing, live progress, stable JSON, explicit `no_changes` and
-`no_reviewable_changes` results, incremental state, and durable artifacts are implemented, but
-coordinator execution also fails before Git while the code-approved shuvcode runtime pin is `null`.
-The GitHub Action does not route to the coordinator.
+`coordinator` is the config default and runs real multi-agent reviews against the approved
+`shuvcode` runtime pin, with live progress, stable JSON, explicit `no_changes` and
+`no_reviewable_changes` results, incremental state, and durable artifacts. `legacy` stays selectable
+but has no safe production driver and fails closed before Git. The GitHub Action does not route to
+the coordinator; it runs a single Claude Code agent.
 
 `doctor` is a strict prerequisite command: any check with status `fail` makes it exit nonzero,
 including general GitHub CLI, Claude, Claude-auth, Git, Bun, Node, MCP, or redaction failures. Warnings
 and skipped coordinator checks do not affect its exit status. With coordinator config it additionally
 checks the configured packed package/client capabilities, local auth structure, isolated launch, and
-non-generating model catalog resolution; that diagnostic does not override the separate nullable
-runtime approval gate or constitute subscription dogfood.
+non-generating model catalog resolution; a passing diagnostic verifies prerequisites rather than
+replacing a real review.
