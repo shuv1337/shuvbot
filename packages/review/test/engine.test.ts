@@ -13,6 +13,7 @@ import type {
 import { classifyReviewError } from "../src/errors.ts";
 import { createReviewExecutionPlan, type ReviewPlanFile } from "../src/plan.ts";
 import type { ResolvedReviewPluginConfig } from "../src/plugins/types.ts";
+import { REVIEW_SESSION_POLICY } from "../src/runtime/shuvcode.ts";
 import type {
   ShuvcodeEvent,
   ShuvcodePromptInput,
@@ -36,7 +37,7 @@ describe("local coordinator engine", () => {
       expect(result.result.decision).toBe("clean");
       expect(result.quorum.status).toBe("complete");
       expect(runtime.parents).toHaveLength(1);
-      expect(runtime.forks).toHaveLength(reviewersFor(tier).length);
+      expect(runtime.specialists).toHaveLength(reviewersFor(tier).length);
       expect(runtime.prompts.every(({ text }) => !text.includes("diff --git"))).toBe(true);
       expect(runtime.prompts.at(-1)?.text).toContain("/results/code-quality.json");
       expect(existsSync(root)).toBe(false);
@@ -55,13 +56,37 @@ describe("local coordinator engine", () => {
     ).toBe(true);
   });
 
+  test("creates policy-scoped specialist sessions instead of forking the unprompted coordinator", async () => {
+    const runtime = new FakeRuntime();
+    await runEngine("trivial", runtime);
+
+    // The runtime resolves a fork boundary from persisted messages, so forking the
+    // coordinator before it is prompted fails with an empty-session request error.
+    expect(runtime.lifecycle.some((entry) => entry.startsWith("fork:"))).toBe(false);
+    expect(runtime.lifecycle.indexOf("create:coordinator")).toBeLessThan(
+      runtime.lifecycle.indexOf("prompt:coordinator")
+    );
+    for (const id of runtime.specialists) {
+      const policy = runtime.policies.get(id);
+      expect(policy).toBeDefined();
+      expect(
+        policy!.tools.allow.every((tool) => REVIEW_SESSION_POLICY.tools.allow.includes(tool))
+      ).toBe(true);
+    }
+    const fresh = new FakeRuntime();
+    const unprompted = await fresh.createSession({ title: "coordinator" });
+    await expect(fresh.forkSession(unprompted.id, REVIEW_SESSION_POLICY)).rejects.toThrow(
+      /Cannot fork empty session/
+    );
+  });
+
   test("installs policy before prompts and does not expose tool authorization in metadata", async () => {
     const runtime = new FakeRuntime();
     await runEngine("trivial", runtime);
 
     expect(runtime.lifecycle.slice(0, 5)).toEqual([
       "create:coordinator",
-      "fork:child-1:read",
+      "create:child-1:read",
       "configure:child-1",
       "prompt:child-1",
       "prompt:coordinator"
@@ -326,7 +351,7 @@ describe("local coordinator engine", () => {
       specialistTimeoutMs: 1_000,
       eventClock: clock
     });
-    while (runtime.forks.length === 0) await sleep(0);
+    while (runtime.specialists.length === 0) await sleep(0);
 
     clock.nowMs = 29_999;
     clock.tick();
@@ -586,7 +611,7 @@ describe("local coordinator engine", () => {
 class FakeRuntime implements ShuvcodeRuntime {
   readonly url = "http://127.0.0.1:1";
   readonly parents: ShuvcodeSessionCreateInput[] = [];
-  readonly forks: string[] = [];
+  readonly specialists: string[] = [];
   readonly configured = new Map<string, Parameters<ShuvcodeRuntime["configureSession"]>[1]>();
   readonly prompts: ShuvcodePromptInput[] = [];
   readonly interrupted: string[] = [];
@@ -625,15 +650,29 @@ class FakeRuntime implements ShuvcodeRuntime {
   ) {}
 
   async createSession(input: ShuvcodeSessionCreateInput = {}) {
-    this.parents.push(input);
-    this.lifecycle.push("create:coordinator");
-    const policy = { tools: { allow: ["read"] } } as const;
-    this.policies.set("coordinator", policy);
-    return { id: "coordinator", policy };
+    if (input.policy === undefined) {
+      this.parents.push(input);
+      this.lifecycle.push("create:coordinator");
+      const policy = { tools: { allow: ["read"] } } as const;
+      this.policies.set("coordinator", policy);
+      return { id: "coordinator", policy };
+    }
+    const policy = input.policy;
+    const id = `child-${++this.sequence}`;
+    this.specialists.push(id);
+    this.lifecycle.push(`create:${id}:${policy.tools.allow.join(",")}`);
+    this.policies.set(id, policy);
+    return { id, policy };
   }
 
+  /**
+   * Mirrors the runtime precondition: a fork boundary is resolved from the
+   * parent's persisted messages, so forking an unprompted session fails.
+   */
   async forkSession(sessionID: string, policy: ShuvcodeSessionPolicy) {
-    this.forks.push(sessionID);
+    if (!this.prompts.some((prompt) => prompt.sessionID === sessionID)) {
+      throw new Error(`Cannot fork empty session: ${sessionID}`);
+    }
     const id = `child-${++this.sequence}`;
     this.lifecycle.push(`fork:${id}:${policy.tools.allow.join(",")}`);
     this.policies.set(id, policy);

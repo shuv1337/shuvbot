@@ -270,7 +270,6 @@ export async function executeCoordinatorEngine(
           reviewer,
           input,
           runtime: runtime!,
-          parentID: coordinator.id,
           captures,
           allCaptures,
           specialistSessionIds,
@@ -466,7 +465,6 @@ function createSpecialistTask(options: {
   reviewer: BuiltInReviewerId;
   input: ExecuteCoordinatorEngineInput;
   runtime: ShuvcodeRuntime;
-  parentID: string;
   captures: Map<string, SessionCapture>;
   allCaptures: SessionCapture[];
   specialistSessionIds: Map<BuiltInReviewerId, Map<number, string>>;
@@ -483,10 +481,11 @@ function createSpecialistTask(options: {
     id: options.reviewer,
     async run(context) {
       try {
-        const session = await options.runtime.forkSession(
-          options.parentID,
-          specialistSessionPolicy(definition.tools)
-        );
+        const session = await options.runtime.createSession({
+          title: `reviewbot ${options.reviewer}`,
+          location: { directory: options.input.workspace.root },
+          policy: specialistSessionPolicy(definition.tools)
+        });
         activeSessionID = session.id;
         const reviewerSessions = options.specialistSessionIds.get(options.reviewer) ?? new Map();
         reviewerSessions.set(context.attempt, session.id);
