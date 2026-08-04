@@ -3,15 +3,38 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [master]
+  issue_comment:
+    types: [created, edited]
 
 permissions: {} # deny by default
+
+# One review at a time per pull request. Not cancel-in-progress: a review
+# someone asked for by commenting should finish rather than be replaced.
+concurrency:
+  group: shuvbot-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   review:
     name: shuvbot review
-    # Public repo: only run on same-repo, non-draft PRs (secrets are available).
-    # Fork PRs are skipped rather than failing their Claude auth check.
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    # Two ways in, with different guards.
+    #
+    # pull_request: same-repo, non-draft only. Fork pull requests cannot receive
+    # CLAUDE_CODE_OAUTH_TOKEN, so they are skipped rather than failing auth.
+    #
+    # issue_comment: only comments on pull requests, only when the bot is
+    # mentioned, and only from someone who already has write access. The last
+    # check keeps a drive-by comment from spending a run; the action re-checks
+    # permission itself and does not trust this.
+    if: >-
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        !github.event.pull_request.draft)
+      ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '@shuvbot') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,8 +42,33 @@ jobs:
       issues: write
       checks: read
     steps:
+      # An issue_comment run checks out the default branch, not the pull
+      # request, so the agent would read pre-change files while reviewing a
+      # post-change diff. Resolve the merge ref instead - but only for a
+      # same-repo head. Checking out a fork here would put untrusted code in a
+      # job that holds CLAUDE_CODE_OAUTH_TOKEN, which is the one thing this
+      # trigger must never do. Fork pull requests keep the default checkout.
+      - name: Resolve pull request ref
+        id: target
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          cross=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json isCrossRepository --jq .isCrossRepository)
+          if [ "$cross" = "false" ]; then
+            echo "ref=refs/pull/$PR_NUMBER/merge" >> "$GITHUB_OUTPUT"
+          else
+            echo "Fork pull request: keeping the default checkout." >&2
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Empty is actions/checkout's default (the ref that triggered the run).
+          ref: ${{ steps.target.outputs.ref || '' }}
 
       - name: Install Claude Code
         run: |
