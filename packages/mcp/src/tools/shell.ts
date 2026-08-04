@@ -48,18 +48,25 @@ const ANY_OBJECT_SCHEMA = {
 
 export const runShellTool: ToolSpec<RunShellInput, Record<string, unknown>> = {
   name: "run_shell",
-  description: "Represent restricted shell execution through a Docker sandbox. Fails closed when Docker is unavailable.",
+  description:
+    "Represent restricted shell execution through a Docker sandbox. Fails closed when Docker is unavailable.",
   inputSchema: RUN_SHELL_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { shell: "restricted" },
   async handler(input, context) {
-    const shellPolicy: { command: string; allowCommands?: readonly string[]; denyCommands?: readonly string[] } = {
+    const shellPolicy: {
+      command: string;
+      allowCommands?: readonly string[];
+      denyCommands?: readonly string[];
+    } = {
       command: input.command
     };
-    if (context.shellSandbox?.allowCommands !== undefined) shellPolicy.allowCommands = context.shellSandbox.allowCommands;
-    if (context.shellSandbox?.denyCommands !== undefined) shellPolicy.denyCommands = context.shellSandbox.denyCommands;
+    if (context.shellSandbox?.allowCommands !== undefined)
+      shellPolicy.allowCommands = context.shellSandbox.allowCommands;
+    if (context.shellSandbox?.denyCommands !== undefined)
+      shellPolicy.denyCommands = context.shellSandbox.denyCommands;
     validateShellCommand(shellPolicy);
-    const dockerPath = process.env.REVIEWBOT_DOCKER_PATH;
+    const dockerPath = process.env.SHUVBOT_DOCKER_PATH;
     const docker = assertDockerSandboxAvailable(dockerPath ? { dockerPath } : {});
     const env = filterShellEnv(process.env);
     const invocation = buildDockerShellInvocation({
@@ -88,7 +95,10 @@ export const runShellTool: ToolSpec<RunShellInput, Record<string, unknown>> = {
   }
 };
 
-export const killBackgroundProcessTool: ToolSpec<KillBackgroundProcessInput, Record<string, unknown>> = {
+export const killBackgroundProcessTool: ToolSpec<
+  KillBackgroundProcessInput,
+  Record<string, unknown>
+> = {
   name: "kill_background_process",
   description: "Represent background process termination for future shell execution.",
   inputSchema: KILL_BACKGROUND_PROCESS_INPUT_SCHEMA,

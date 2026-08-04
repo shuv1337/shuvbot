@@ -1,6 +1,6 @@
 # SPEC.md — GitHub Code Review / Actions Bot
 
-**Project codename:** `reviewbot`  
+**Project codename:** `shuvbot`  
 **Primary shape:** Pullfrog-style GitHub Action / agent bridge  
 **Review discipline:** Warden-style skills, gates, findings, and inline reviews  
 **Last updated:** 2026-08-03
@@ -49,11 +49,11 @@ On `pull_request` events, the bot should:
 Maintainers should be able to trigger the bot with comments such as:
 
 ```text
-@reviewbot review
-@reviewbot fix this
-@reviewbot implement the TODO in src/foo.ts
-@reviewbot explain why CI failed
-@reviewbot update the docs for this change
+@shuvbot review
+@shuvbot fix this
+@shuvbot implement the TODO in src/foo.ts
+@shuvbot explain why CI failed
+@shuvbot update the docs for this change
 ```
 
 The bot should infer mode, collect context, run an agent, and perform allowed actions according to policy.
@@ -449,7 +449,7 @@ All coordinator and specialist sessions are read-only. They return typed results
 ### 4.1 `action.yml`
 
 ```yaml
-name: "ReviewBot"
+name: "Shuvbot"
 description: "Run repo-aware coding agents and structured PR reviews"
 author: "shuv"
 
@@ -466,7 +466,7 @@ inputs:
   config:
     description: "Path to bot config"
     required: false
-    default: ".github/reviewbot.toml"
+    default: ".github/shuvbot.toml"
 
   model:
     description: "Model alias, e.g. claude/sonnet, claude/opus, openai/gpt"
@@ -596,7 +596,7 @@ Human-readable Markdown summary of what happened.
 ### 5.1 Automatic PR Review
 
 ```yaml
-name: ReviewBot
+name: Shuvbot
 
 on:
   pull_request:
@@ -617,10 +617,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: shuv/reviewbot@v0
+      - uses: shuv/shuvbot@v0
         with:
           mode: review
-          config: .github/reviewbot.toml
+          config: .github/shuvbot.toml
           shell: disabled
           push: disabled
         env:
@@ -631,7 +631,7 @@ jobs:
 ### 5.2 Mention-Driven Bot
 
 ```yaml
-name: ReviewBot Mention
+name: Shuvbot Mention
 
 on:
   issue_comment:
@@ -650,14 +650,14 @@ permissions:
 
 jobs:
   respond:
-    if: contains(github.event.comment.body || github.event.issue.body || '', '@reviewbot')
+    if: contains(github.event.comment.body || github.event.issue.body || '', '@shuvbot')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: shuv/reviewbot@v0
+      - uses: shuv/shuvbot@v0
         with:
           mode: auto
           shell: restricted
@@ -677,7 +677,7 @@ structured-output flow in §23.1 is built.
 ### 5.4 CI Repair Workflow
 
 ```yaml
-name: ReviewBot Fix CI
+name: Shuvbot Fix CI
 
 on:
   workflow_run:
@@ -700,7 +700,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: shuv/reviewbot@v0
+      - uses: shuv/shuvbot@v0
         with:
           mode: fix-ci
           shell: restricted
@@ -741,7 +741,7 @@ Credential resolution order:
 The CLI should support:
 
 ```bash
-bunx reviewbot auth claude setup-token
+bunx shuvbot auth claude setup-token
 ```
 
 Expected behavior:
@@ -756,7 +756,7 @@ Expected behavior:
 Store as a GitHub secret:
 
 ```bash
-bunx reviewbot auth claude setup-token \
+bunx shuvbot auth claude setup-token \
   --repo owner/repo \
   --secret CLAUDE_CODE_OAUTH_TOKEN
 ```
@@ -770,7 +770,7 @@ gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo owner/repo --body "$TOKEN"
 Support stdin:
 
 ```bash
-claude setup-token | bunx reviewbot auth claude import --repo owner/repo
+claude setup-token | bunx shuvbot auth claude import --repo owner/repo
 ```
 
 ### 6.4 Runtime Handling
@@ -817,7 +817,7 @@ Use TOML.
 Default path:
 
 ```text
-.github/reviewbot.toml
+.github/shuvbot.toml
 ```
 
 ### 7.2 Example Config
@@ -901,7 +901,7 @@ pr_summaries = true
 
 Both `camelCase` and `snake_case` spellings are accepted for every key
 (e.g. `failOn`/`fail_on`, `activityTimeout`/`activity_timeout`); the example
-above uses `snake_case` to match `reviewbot.sample.toml` and `docs/config.md`.
+above uses `snake_case` to match `shuvbot.sample.toml` and `docs/config.md`.
 
 ### 7.3 Config Validation
 
@@ -941,7 +941,7 @@ Policy restrictions always win. For example, config can request `push = "enabled
 
 ```ts
 export interface BotEnvelope {
-  "~reviewbot": true;
+  "~shuvbot": true;
   version: string;
 
   prompt: string;
@@ -1417,7 +1417,7 @@ export const models: Record<string, ModelAlias> = {
 - Config uses aliases.
 - Driver resolves alias to concrete model.
 - Concrete model IDs can be passed through directly.
-- The Claude Code driver must pass Claude CLI-compatible aliases or concrete IDs to `--model`, not reviewbot slugs like `claude/sonnet`.
+- The Claude Code driver must pass Claude CLI-compatible aliases or concrete IDs to `--model`, not shuvbot slugs like `claude/sonnet`.
 - Provider-specific model churn should not break repo config.
 
 ---
@@ -1487,7 +1487,7 @@ export interface ReviewFinding {
 Purpose: fulfill a maintainer request.
 
 **Not fully implemented in this repo.** The current runtime classifies the
-request, prepares the `reviewbot/*` branch, applies policy, and posts a
+request, prepares the `shuvbot/*` branch, applies policy, and posts a
 summary, but the agent edit/check/commit/push/PR step is still an explicit
 no-op.
 
@@ -1495,7 +1495,7 @@ Flow:
 
 ```text
 classify request
-create or update reviewbot/* branch
+create or update shuvbot/* branch
 load context
 start MCP server
 agent edits files
@@ -1509,7 +1509,7 @@ post summary
 #### Commit Format
 
 ```text
-reviewbot: <short task summary>
+shuvbot: <short task summary>
 
 Requested-by: @user
 Run-id: <github-run-id>
@@ -1756,7 +1756,7 @@ Stores state in:
 Stores local CLI state under:
 
 ```text
-.reviewbot/state/
+.shuvbot/state/
 ```
 
 #### `api`
@@ -1777,7 +1777,7 @@ For v1:
 ### 16.4 Hidden Comment Marker
 
 ```md
-<!-- reviewbot:pr-summary:v1:{"pr":123,"run":"..."} -->
+<!-- shuvbot:pr-summary:v1:{"pr":123,"run":"..."} -->
 ```
 
 ---
@@ -1789,7 +1789,7 @@ For v1:
 For mention/manual runs, create one progress comment:
 
 ```md
-### ReviewBot is working
+### Shuvbot is working
 
 - [x] Loaded PR context
 - [x] Parsed 14 changed files
@@ -1945,7 +1945,7 @@ Default:
 Track previous bot comments by hidden markers:
 
 ```md
-<!-- reviewbot:finding:v1:{"id":"...","path":"...","line":42} -->
+<!-- shuvbot:finding:v1:{"id":"...","path":"...","line":42} -->
 ```
 
 Avoid reposting identical findings on synchronize events unless the code changed.
@@ -1959,29 +1959,29 @@ Avoid reposting identical findings on synchronize events unless the code changed
 Default:
 
 ```text
-@reviewbot
+@shuvbot
 ```
 
 Configurable:
 
 ```toml
 [commands]
-prefix = "@reviewbot"
+prefix = "@shuvbot"
 ```
 
 ### 20.2 Supported Commands
 
 ```text
-@reviewbot review
-@reviewbot improve
-@reviewbot ask <question>
-@reviewbot implement <task>
-@reviewbot fix-ci
-@reviewbot describe
-@reviewbot changelog
-@reviewbot test-plan
-@reviewbot explain
-@reviewbot summarize
+@shuvbot review
+@shuvbot improve
+@shuvbot ask <question>
+@shuvbot implement <task>
+@shuvbot fix-ci
+@shuvbot describe
+@shuvbot changelog
+@shuvbot test-plan
+@shuvbot explain
+@shuvbot summarize
 ```
 
 ### 20.3 Command Parser
@@ -2019,28 +2019,28 @@ export interface ParsedCommand {
 ### 21.1 Commands
 
 ```bash
-reviewbot init
-reviewbot review
-reviewbot review --base main --head HEAD --engine coordinator
-reviewbot run --mode implement --prompt "add tests"
-reviewbot auth claude setup-token
-reviewbot auth claude import
-reviewbot doctor
-reviewbot replay .github/events/pr-opened.json
-reviewbot config validate
+shuvbot init
+shuvbot review
+shuvbot review --base main --head HEAD --engine coordinator
+shuvbot run --mode implement --prompt "add tests"
+shuvbot auth claude setup-token
+shuvbot auth claude import
+shuvbot doctor
+shuvbot replay .github/events/pr-opened.json
+shuvbot config validate
 ```
 
-### 21.2 `reviewbot init`
+### 21.2 `shuvbot init`
 
 Writes:
 
 ```text
-.github/reviewbot.toml
-.github/workflows/reviewbot.yml
+.github/shuvbot.toml
+.github/workflows/shuvbot.yml
 AGENTS.md additions
 ```
 
-### 21.3 `reviewbot doctor`
+### 21.3 `shuvbot doctor`
 
 Checks:
 
@@ -2058,15 +2058,15 @@ Checks:
 - Availability of shuvcode-managed local provider authentication without printing or importing credentials.
 - Coordinator and specialist model-reference resolution.
 
-### 21.4 `reviewbot replay`
+### 21.4 `shuvbot replay`
 
 Replays a stored GitHub event locally.
 
 Example:
 
 ```bash
-reviewbot replay fixtures/events/issue-comment-mention.json \
-  --config .github/reviewbot.toml \
+shuvbot replay fixtures/events/issue-comment-mention.json \
+  --config .github/shuvbot.toml \
   --dry-run
 ```
 
@@ -2305,11 +2305,11 @@ Every run should write:
 Upload:
 
 ```text
-reviewbot-run.json
-reviewbot-findings.json
-reviewbot-context-manifest.json
-reviewbot-review-sessions.json
-reviewbot-events.jsonl
+shuvbot-run.json
+shuvbot-findings.json
+shuvbot-context-manifest.json
+shuvbot-review-sessions.json
+shuvbot-events.jsonl
 ```
 
 Avoid uploading raw prompts if they may contain sensitive repo content unless configured.
@@ -2567,7 +2567,7 @@ Deliver:
 - `action.yml`.
 - Bun build/test setup.
 - Compiled `dist/index.js`.
-- `reviewbot doctor`.
+- `shuvbot doctor`.
 - Config parser.
 
 ### Milestone 1: GitHub Event Core
@@ -2805,7 +2805,7 @@ These decisions pin down the first implementation pass.
 1. Tool server protocol: implement MCP directly from v0.1.
 2. Legacy review verification model: use the same selected model for candidate generation and verification. Superseded for coordinator mode by decisions 19-26.
 3. `REQUEST_CHANGES` policy: use a global default with per-skill override.
-4. Implementation branch strategy: always push to `reviewbot/*` branches and open or update PRs. Do not push directly to source branches.
+4. Implementation branch strategy: always push to `shuvbot/*` branches and open or update PRs. Do not push directly to source branches.
 5. Restricted shell sandbox: run restricted shell commands inside a container sandbox by default.
 6. Pre-v1.0 agent drivers beyond Claude Code: support `codex-cli`.
 7. Historical v0.1 review scope: ship one built-in `code-review` skill with thresholds, inline comments, and review body. Coordinator mode supersedes this path after dogfooding.
@@ -2814,7 +2814,7 @@ These decisions pin down the first implementation pass.
 10. First implementation scope: Milestone 0 plus the policy skeleton and default permission matrix tests.
 11. Package tooling: Bun test, ESLint, and Prettier.
 12. Action bundler: `tsup` targeting Node 24.
-13. MCP implementation: use the official MCP TypeScript SDK while keeping reviewbot's internal tool contracts stable.
+13. MCP implementation: use the official MCP TypeScript SDK while keeping shuvbot's internal tool contracts stable.
 14. Restricted shell sandbox: use Docker when available and fail closed when the sandbox is unavailable.
 15. Initial model aliases: start with minimal Claude aliases, `claude/sonnet` and `claude/opus`; allow direct model IDs as overrides.
 16. v0.1 posting default: inline review comments plus a review summary.

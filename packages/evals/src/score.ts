@@ -26,7 +26,10 @@ export function formatScoreTable(results: readonly EvalCaseResult[]): string {
   const rows = [
     "| Case | Result | Notes |",
     "| --- | --- | --- |",
-    ...results.map((result) => `| ${result.id} | ${result.passed ? "pass" : "fail"} | ${result.notes.join("; ")} |`),
+    ...results.map(
+      (result) =>
+        `| ${result.id} | ${result.passed ? "pass" : "fail"} | ${result.notes.join("; ")} |`
+    ),
     `| total | ${score.passed}/${score.total} | passRate=${score.passRate.toFixed(2)} |`
   ];
   return rows.join("\n");

@@ -28,13 +28,20 @@ const DEFAULT_BASE_URL = "https://api.github.com";
 
 export function createGitHubClient(input: CreateGitHubClientInput): GitHubClient {
   const baseUrl = (input.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-  const userAgent = input.userAgent ?? "reviewbot";
+  const userAgent = input.userAgent ?? "shuvbot";
   const fetchImpl = input.fetchImpl ?? fetch;
 
   return {
-    async request<T = unknown>(route: string, options: GitHubRequestOptions = {}): Promise<GitHubResponse<T>> {
+    async request<T = unknown>(
+      route: string,
+      options: GitHubRequestOptions = {}
+    ): Promise<GitHubResponse<T>> {
       const { method, path } = parseRoute(route, options.method ?? "GET");
-      const url = applyParams(`${baseUrl}${path}`, options.params, method === "GET" ? "query" : "path");
+      const url = applyParams(
+        `${baseUrl}${path}`,
+        options.params,
+        method === "GET" ? "query" : "path"
+      );
       const headers: Record<string, string> = {
         accept: "application/vnd.github+json",
         authorization: `Bearer ${input.token}`,
@@ -52,13 +59,19 @@ export function createGitHubClient(input: CreateGitHubClientInput): GitHubClient
       }
       const response = await fetchImpl(url, init);
       const text = await response.text();
-      const data = (options.responseType === "text" ? text : text.length > 0 ? JSON.parse(text) : {}) as T;
+      const data = (
+        options.responseType === "text" ? text : text.length > 0 ? JSON.parse(text) : {}
+      ) as T;
       if (!response.ok) {
         const message =
           data && typeof data === "object" && "message" in (data as Record<string, unknown>)
             ? String((data as Record<string, unknown>).message)
             : response.statusText;
-        throw new GitHubRequestError(`GitHub request failed (${response.status}): ${message}`, response.status, data);
+        throw new GitHubRequestError(
+          `GitHub request failed (${response.status}): ${message}`,
+          response.status,
+          data
+        );
       }
       return { status: response.status, data };
     }
@@ -66,13 +79,20 @@ export function createGitHubClient(input: CreateGitHubClientInput): GitHubClient
 }
 
 export class GitHubRequestError extends Error {
-  constructor(message: string, public readonly status: number, public readonly data: unknown) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data: unknown
+  ) {
     super(message);
     this.name = "GitHubRequestError";
   }
 }
 
-function parseRoute(route: string, fallbackMethod: GitHubMethod): { method: GitHubMethod; path: string } {
+function parseRoute(
+  route: string,
+  fallbackMethod: GitHubMethod
+): { method: GitHubMethod; path: string } {
   const trimmed = route.trim();
   if (!trimmed) return { method: fallbackMethod, path: "/" };
   const match = trimmed.match(/^([A-Z]+)\s+(.*)$/);

@@ -1,1 +1,22 @@
-{"action":"created","repository":{"owner":{"login":"octo"},"name":"repo","full_name":"octo/repo","private":false},"sender":{"login":"maintainer"},"issue":{"number":1,"title":"Bug","body":"Please fix","state":"open","user":{"login":"alice"}},"comment":{"id":10,"body":"@reviewbot implement fix this bug","user":{"login":"maintainer"}}}
+{
+  "action": "created",
+  "repository": {
+    "owner": { "login": "octo" },
+    "name": "repo",
+    "full_name": "octo/repo",
+    "private": false
+  },
+  "sender": { "login": "maintainer" },
+  "issue": {
+    "number": 1,
+    "title": "Bug",
+    "body": "Please fix",
+    "state": "open",
+    "user": { "login": "alice" }
+  },
+  "comment": {
+    "id": 10,
+    "body": "@shuvbot implement fix this bug",
+    "user": { "login": "maintainer" }
+  }
+}

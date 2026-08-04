@@ -1,8 +1,8 @@
-# PLAN-reviewbot-implementation.md
+# PLAN-shuvbot-implementation.md
 
 ## Purpose
 
-Implement `reviewbot`: a GitHub-native code review and coding-agent bot delivered as a reusable GitHub Action plus local CLI. The implementation should follow `SPEC.md` and combine:
+Implement `shuvbot`: a GitHub-native code review and coding-agent bot delivered as a reusable GitHub Action plus local CLI. The implementation should follow `SPEC.md` and combine:
 
 - Pullfrog-style single-action orchestration and GitHub event bridge.
 - Warden-style review discipline: skills, filters, gates, verification, structured findings, and inline reviews.
@@ -15,25 +15,25 @@ This plan is intentionally implementation-ready, but it does **not** implement t
 
 ### Internal files
 
-| Path | Purpose |
-|---|---|
-| `SPEC.md` | Product, architecture, security, API, and milestone specification. |
-| `AGENTS.md` | Project-local operating notes for future agents. |
-| `PLAN-reviewbot-implementation.md` | This implementation plan. |
+| Path                             | Purpose                                                            |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `SPEC.md`                        | Product, architecture, security, API, and milestone specification. |
+| `AGENTS.md`                      | Project-local operating notes for future agents.                   |
+| `PLAN-shuvbot-implementation.md` | This implementation plan.                                          |
 
 ### External references
 
-| Project / docs | URL | Relevant lessons |
-|---|---|---|
-| Pullfrog | https://github.com/pullfrog/pullfrog | Single GitHub Action entrypoint, MCP/tool bridge, structured event envelopes, progress comments, action outputs. |
-| Warden | https://github.com/getsentry/warden | Review skills, path filters, gates, verification, findings, local CLI. |
-| PR-Agent | https://github.com/qodo-ai/pr-agent | Command ergonomics, one-shot PR review, adaptive PR compression. |
-| Claude Code Action | https://github.com/anthropics/claude-code-action | GitHub-native Claude Code execution, auth/provider handling, progress tracking. |
-| Aider | https://github.com/Aider-AI/aider | Repo maps, git-native edits, commits, test/lint loops. |
-| OpenHands | https://github.com/All-Hands-AI/OpenHands | Sandboxed execution and future autonomy patterns. |
-| GitHub Actions token security | https://docs.github.com/en/actions/security-guides/automatic-token-authentication | GITHUB_TOKEN permission design. |
-| GitHub Actions hardening | https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions | Fork PR and untrusted input safety. |
-| Pull request reviews REST API | https://docs.github.com/en/rest/pulls/reviews | Inline review posting and review event behavior. |
+| Project / docs                | URL                                                                                      | Relevant lessons                                                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Pullfrog                      | https://github.com/pullfrog/pullfrog                                                     | Single GitHub Action entrypoint, MCP/tool bridge, structured event envelopes, progress comments, action outputs. |
+| Warden                        | https://github.com/getsentry/warden                                                      | Review skills, path filters, gates, verification, findings, local CLI.                                           |
+| PR-Agent                      | https://github.com/qodo-ai/pr-agent                                                      | Command ergonomics, one-shot PR review, adaptive PR compression.                                                 |
+| Claude Code Action            | https://github.com/anthropics/claude-code-action                                         | GitHub-native Claude Code execution, auth/provider handling, progress tracking.                                  |
+| Aider                         | https://github.com/Aider-AI/aider                                                        | Repo maps, git-native edits, commits, test/lint loops.                                                           |
+| OpenHands                     | https://github.com/All-Hands-AI/OpenHands                                                | Sandboxed execution and future autonomy patterns.                                                                |
+| GitHub Actions token security | https://docs.github.com/en/actions/security-guides/automatic-token-authentication        | GITHUB_TOKEN permission design.                                                                                  |
+| GitHub Actions hardening      | https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions | Fork PR and untrusted input safety.                                                                              |
+| Pull request reviews REST API | https://docs.github.com/en/rest/pulls/reviews                                            | Inline review posting and review event behavior.                                                                 |
 
 ## Implementation Strategy
 
@@ -41,7 +41,7 @@ Build the boring guardrails first, then attach agentic behavior.
 
 1. Scaffold the monorepo and build system.
 2. Implement config, event normalization, policy resolution, redaction, and observability before any agent is allowed to act.
-3. Implement MCP directly from the first tool-server milestone using the official MCP TypeScript SDK behind reviewbot-owned tool contracts.
+3. Implement MCP directly from the first tool-server milestone using the official MCP TypeScript SDK behind shuvbot-owned tool contracts.
 4. Add Claude Code driver with strict credential isolation.
 5. Ship review mode first with one `code-review` skill, then add Warden-grade review stages.
 6. Add mention-driven implementation, restricted shell, git push, and CI repair only after policy and tests are mature.
@@ -73,7 +73,7 @@ repo/
   README.md
   SPEC.md
   AGENTS.md
-  PLAN-reviewbot-implementation.md
+  PLAN-shuvbot-implementation.md
 
   packages/
     action/
@@ -214,12 +214,7 @@ export interface ReviewFinding {
 Implement in `packages/agents/src/driver.ts`.
 
 ```ts
-export type AgentId =
-  | "claude-code"
-  | "anthropic-sdk"
-  | "openai"
-  | "codex-cli"
-  | "aider";
+export type AgentId = "claude-code" | "anthropic-sdk" | "openai" | "codex-cli" | "aider";
 
 export interface AgentDriver {
   id: AgentId;
@@ -247,9 +242,9 @@ Implement in `packages/core/src/observability.ts` and `packages/core/src/run-rec
 - Duration measurement around config load, event parsing, policy resolution, GitHub API calls, MCP tool calls, agent runs, review posting, and artifact upload.
 - Explicit failure telemetry with error class and sanitized cause.
 - Machine-readable artifacts:
-  - `reviewbot-run.json`
-  - `reviewbot-findings.json`
-  - `reviewbot-context-manifest.json`
+  - `shuvbot-run.json`
+  - `shuvbot-findings.json`
+  - `shuvbot-context-manifest.json`
 - Optional external telemetry config:
 
 ```toml
@@ -307,14 +302,14 @@ Create the TypeScript/Bun monorepo, compiled GitHub Action shell, config parser,
 - [x] Validate enum values for modes, agents, severity, confidence, shell, and push.
 - [x] Validate obvious glob syntax errors for path filters.
 - [x] Add `packages/cli/src/index.ts` with commands stubbed:
-  - [x] `reviewbot init`
-  - [x] `reviewbot review`
-  - [x] `reviewbot run`
-  - [x] `reviewbot auth claude setup-token`
-  - [x] `reviewbot auth claude import`
-  - [x] `reviewbot doctor`
-  - [x] `reviewbot replay`
-  - [x] `reviewbot config validate`
+  - [x] `shuvbot init`
+  - [x] `shuvbot review`
+  - [x] `shuvbot run`
+  - [x] `shuvbot auth claude setup-token`
+  - [x] `shuvbot auth claude import`
+  - [x] `shuvbot doctor`
+  - [x] `shuvbot replay`
+  - [x] `shuvbot config validate`
 - [x] Add `packages/core/src/errors.ts` with named error classes:
   - [x] `AuthError`
   - [x] `ConfigError`
@@ -363,7 +358,7 @@ bun run build
 ### Completion criteria
 
 - [x] `action.yml` points to a real built `dist/index.js`.
-- [x] `reviewbot config validate` works locally against sample config.
+- [x] `shuvbot config validate` works locally against sample config.
 - [x] Config failures produce clear diagnostics.
 - [x] Secret redaction tests pass.
 - [x] Policy defaults exist and cannot be overridden by untrusted payload fields.
@@ -390,7 +385,7 @@ Normalize GitHub events, derive trusted actor permissions, build runtime policy,
   - [x] Infer mode for `auto` from event and prompt/comment text.
   - [x] Map commands to modes.
 - [x] Implement command parsing in `packages/core/src/modes.ts` or a dedicated `commands.ts`:
-  - [x] prefix defaults to `@reviewbot`.
+  - [x] prefix defaults to `@shuvbot`.
   - [x] commands: `review`, `improve`, `ask`, `implement`, `fix-ci`, `describe`, `changelog`, `test-plan`, `explain`, `summarize`.
 - [x] Implement `packages/github/src/octokit.ts` for GitHub client creation.
 - [x] Implement `packages/github/src/permissions.ts`:
@@ -593,7 +588,7 @@ export function resolveClaudeAuth(env: NodeJS.ProcessEnv): ClaudeAuth {
 - [ ] Add `packages/cli/src/auth/claude-import.ts` for stdin import:
 
 ```bash
-claude setup-token | bunx reviewbot auth claude import --repo owner/repo
+claude setup-token | bunx shuvbot auth claude import --repo owner/repo
 ```
 
 - [ ] Ensure GitHub Actions masking calls are applied for every detected secret.
@@ -679,9 +674,9 @@ Ship v0.1 review mode: PR context collection, diff chunking, one built-in `code-
   - [ ] `review_findings`
   - [ ] `summary`
 - [ ] Write artifacts:
-  - [ ] `reviewbot-run.json`
-  - [ ] `reviewbot-findings.json`
-  - [ ] `reviewbot-context-manifest.json`
+  - [ ] `shuvbot-run.json`
+  - [ ] `shuvbot-findings.json`
+  - [ ] `shuvbot-context-manifest.json`
 
 ### Tests
 
@@ -767,7 +762,7 @@ export interface ReviewSkill {
   - [ ] Per-skill override.
   - [ ] Threshold-based.
 - [ ] Implement fail-check behavior when enabled.
-- [ ] Upload `reviewbot-findings.json` artifact consistently.
+- [ ] Upload `shuvbot-findings.json` artifact consistently.
 
 ### Tests
 
@@ -798,7 +793,7 @@ bun run build
 
 ### Goal
 
-Support trusted maintainer/collaborator comments that ask the bot to implement changes on `reviewbot/*` branches and open/update PRs.
+Support trusted maintainer/collaborator comments that ask the bot to implement changes on `shuvbot/*` branches and open/update PRs.
 
 ### Tasks
 
@@ -809,7 +804,7 @@ Support trusted maintainer/collaborator comments that ask the bot to implement c
   - [ ] Replace/delete when final summary supersedes it.
   - [ ] Keep comment on failure.
 - [ ] Implement branch strategy:
-  - [ ] Always use `reviewbot/*` branches.
+  - [ ] Always use `shuvbot/*` branches.
   - [ ] Never push directly to source branches.
   - [ ] Create/update PR from bot branch.
 - [ ] Implement restricted shell sandbox integration:
@@ -834,7 +829,7 @@ Support trusted maintainer/collaborator comments that ask the bot to implement c
 - [ ] Use commit format:
 
 ```text
-reviewbot: <short task summary>
+shuvbot: <short task summary>
 
 Requested-by: @user
 Run-id: <github-run-id>
@@ -863,7 +858,7 @@ bun run build
 
 ### Completion criteria
 
-- [ ] A fixture `@reviewbot implement ...` flow can run with a fake agent.
+- [ ] A fixture `@shuvbot implement ...` flow can run with a fake agent.
 - [ ] The implementation path cannot bypass branch/policy restrictions.
 - [ ] Final summaries are clear and non-chatty.
 
@@ -892,7 +887,7 @@ rerunChecks = true
 - [ ] Enforce max runtime.
 - [ ] Let agent patch files only when policy permits.
 - [ ] Run relevant local tests only when shell policy permits.
-- [ ] Commit/push only to `reviewbot/*` branches.
+- [ ] Commit/push only to `shuvbot/*` branches.
 - [ ] Post what was tried if attempts are exhausted.
 
 ### Tests
@@ -951,12 +946,12 @@ export interface StateStore {
 - [ ] Add backends:
   - [ ] `memory` for tests.
   - [ ] `github` via hidden comments/artifacts.
-  - [ ] `file` under `.reviewbot/state/` for local CLI.
+  - [ ] `file` under `.shuvbot/state/` for local CLI.
   - [ ] `api` interface stub for future hosted backend.
 - [ ] Implement hidden PR summary marker:
 
 ```md
-<!-- reviewbot:pr-summary:v1:{"pr":123,"run":"..."} -->
+<!-- shuvbot:pr-summary:v1:{"pr":123,"run":"..."} -->
 ```
 
 - [ ] Implement repo learnings only behind explicit opt-in.
@@ -966,7 +961,7 @@ export interface StateStore {
 
 - [ ] PR summary hidden comment is created/updated idempotently.
 - [ ] Repo learnings are not read/written unless enabled.
-- [ ] File backend writes under `.reviewbot/state/` only.
+- [ ] File backend writes under `.shuvbot/state/` only.
 - [ ] State records do not contain secrets.
 
 ### Validation commands
@@ -1096,7 +1091,7 @@ bun run evals
 
 ### v0.2 — Mentions and Git Writes
 
-- [ ] `@reviewbot` command mode.
+- [ ] `@shuvbot` command mode.
 - [ ] Progress comments.
 - [ ] Restricted shell.
 - [ ] Commit/push to bot branch.
@@ -1133,28 +1128,28 @@ bun run evals
 
 ## Documentation Checklist
 
-- [ ] `README.md` explains what reviewbot is and provides a secure quickstart.
+- [ ] `README.md` explains what shuvbot is and provides a secure quickstart.
 - [ ] `docs/config.md` documents TOML config and effective resolution order.
 - [ ] `docs/security.md` documents policy, fork PR handling, secrets, shell sandboxing, and `pull_request_target` guidance.
 - [ ] `docs/workflows.md` includes automatic review, mention-driven bot, standalone structured output, and CI repair examples.
-- [ ] `docs/commands.md` documents `@reviewbot` commands and command-to-mode mapping.
+- [ ] `docs/commands.md` documents `@shuvbot` commands and command-to-mode mapping.
 - [ ] `docs/claude-token.md` documents `claude setup-token` and `CLAUDE_CODE_OAUTH_TOKEN` handling.
 - [ ] `docs/troubleshooting.md` documents common auth, permission, comment mapping, and action-output failures.
 
 ## Final Validation Matrix
 
-| Area | Required validation |
-|---|---|
-| Build | `bun run build` produces `dist/index.js`. |
-| Types | `bun run typecheck` passes. |
-| Tests | `bun test` passes. |
-| Config | Invalid config fails early with clear diagnostics. |
-| Policy | Fork and untrusted contexts cannot escalate shell, push, or secrets. |
-| Redaction | Known secret strings do not appear in logs, artifacts, summaries, or errors. |
-| MCP | Every tool validates schema, checks policy, audits, and redacts. |
-| Review | Findings are verified, deduped, thresholded, and line-mapped or summarized. |
-| Claude auth | OAuth token and API-key paths both work; OAuth wins when both exist. |
-| Docs | Quickstart and workflow examples are secure by default. |
+| Area        | Required validation                                                          |
+| ----------- | ---------------------------------------------------------------------------- |
+| Build       | `bun run build` produces `dist/index.js`.                                    |
+| Types       | `bun run typecheck` passes.                                                  |
+| Tests       | `bun test` passes.                                                           |
+| Config      | Invalid config fails early with clear diagnostics.                           |
+| Policy      | Fork and untrusted contexts cannot escalate shell, push, or secrets.         |
+| Redaction   | Known secret strings do not appear in logs, artifacts, summaries, or errors. |
+| MCP         | Every tool validates schema, checks policy, audits, and redacts.             |
+| Review      | Findings are verified, deduped, thresholded, and line-mapped or summarized.  |
+| Claude auth | OAuth token and API-key paths both work; OAuth wins when both exist.         |
+| Docs        | Quickstart and workflow examples are secure by default.                      |
 
 ## Implementation Notes for Future Agents
 

@@ -5,7 +5,7 @@ describe("assembleReviewContext", () => {
   test("labels prSummary and learnings as untrusted since they derive from diff content", () => {
     const context = assembleReviewContext({
       event: { action: "opened" },
-      repo: "octo/reviewbot",
+      repo: "octo/shuvbot",
       diff: "diff --git a/a.ts b/a.ts",
       files: [{ filename: "a.ts" }],
       repoInstructions: [],

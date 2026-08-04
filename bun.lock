@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "reviewbot",
+      "name": "shuvbot",
       "dependencies": {
         "@actions/core": "^1.11.1",
         "@modelcontextprotocol/sdk": "^1.29.0",

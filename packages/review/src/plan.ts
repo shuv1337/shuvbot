@@ -1,6 +1,6 @@
 import { classifyDiffFile } from "./diff-filter.ts";
 import { matchesGlob } from "node:path";
-import type { ReviewbotConfig } from "../../core/src/config.ts";
+import type { ShuvbotConfig } from "../../core/src/config.ts";
 import {
   DEFAULT_SECURITY_SENSITIVE_PATH_PATTERNS,
   classifyRisk,
@@ -84,7 +84,7 @@ export function createReviewExecutionPlan(
 
 export function createReviewExecutionPlanFromConfig(
   input: Omit<CreateReviewExecutionPlanInput, "maxConcurrency" | "risk" | "reviewers"> & {
-    config: Pick<ReviewbotConfig, "review" | "paths">;
+    config: Pick<ShuvbotConfig, "review" | "paths">;
   }
 ): ReviewExecutionPlan {
   const { config, ...planInput } = input;

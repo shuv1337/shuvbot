@@ -1,5 +1,5 @@
 import type { BotEvent } from "./events.ts";
-import type { ReviewbotMode } from "./types.ts";
+import type { ShuvbotMode } from "./types.ts";
 import type { ActorPermission, PermissionLevel } from "./types.ts";
 
 export type { ActorPermission } from "./types.ts";
@@ -95,7 +95,7 @@ function capPermission(current: PermissionLevel, requested: PermissionLevel): Pe
 
 export interface BuildRuntimePolicyInput {
   event: BotEvent;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   actor: {
     login: string;
     actorPermission: ActorPermission;
@@ -190,7 +190,7 @@ function contextDefaults(input: PolicyInput): RuntimePolicy {
 function applyEventRestrictions(
   policy: RuntimePolicy,
   event: BotEvent,
-  mode: ReviewbotMode
+  mode: ShuvbotMode
 ): RuntimePolicy {
   const reasons = [...policy.reasons];
   let { shell, push, canReadSecrets, canApprove } = policy;

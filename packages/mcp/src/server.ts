@@ -9,7 +9,7 @@ import * as z from "zod/v4";
 import type { ToolContext, ToolSchema, ToolSpec } from "./tool-spec.ts";
 import { executeTool } from "./tool-spec.ts";
 
-export interface ReviewbotMcpServer {
+export interface ShuvbotMcpServer {
   url: URL;
   close(): Promise<void>;
 }
@@ -19,9 +19,7 @@ export interface StartMcpServerInput {
   context: ToolContext;
 }
 
-export async function startReviewbotMcpServer(
-  input: StartMcpServerInput
-): Promise<ReviewbotMcpServer> {
+export async function startShuvbotMcpServer(input: StartMcpServerInput): Promise<ShuvbotMcpServer> {
   const httpServer = createServer(async (request, response) => {
     if (request.url !== "/mcp") {
       writeJson(response, 404, { error: "Not found" });
@@ -86,7 +84,7 @@ function createMcpServer(
 ): McpServer {
   const server = new McpServer(
     {
-      name: "reviewbot-mcp",
+      name: "shuvbot-mcp",
       version: "0.1.0"
     },
     {

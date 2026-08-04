@@ -1,7 +1,7 @@
 import type { ParsedCommand } from "./commands.ts";
 import { formatFinalSummary } from "./final-summary.ts";
 import type { RuntimePolicy } from "./policy.ts";
-import { deriveReviewbotBranch } from "../../github/src/branches.ts";
+import { deriveShuvbotBranch } from "../../github/src/branches.ts";
 
 export interface ImplementAgent {
   run(input: { task: string; branch: string }): Promise<{
@@ -34,10 +34,14 @@ export interface RunImplementResult {
 }
 
 export async function runImplement(input: RunImplementInput): Promise<RunImplementResult> {
-  if (input.policy.push === "disabled" || input.policy.shell === "disabled" || !input.policy.canCreatePr) {
+  if (
+    input.policy.push === "disabled" ||
+    input.policy.shell === "disabled" ||
+    !input.policy.canCreatePr
+  ) {
     throw new Error("implement mode requires trusted push, shell, and create-pr policy");
   }
-  const branch = deriveReviewbotBranch({
+  const branch = deriveShuvbotBranch({
     mode: "implement",
     runId: input.runId,
     requestedBy: input.command.actor,

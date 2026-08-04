@@ -68,7 +68,7 @@ const FAILURE_EVENTS = new Set([
 ]);
 
 /**
- * Reduces public shuvcode events to reviewbot-owned lifecycle metadata. Source events are
+ * Reduces public shuvcode events to shuvbot-owned lifecycle metadata. Source events are
  * inspected synchronously and are never retained.
  */
 export class ShuvcodeSessionEventAccumulator {

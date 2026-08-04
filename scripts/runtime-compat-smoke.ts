@@ -44,13 +44,10 @@ function policyOf(session: { readonly policy?: ShuvcodeSessionPolicy }): string 
   return JSON.stringify(session.policy ?? null);
 }
 
-const root = await mkdtemp(join(tmpdir(), "reviewbot-runtime-smoke-"));
+const root = await mkdtemp(join(tmpdir(), "shuvbot-runtime-smoke-"));
 let exitCode = 0;
 try {
-  await writeFile(
-    join(root, "package.json"),
-    '{"name":"reviewbot-runtime-smoke","private":true}\n'
-  );
+  await writeFile(join(root, "package.json"), '{"name":"shuvbot-runtime-smoke","private":true}\n');
   console.log(`Installing ${packageName}@${version} into ${root}`);
   const install = spawnSync(
     "npm",
@@ -71,7 +68,7 @@ try {
 
   try {
     const coordinator = await runtime.createSession({
-      title: "reviewbot coordinator",
+      title: "shuvbot coordinator",
       location: { directory: root }
     });
     record(
@@ -81,7 +78,7 @@ try {
     );
 
     const reader = await runtime.createSession({
-      title: "reviewbot specialist read",
+      title: "shuvbot specialist read",
       location: { directory: root },
       policy: REVIEW_SESSION_POLICY
     });
@@ -92,7 +89,7 @@ try {
     );
 
     const restricted = await runtime.createSession({
-      title: "reviewbot specialist no tools",
+      title: "shuvbot specialist no tools",
       location: { directory: root },
       policy: { tools: { allow: [] } }
     });
@@ -105,7 +102,7 @@ try {
     let widened = false;
     try {
       await runtime.createSession({
-        title: "reviewbot widened",
+        title: "shuvbot widened",
         location: { directory: root },
         policy: { tools: { allow: [...REVIEW_SESSION_POLICY.tools.allow, "bash"] } }
       });

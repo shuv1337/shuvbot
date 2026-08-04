@@ -15,7 +15,7 @@ const FIXTURE_PATH = join(REPO_ROOT, "fixtures", "events", "pull_request.synchro
 // per-test temp dir and deleting that dir afterward poisons every later
 // summary-writing test in the same process with an ENOENT. Use one fixed,
 // never-deleted path for the whole process instead - see workflow-summary.test.ts.
-const SUMMARY_PATH = join(tmpdir(), "reviewbot-tests-github-step-summary.md");
+const SUMMARY_PATH = join(tmpdir(), "shuvbot-tests-github-step-summary.md");
 
 const INJECTED_FINDING = {
   id: "sql-injection-1",
@@ -134,7 +134,7 @@ describe("main() end to end (review mode)", () => {
   let previousEnv: Record<string, string | undefined>;
 
   beforeEach(async () => {
-    cwd = await mkdtemp(join(tmpdir(), "reviewbot-e2e-"));
+    cwd = await mkdtemp(join(tmpdir(), "shuvbot-e2e-"));
     const outputPath = join(cwd, "output.txt");
     await writeFile(SUMMARY_PATH, "");
     await writeFile(outputPath, "");
@@ -225,7 +225,7 @@ describe("main() end to end (review mode)", () => {
     expect(output).toContain(INJECTED_FINDING.title);
 
     const summary = await readFile(SUMMARY_PATH, "utf8");
-    expect(summary).toContain("reviewbot");
+    expect(summary).toContain("shuvbot");
   });
 
   test("records the failure and still writes a workflow summary when the driver can't prepare", async () => {

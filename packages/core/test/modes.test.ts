@@ -59,20 +59,20 @@ describe("resolveMode", () => {
   });
 
   test("maps command tokens to modes", () => {
-    const event = makeIssueCommentEvent("@reviewbot implement the spec");
+    const event = makeIssueCommentEvent("@shuvbot implement the spec");
     const command = findCommandInEvent(event);
     const result = resolveMode({ explicit: "auto", event, command });
     expect(result.mode).toBe("implement");
   });
 
   test("maps fix-ci command", () => {
-    const event = makeIssueCommentEvent("@reviewbot fix-ci");
+    const event = makeIssueCommentEvent("@shuvbot fix-ci");
     const command = findCommandInEvent(event);
     expect(resolveMode({ explicit: "auto", event, command }).mode).toBe("fix-ci");
   });
 
   test("maps release-notes-style commands", () => {
-    const event = makeIssueCommentEvent("@reviewbot changelog");
+    const event = makeIssueCommentEvent("@shuvbot changelog");
     const command = findCommandInEvent(event);
     expect(resolveMode({ explicit: "auto", event, command }).mode).toBe("release-notes");
   });

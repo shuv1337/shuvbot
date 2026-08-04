@@ -38,14 +38,13 @@ interface PendingArtifact {
 
 export async function writeReviewArtifacts(input: ReviewArtifactsInput): Promise<ReviewArtifacts> {
   const redactor = input.redactor ?? new DefaultRedactor();
-  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
-  const runPath = join(dir, "reviewbot-run.json");
-  const findingsPath = join(dir, "reviewbot-findings.json");
-  const contextManifestPath = join(dir, "reviewbot-context-manifest.json");
+  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "shuvbot");
+  const runPath = join(dir, "shuvbot-run.json");
+  const findingsPath = join(dir, "shuvbot-findings.json");
+  const contextManifestPath = join(dir, "shuvbot-context-manifest.json");
   const reviewSessionsPath =
-    input.runRecord.review === undefined ? undefined : join(dir, "reviewbot-review-sessions.json");
-  const eventsPath =
-    input.sessionLog === undefined ? undefined : join(dir, "reviewbot-events.jsonl");
+    input.runRecord.review === undefined ? undefined : join(dir, "shuvbot-review-sessions.json");
+  const eventsPath = input.sessionLog === undefined ? undefined : join(dir, "shuvbot-events.jsonl");
 
   assertCount("findings", input.findings.length, MAX_STRUCTURED_ITEMS);
   assertCount(
@@ -116,7 +115,7 @@ export async function writeReviewArtifacts(input: ReviewArtifactsInput): Promise
 
 /**
  * Persist agent/review failure diagnostics so an opaque "Claude exited with 1"
- * leaves an inspectable trace in the uploaded `$RUNNER_TEMP/reviewbot` artifacts
+ * leaves an inspectable trace in the uploaded `$RUNNER_TEMP/shuvbot` artifacts
  * (the review pipeline throws before the normal artifacts are written). The
  * caller is responsible for redacting `message` before it reaches here.
  */
@@ -124,9 +123,9 @@ export async function writeFailureDiagnostics(input: {
   runnerTemp?: string;
   message: string;
 }): Promise<string> {
-  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
+  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "shuvbot");
   await mkdir(dir, { recursive: true });
-  const path = join(dir, "reviewbot-agent-error.txt");
+  const path = join(dir, "shuvbot-agent-error.txt");
   await writeFile(path, `${input.message.trimEnd()}\n`);
   return path;
 }

@@ -1,5 +1,5 @@
 export const MODES = ["auto", "review", "implement", "fix-ci", "triage", "release-notes"] as const;
-export type ReviewbotMode = (typeof MODES)[number];
+export type ShuvbotMode = (typeof MODES)[number];
 
 export type ActorPermission = "none" | "read" | "triage" | "write" | "maintain" | "admin";
 
@@ -24,6 +24,9 @@ export type Confidence = (typeof CONFIDENCES)[number];
 export const PERMISSION_LEVELS = ["disabled", "restricted", "enabled"] as const;
 export type PermissionLevel = (typeof PERMISSION_LEVELS)[number];
 
-export function isOneOf<const T extends readonly string[]>(value: unknown, allowed: T): value is T[number] {
+export function isOneOf<const T extends readonly string[]>(
+  value: unknown,
+  allowed: T
+): value is T[number] {
   return typeof value === "string" && allowed.includes(value);
 }

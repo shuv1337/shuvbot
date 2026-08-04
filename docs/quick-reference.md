@@ -32,23 +32,23 @@ Without building, run from source with `bun packages/cli/src/index.ts review`.
 
 Keep the binary in this checkout, or symlink it as above: it finds `shuvcode` next to its real
 location, so a symlink on `PATH` works but a copy moved elsewhere does not. The runtime is looked up
-in the reviewed repository first and beside reviewbot second, so the reviewed project does not need
+in the reviewed repository first and beside shuvbot second, so the reviewed project does not need
 to depend on `shuvcode`.
 
-| Flag                           | Meaning                                                                       |
-| ------------------------------ | ----------------------------------------------------------------------------- |
-| `--base <rev>`                 | Range start. Defaults per VCS, see below.                                     |
-| `--head <rev>`                 | Range end. Defaults per VCS, see below.                                       |
-| `--config <path>`              | Load a specific TOML instead of `./reviewbot.toml`. Missing file is an error. |
-| `--engine coordinator\|legacy` | Override the configured engine. `legacy` fails closed.                        |
-| `--json`                       | Stable machine-readable report instead of progress output.                    |
+| Flag                           | Meaning                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `--base <rev>`                 | Range start. Defaults per VCS, see below.                                   |
+| `--head <rev>`                 | Range end. Defaults per VCS, see below.                                     |
+| `--config <path>`              | Load a specific TOML instead of `./shuvbot.toml`. Missing file is an error. |
+| `--engine coordinator\|legacy` | Override the configured engine. `legacy` fails closed.                      |
+| `--json`                       | Stable machine-readable report instead of progress output.                  |
 
 The range is three-dot, so it reviews what your side adds rather than what the other side moved on
 to. Flags are strict: unknown, duplicate, or valueless options fail rather than being ignored.
 
 ### Jujutsu and Git
 
-Reviewbot detects the VCS and picks defaults to match. A colocated repository counts as Jujutsu,
+Shuvbot detects the VCS and picks defaults to match. A colocated repository counts as Jujutsu,
 because Git's `HEAD` there is the _parent_ of the working-copy commit, so reading it through Git
 would skip the change being worked on.
 
@@ -81,7 +81,7 @@ the feedback describes the previous state.
 ```
 
 Jujutsu revisions are resolved by `jj` into ordinary Git commits, so everything after resolution is
-identical for both. `jj` must be on `PATH` in a Jujutsu workspace; if it is missing, reviewbot says
+identical for both. `jj` must be on `PATH` in a Jujutsu workspace; if it is missing, shuvbot says
 so and suggests an explicit Git range.
 
 ### Reading the result
@@ -106,7 +106,7 @@ Findings are `[severity/state] summary (file:line, reviewer)`.
 
 ### Configuration
 
-A `reviewbot.toml` in the repository being reviewed. Everything is optional.
+A `shuvbot.toml` in the repository being reviewed. Everything is optional.
 
 ```toml
 [review]
@@ -139,18 +139,18 @@ be one the configuration already selects for a role.
 
 ### Artifacts
 
-Each run writes `.reviewbot/runs/<id>/`:
+Each run writes `.shuvbot/runs/<id>/`:
 
-| File                              | Contents                                            |
-| --------------------------------- | --------------------------------------------------- |
-| `reviewbot-run.json`              | Run record: timings, engine, config summary         |
-| `reviewbot-review-result.json`    | Decision, coverage, quorum, retries                 |
-| `reviewbot-review-sessions.json`  | Per-session model, status, usage, errors            |
-| `reviewbot-events.jsonl`          | Redacted session timeline                           |
-| `reviewbot-findings.json`         | Findings as structured data                         |
-| `reviewbot-rejected-results.json` | Only when a result was refused: the offending value |
+| File                            | Contents                                            |
+| ------------------------------- | --------------------------------------------------- |
+| `shuvbot-run.json`              | Run record: timings, engine, config summary         |
+| `shuvbot-review-result.json`    | Decision, coverage, quorum, retries                 |
+| `shuvbot-review-sessions.json`  | Per-session model, status, usage, errors            |
+| `shuvbot-events.jsonl`          | Redacted session timeline                           |
+| `shuvbot-findings.json`         | Findings as structured data                         |
+| `shuvbot-rejected-results.json` | Only when a result was refused: the offending value |
 
-`.reviewbot/` is gitignored here; add it to `.gitignore` in other repositories.
+`.shuvbot/` is gitignored here; add it to `.gitignore` in other repositories.
 
 ### When something breaks
 
@@ -159,19 +159,19 @@ bun packages/cli/src/index.ts doctor    # prerequisites, auth, runtime, model ca
 bun run smoke:runtime                    # drive the pinned runtime end to end
 ```
 
-| Symptom                                         | Cause                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------ |
-| `REVIEW_CONFIG_INVALID` naming a model          | Model or effort is not curated. The message lists the accepted ones.           |
-| `REVIEW_SCHEMA_INVALID`                         | A result failed validation. The value is in `reviewbot-rejected-results.json`. |
-| `Cannot resolve the installed shuvcode package` | Run `bun install` here; a binary copied elsewhere cannot find it.              |
-| `jj` executable not found                       | Install jj, or pass an explicit `--base`/`--head` Git range.                   |
-| Runtime pin mismatch                            | `review.shuvcode.version` must equal the code-approved pin.                    |
-| `no_changes` / `no_reviewable_changes`          | The range is empty or entirely ignored by `[paths]`.                           |
-| Review describes code you already fixed         | Git only: uncommitted work. Commit and rerun, or use Jujutsu.                  |
+| Symptom                                         | Cause                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| `REVIEW_CONFIG_INVALID` naming a model          | Model or effort is not curated. The message lists the accepted ones.         |
+| `REVIEW_SCHEMA_INVALID`                         | A result failed validation. The value is in `shuvbot-rejected-results.json`. |
+| `Cannot resolve the installed shuvcode package` | Run `bun install` here; a binary copied elsewhere cannot find it.            |
+| `jj` executable not found                       | Install jj, or pass an explicit `--base`/`--head` Git range.                 |
+| Runtime pin mismatch                            | `review.shuvcode.version` must equal the code-approved pin.                  |
+| `no_changes` / `no_reviewable_changes`          | The range is empty or entirely ignored by `[paths]`.                         |
+| Review describes code you already fixed         | Git only: uncommitted work. Commit and rerun, or use Jujutsu.                |
 
 ## GitHub reviews
 
-`.github/workflows/reviewbot.yml` runs the published action on pull requests targeting `master`. It
+`.github/workflows/shuvbot.yml` runs the published action on pull requests targeting `master`. It
 is **advisory**: it comments but never blocks a merge.
 
 ```yaml
@@ -187,10 +187,10 @@ requests are skipped, because secrets are not available to them, and drafts wait
 `ready_for_review`.
 
 Useful inputs: `mode`, `model`, `config`, `timeout`, `activity_timeout`, `push`, `shell`, `prompt`.
-Outputs: `result`, `review_findings`, `summary`. Failure diagnostics upload as the `reviewbot`
+Outputs: `result`, `review_findings`, `summary`. Failure diagnostics upload as the `shuvbot`
 artifact.
 
-To make it blocking, set these in `reviewbot.toml` - both default to `false`, so decide deliberately:
+To make it blocking, set these in `shuvbot.toml` - both default to `false`, so decide deliberately:
 
 ```toml
 fail_check = true       # fail the check run

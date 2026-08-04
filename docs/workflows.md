@@ -10,11 +10,11 @@ Review mode needs the Claude Code CLI on `PATH` and Claude credentials in
 addition to the GitHub token: install Claude Code before the shuvbot step, then
 expose `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via
 `env:`, or the run will fail with a Claude auth error. When the real agent
-fails before normal review artifacts are written, reviewbot logs a redacted
-diagnostic tail and persists it as `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
+fails before normal review artifacts are written, shuvbot logs a redacted
+diagnostic tail and persists it as `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt`.
 
 ```yaml
-name: reviewbot
+name: shuvbot
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -44,26 +44,26 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      - name: Upload reviewbot artifacts
+      - name: Upload shuvbot artifacts
         if: always()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: reviewbot
-          path: ${{ runner.temp }}/reviewbot
+          name: shuvbot
+          path: ${{ runner.temp }}/shuvbot
           if-no-files-found: warn
 ```
 
-Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `reviewbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft` on the job when credentials are unavailable to fork PRs and draft PRs should wait for review; fork PRs will be skipped instead of failing the Claude auth check, and draft PRs will run when marked ready for review because `ready_for_review` is included in the trigger types.
+Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `shuvbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft` on the job when credentials are unavailable to fork PRs and draft PRs should wait for review; fork PRs will be skipped instead of failing the Claude auth check, and draft PRs will run when marked ready for review because `ready_for_review` is included in the trigger types.
 
 ## Mention-Driven Implement
 
 Not yet wired to a real agent in this version. Trusted collaborators can comment:
 
 ```text
-@reviewbot implement fix the failing parser test
+@shuvbot implement fix the failing parser test
 ```
 
-The bot creates/fast-forwards a `reviewbot/*` branch and validates implement-mode
+The bot creates/fast-forwards a `shuvbot/*` branch and validates implement-mode
 policy, but the agent step itself is a no-op: it writes no patch, runs no
 commands, and opens no PR. Fork and untrusted contexts keep shell/push
 disabled regardless.

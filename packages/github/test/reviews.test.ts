@@ -14,10 +14,10 @@ import type { PipelineFinding } from "../../core/src/review-pipeline.ts";
 describe("review posting", () => {
   test("dedupes existing marker comments before posting review", async () => {
     const client = new MockClient({
-      "GET /repos/octo/reviewbot/pulls/1/comments": [
+      "GET /repos/octo/shuvbot/pulls/1/comments": [
         { id: 1, body: appendMarker("old", "finding:one") }
       ],
-      "POST /repos/octo/reviewbot/pulls/1/reviews": {
+      "POST /repos/octo/shuvbot/pulls/1/reviews": {
         id: 2,
         html_url: "https://github.test/review/2"
       }
@@ -25,7 +25,7 @@ describe("review posting", () => {
 
     const result = await postReview({
       client,
-      repo: { owner: "octo", name: "reviewbot" },
+      repo: { owner: "octo", name: "shuvbot" },
       pullNumber: 1,
       body: "summary",
       event: "COMMENT",
@@ -72,8 +72,8 @@ describe("review finding ingestion", () => {
       key: `finding:${stable}`,
       payload: { version: 1 }
     });
-    expect(parseMarker("<!-- reviewbot:finding:stable-root:not+base64 -->")).toBeUndefined();
-    expect(parseMarker("<!-- reviewbot:finding:stable-root:e2JhZA -->")).toBeUndefined();
+    expect(parseMarker("<!-- shuvbot:finding:stable-root:not+base64 -->")).toBeUndefined();
+    expect(parseMarker("<!-- shuvbot:finding:stable-root:e2JhZA -->")).toBeUndefined();
   });
 
   test("paginates, filters bot roots, groups untrusted replies, and deduplicates fingerprints", async () => {
@@ -82,9 +82,9 @@ describe("review finding ingestion", () => {
         1,
         {
           comments: [
-            reviewComment(10, "reviewbot[bot]", stable, { path: "src/a.ts", line: 12 }),
+            reviewComment(10, "shuvbot[bot]", stable, { path: "src/a.ts", line: 12 }),
             reviewComment(11, "someone", duplicate),
-            reviewComment(12, "reviewbot[bot]", stable, { path: "src/duplicate.ts" })
+            reviewComment(12, "shuvbot[bot]", stable, { path: "src/duplicate.ts" })
           ],
           nextPage: 2
         }
@@ -100,7 +100,7 @@ describe("review finding ingestion", () => {
               user: { login: "contributor" },
               created_at: "2026-08-03T00:00:00Z"
             },
-            { id: 21, in_reply_to_id: 10, body: "bot follow-up", user: { login: "reviewbot[bot]" } }
+            { id: 21, in_reply_to_id: 10, body: "bot follow-up", user: { login: "shuvbot[bot]" } }
           ],
           nextPage: null
         }
@@ -110,9 +110,9 @@ describe("review finding ingestion", () => {
 
     const result = await readReviewFindingThreads({
       client: new MockClient({}),
-      repo: { owner: "octo", name: "reviewbot" },
+      repo: { owner: "octo", name: "shuvbot" },
       pullNumber: 1,
-      botLogin: "reviewbot[bot]",
+      botLogin: "shuvbot[bot]",
       loadPage: async (page) => {
         loadedPages.push(page);
         return pages.get(page)!;
@@ -139,7 +139,7 @@ describe("review finding ingestion", () => {
       {
         id: 21,
         body: "bot follow-up",
-        authorLogin: "reviewbot[bot]",
+        authorLogin: "shuvbot[bot]",
         createdAt: null,
         untrusted: true
       }
@@ -188,7 +188,7 @@ describe("review finding ingestion", () => {
     ];
     const result = await readReviewFindingThreads({
       client: new MockClient({}),
-      repo: { owner: "octo", name: "reviewbot" },
+      repo: { owner: "octo", name: "shuvbot" },
       pullNumber: 1,
       botLogin: "bot",
       loadPage: async () => ({ comments })
@@ -329,7 +329,7 @@ function markerComment(id: number, login: string, markerKey: string): Record<str
 function baseInput() {
   return {
     client: new MockClient({}),
-    repo: { owner: "octo", name: "reviewbot" },
+    repo: { owner: "octo", name: "shuvbot" },
     pullNumber: 1,
     botLogin: "bot"
   };

@@ -1,1 +1,11 @@
-{"action":"completed","repository":{"owner":{"login":"octo"},"name":"repo","full_name":"octo/repo","private":false},"sender":{"login":"github-actions[bot]"},"check_suite":{"conclusion":"failure","head_sha":"headsha"}}
+{
+  "action": "completed",
+  "repository": {
+    "owner": { "login": "octo" },
+    "name": "repo",
+    "full_name": "octo/repo",
+    "private": false
+  },
+  "sender": { "login": "github-actions[bot]" },
+  "check_suite": { "conclusion": "failure", "head_sha": "headsha" }
+}

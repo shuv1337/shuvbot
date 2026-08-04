@@ -6,13 +6,13 @@ import {
   PERMISSION_LEVELS,
   type AgentId,
   type PermissionLevel,
-  type ReviewbotMode,
+  type ShuvbotMode,
   isOneOf
 } from "../../core/src/types.ts";
 
 export interface ActionInputs {
   prompt?: string;
-  mode?: ReviewbotMode;
+  mode?: ShuvbotMode;
   config?: string;
   model?: string;
   agent?: AgentId;

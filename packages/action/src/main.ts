@@ -20,19 +20,19 @@ import { buildRuntimePolicy } from "../../core/src/policy.ts";
 import { deriveActorContext, type ActorContext } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
 import { ConfigError } from "../../core/src/errors.ts";
-import { MODES, type AgentId, type ReviewbotMode } from "../../core/src/types.ts";
+import { MODES, type AgentId, type ShuvbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
 import { runReview } from "../../core/src/review-runner.ts";
 import { fallbackToSummary, postReview } from "../../github/src/reviews.ts";
 import { runImplement } from "../../core/src/implement-runner.ts";
-import { createOrFastForwardReviewbotBranch } from "../../github/src/branches.ts";
+import { createOrFastForwardShuvbotBranch } from "../../github/src/branches.ts";
 import { parseDurationMs, runFixCiLoop } from "../../core/src/fix-ci.ts";
 import { fetchCheckLog, findFailedCheckRuns } from "../../github/src/checks.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import type { AgentDriver } from "../../agents/src/driver.ts";
 import { createClaudeCodeDriver } from "../../agents/src/claude-code.ts";
 import { createDriverReviewAgent } from "../../agents/src/review-agent.ts";
-import { startReviewbotMcpServer } from "../../mcp/src/server.ts";
+import { startShuvbotMcpServer } from "../../mcp/src/server.ts";
 import { readContextTools } from "../../mcp/src/tools/index.ts";
 import { AuditLog } from "../../mcp/src/audit.ts";
 
@@ -63,7 +63,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     command,
     promptText: inputs.prompt ?? ""
   });
-  const mode: ReviewbotMode = resolved.mode;
+  const mode: ShuvbotMode = resolved.mode;
 
   const config = {
     ...fileConfig,
@@ -151,7 +151,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       const cwd = inputs.cwd ?? process.cwd();
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
-      const mcpServer = await startReviewbotMcpServer({
+      const mcpServer = await startShuvbotMcpServer({
         tools: readContextTools,
         context: {
           repo,
@@ -203,7 +203,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         const message = redactor.redactString(
           reviewError instanceof Error ? reviewError.message : String(reviewError)
         );
-        core.error(`reviewbot review failed:\n${boundedLogTail(message)}`);
+        core.error(`shuvbot review failed:\n${boundedLogTail(message)}`);
         await writeFailureDiagnostics({ message }).catch(() => undefined);
         throw reviewError;
       } finally {
@@ -263,12 +263,12 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         command,
         policy,
         startPoint: triggerSha(event),
-        prepareBranch: createOrFastForwardReviewbotBranch,
+        prepareBranch: createOrFastForwardShuvbotBranch,
         agent: {
           async run() {
             return {
               workDone: [
-                "Prepared reviewbot implementation branch and validated implement-mode policy."
+                "Prepared shuvbot implementation branch and validated implement-mode policy."
               ],
               filesChanged: [],
               commandsRun: [],
@@ -383,7 +383,7 @@ function createReviewDriver(agentId: AgentId): AgentDriver {
   return createClaudeCodeDriver();
 }
 
-function isExplicitMode(value: string | undefined): value is ReviewbotMode {
+function isExplicitMode(value: string | undefined): value is ShuvbotMode {
   return typeof value === "string" && (MODES as readonly string[]).includes(value);
 }
 
@@ -433,6 +433,6 @@ async function readEventPayload(): Promise<unknown> {
 }
 
 function buildReviewSummary(findings: Parameters<typeof fallbackToSummary>[0][]): string {
-  if (findings.length === 0) return "reviewbot found no summary-only findings.";
+  if (findings.length === 0) return "shuvbot found no summary-only findings.";
   return findings.map((finding) => fallbackToSummary(finding)).join("\n");
 }

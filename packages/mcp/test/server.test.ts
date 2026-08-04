@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
-import { startReviewbotMcpServer, type ReviewbotMcpServer } from "../src/server.ts";
+import { startShuvbotMcpServer, type ShuvbotMcpServer } from "../src/server.ts";
 import type { ToolAuditRecord, ToolContext, ToolSpec } from "../src/tool-spec.ts";
 
 interface EchoInput {
@@ -38,7 +38,7 @@ const echoTool: ToolSpec<EchoInput, EchoOutput> = {
   }
 };
 
-let server: ReviewbotMcpServer | undefined;
+let server: ShuvbotMcpServer | undefined;
 
 afterEach(async () => {
   await server?.close();
@@ -48,7 +48,7 @@ afterEach(async () => {
 describe("MCP server", () => {
   test("binds to 127.0.0.1 on an ephemeral port and serves registered tools", async () => {
     const audit: ToolAuditRecord[] = [];
-    server = await startReviewbotMcpServer({
+    server = await startShuvbotMcpServer({
       tools: [echoTool as ToolSpec<unknown, unknown>],
       context: context(audit)
     });
@@ -81,7 +81,7 @@ describe("MCP server", () => {
       }
     };
     const audit: ToolAuditRecord[] = [];
-    server = await startReviewbotMcpServer({
+    server = await startShuvbotMcpServer({
       tools: [secretTool as ToolSpec<unknown, unknown>],
       context: context(audit)
     });

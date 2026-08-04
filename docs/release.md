@@ -11,7 +11,7 @@ The script runs install, typecheck, lint, tests, build, and evals, then prints t
 Tag plan:
 
 - Release-note changes may prepare the v0 line before any git tag or GitHub release exists.
-- `v0.1.0` points at the first reviewbot v0 release commit once the release is cut.
+- `v0.1.0` points at the first shuvbot v0 release commit once the release is cut.
 - `v0` is a moving major tag updated only after release smoke validation.
 - `v1` is reserved for the future stable contract.
 

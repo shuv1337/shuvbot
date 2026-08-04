@@ -331,11 +331,9 @@ describe("local review CLI", () => {
       artifactDirectories.push(directory);
       await mkdir(directory, { recursive: true });
       await Promise.all(
-        [
-          "reviewbot-events.jsonl",
-          "reviewbot-review-sessions.json",
-          "reviewbot-review-result.json"
-        ].map((name) => writeFile(join(directory, name), '{"secret":"[REDACTED]"}\n'))
+        ["shuvbot-events.jsonl", "shuvbot-review-sessions.json", "shuvbot-review-result.json"].map(
+          (name) => writeFile(join(directory, name), '{"secret":"[REDACTED]"}\n')
+        )
       );
       return {
         ...completedExecution(["code-quality"]),
@@ -356,15 +354,15 @@ describe("local review CLI", () => {
 
     expect(new Set(artifactDirectories).size).toBe(2);
     for (const directory of artifactDirectories) {
-      expect(directory.startsWith(join(cwd, ".reviewbot", "runs") + "/")).toBe(true);
-      expect(directory).not.toContain("reviewbot-review-");
-      await access(join(directory, "reviewbot-review-result.json"));
-      expect(await readFile(join(directory, "reviewbot-events.jsonl"), "utf8")).not.toContain(
+      expect(directory.startsWith(join(cwd, ".shuvbot", "runs") + "/")).toBe(true);
+      expect(directory).not.toContain("shuvbot-review-");
+      await access(join(directory, "shuvbot-review-result.json"));
+      expect(await readFile(join(directory, "shuvbot-events.jsonl"), "utf8")).not.toContain(
         "token-do-not-print"
       );
     }
-    expect(await readdir(join(cwd, ".reviewbot", "runs"))).toHaveLength(2);
-    expect(await readdir(join(cwd, ".reviewbot", "state", "reviews"))).toHaveLength(1);
+    expect(await readdir(join(cwd, ".shuvbot", "runs"))).toHaveLength(2);
+    expect(await readdir(join(cwd, ".shuvbot", "state", "reviews"))).toHaveLength(1);
   });
 
   test("reports degraded coverage honestly", async () => {
@@ -536,8 +534,8 @@ describe("local review CLI", () => {
     await git(moved, ["worktree", "add", "--detach", linked, "HEAD"]);
     const fromLinked = coordinatorResult(await runLocalReview({ ...options, cwd: linked }));
     expect(fromLinked.reconciliation?.activeFindings[0]?.disposition).toBe("unresolved");
-    expect(await readdir(join(moved, ".reviewbot", "state", "reviews"))).toHaveLength(1);
-    await expect(access(join(linked, ".reviewbot", "state"))).rejects.toMatchObject({
+    expect(await readdir(join(moved, ".shuvbot", "state", "reviews"))).toHaveLength(1);
+    await expect(access(join(linked, ".shuvbot", "state"))).rejects.toMatchObject({
       code: "ENOENT"
     });
   });
@@ -563,13 +561,13 @@ describe("local review CLI", () => {
       })
     });
 
-    const stateDirectory = join(cwd, ".reviewbot", "state", "reviews");
+    const stateDirectory = join(cwd, ".shuvbot", "state", "reviews");
     const names = await readdir(stateDirectory);
     expect(names).toEqual([expect.stringMatching(/^[0-9a-f]{64}\.json$/)]);
     const persisted = await readFile(join(stateDirectory, names[0]!), "utf8");
     expect(`${output}${persisted}${artifactDirectory}`).not.toContain(secret);
     expect(`${output}${persisted}${artifactDirectory}`).not.toContain("private-user");
-    expect(artifactDirectory.startsWith(join(cwd, ".reviewbot", "runs") + "/")).toBe(true);
+    expect(artifactDirectory.startsWith(join(cwd, ".shuvbot", "runs") + "/")).toBe(true);
     expect(artifactDirectory).not.toContain("git.example.test");
   });
 
@@ -594,7 +592,7 @@ describe("local review CLI", () => {
     const secondState = JSON.parse(await readFile(await onlyStatePath(second), "utf8"));
     expect(firstState.changeId).not.toBe(secondState.changeId);
     for (const cwd of [first, second]) {
-      const identityPath = join(cwd, ".git", "reviewbot", "repository-id");
+      const identityPath = join(cwd, ".git", "shuvbot", "repository-id");
       expect((await stat(identityPath)).mode & 0o777).toBe(0o600);
       expect((await readFile(identityPath, "utf8")).trim()).toMatch(/^[0-9a-f-]{36}$/);
     }
@@ -823,7 +821,7 @@ describe("local review CLI", () => {
     expect(JSON.stringify(json)).not.toContain("quorum");
     expect(JSON.stringify(json)).not.toContain("coverage");
     expect(calls).toBe(0);
-    await expect(access(join(cwd, ".reviewbot"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(cwd, ".shuvbot"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("reports an actionable deterministic error when the reviewed diff bound is exceeded", async () => {
@@ -1067,7 +1065,7 @@ describe("local review CLI", () => {
     expect(output).not.toContain("quorum");
     expect(output).not.toContain("clean");
     expect(executions).toBe(0);
-    await expect(access(join(cwd, ".reviewbot"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(cwd, ".shuvbot"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("persists redacted contract run and findings artifacts with accounting", async () => {
@@ -1089,8 +1087,8 @@ describe("local review CLI", () => {
       })
     });
 
-    const run = JSON.parse(await readFile(join(directory, "reviewbot-run.json"), "utf8"));
-    const findings = await readFile(join(directory, "reviewbot-findings.json"), "utf8");
+    const run = JSON.parse(await readFile(join(directory, "shuvbot-run.json"), "utf8"));
+    const findings = await readFile(join(directory, "shuvbot-findings.json"), "utf8");
     expect(run.review).toMatchObject({
       engine: "coordinator",
       tier: "trivial",
@@ -1133,7 +1131,7 @@ describe("local review CLI", () => {
     let directory = "";
     const delayedWrite = (async (path: Parameters<typeof writeFile>[0], ...args: unknown[]) => {
       await (writeFile as (...values: unknown[]) => Promise<void>)(path, ...args);
-      if (String(path).includes("reviewbot-run.json")) {
+      if (String(path).includes("shuvbot-run.json")) {
         await new Promise<void>(() => undefined);
       }
     }) as typeof writeFile;
@@ -1343,11 +1341,11 @@ function degradedExecution(reviewers: readonly BuiltInReviewerId[]): Coordinator
 }
 
 async function createRepository(changedLines: number): Promise<string> {
-  const cwd = await mkdtemp(join(tmpdir(), "reviewbot-local-review-"));
+  const cwd = await mkdtemp(join(tmpdir(), "shuvbot-local-review-"));
   temporaryRepositories.push(cwd);
   await execFileAsync("git", ["init", "-b", "main"], { cwd });
-  await execFileAsync("git", ["config", "user.email", "reviewbot@example.com"], { cwd });
-  await execFileAsync("git", ["config", "user.name", "reviewbot"], { cwd });
+  await execFileAsync("git", ["config", "user.email", "shuvbot@example.com"], { cwd });
+  await execFileAsync("git", ["config", "user.name", "shuvbot"], { cwd });
   await writeFile(join(cwd, "a.ts"), "const initial = true;\n");
   await execFileAsync("git", ["add", "a.ts"], { cwd });
   await execFileAsync("git", ["commit", "-m", "initial"], { cwd });
@@ -1361,11 +1359,11 @@ async function createRepository(changedLines: number): Promise<string> {
 }
 
 async function createSpecialRepository(): Promise<string> {
-  const cwd = await mkdtemp(join(tmpdir(), "reviewbot-local-review-paths-"));
+  const cwd = await mkdtemp(join(tmpdir(), "shuvbot-local-review-paths-"));
   temporaryRepositories.push(cwd);
   await git(cwd, ["init", "-b", "main"]);
-  await git(cwd, ["config", "user.email", "reviewbot@example.com"]);
-  await git(cwd, ["config", "user.name", "reviewbot"]);
+  await git(cwd, ["config", "user.email", "shuvbot@example.com"]);
+  await git(cwd, ["config", "user.name", "shuvbot"]);
   await Promise.all([
     writeFile(join(cwd, "old.ts"), "export const renamed = true;\n"),
     writeFile(join(cwd, "source.ts"), "export const copied = true;\n"),
@@ -1395,7 +1393,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 }
 
 async function onlyStatePath(cwd: string): Promise<string> {
-  const directory = join(cwd, ".reviewbot", "state", "reviews");
+  const directory = join(cwd, ".shuvbot", "state", "reviews");
   const names = await readdir(directory);
   if (names.length !== 1) throw new Error(`expected one state file, found ${names.length}`);
   return join(directory, names[0]!);

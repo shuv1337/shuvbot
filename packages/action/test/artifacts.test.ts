@@ -14,7 +14,7 @@ import {
 
 describe("review artifacts", () => {
   test("writes redacted run, findings, manifest, session, and event artifacts with safe modes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifacts-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifacts-"));
     const secret = "private-token";
     const artifacts = await writeReviewArtifacts({
       runnerTemp: root,
@@ -40,7 +40,7 @@ describe("review artifacts", () => {
   });
 
   test("accepts an artifact exactly at the byte limit and rejects one byte over", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-boundary-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-boundary-"));
     const findings = Array.from({ length: 33 }, (_, index) => ({
       ...finding(""),
       id: `finding-${index}`
@@ -74,9 +74,7 @@ describe("review artifacts", () => {
         contextManifest: { sections: [], totalBytes: 0 },
         redactor: identityRedactor
       })
-    ).rejects.toThrow(
-      `reviewbot-findings.json exceeds the ${ACTION_ARTIFACT_MAX_BYTES}-byte limit`
-    );
+    ).rejects.toThrow(`shuvbot-findings.json exceeds the ${ACTION_ARTIFACT_MAX_BYTES}-byte limit`);
   });
 
   test("rejects oversized model-derived run, context, session, and event fields", async () => {
@@ -94,7 +92,7 @@ describe("review artifacts", () => {
     ];
 
     for (const overrides of cases) {
-      const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-oversized-"));
+      const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-oversized-"));
       await expect(
         writeReviewArtifacts({
           runnerTemp: root,
@@ -109,7 +107,7 @@ describe("review artifacts", () => {
   });
 
   test("bounds event count without silently truncating", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-events-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-events-"));
     const event = failedEvent("failure");
     const exact = await writeReviewArtifacts({
       runnerTemp: root,
@@ -137,14 +135,10 @@ describe("review artifacts", () => {
   });
 
   test("preserves every existing final when any artifact fails before commit", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-precommit-"));
-    const dir = join(root, "reviewbot");
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-precommit-"));
+    const dir = join(root, "shuvbot");
     await mkdir(dir);
-    const names = [
-      "reviewbot-run.json",
-      "reviewbot-findings.json",
-      "reviewbot-context-manifest.json"
-    ];
+    const names = ["shuvbot-run.json", "shuvbot-findings.json", "shuvbot-context-manifest.json"];
     await Promise.all(names.map((name) => writeFile(join(dir, name), `old:${name}`)));
 
     await expect(
@@ -163,12 +157,12 @@ describe("review artifacts", () => {
   });
 
   test("cleans all temps and preserves complete finals when a deterministic rename fails", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-rename-"));
-    const dir = join(root, "reviewbot");
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-rename-"));
+    const dir = join(root, "shuvbot");
     await mkdir(dir);
-    await writeFile(join(dir, "reviewbot-run.json"), "old-run");
-    await writeFile(join(dir, "reviewbot-findings.json"), "old-findings");
-    await mkdir(join(dir, "reviewbot-context-manifest.json"));
+    await writeFile(join(dir, "shuvbot-run.json"), "old-run");
+    await writeFile(join(dir, "shuvbot-findings.json"), "old-findings");
+    await mkdir(join(dir, "shuvbot-context-manifest.json"));
 
     await expect(
       writeReviewArtifacts({
@@ -179,8 +173,8 @@ describe("review artifacts", () => {
       })
     ).rejects.toThrow("Unable to commit review artifacts");
 
-    await expect(readFile(join(dir, "reviewbot-run.json"), "utf8")).resolves.toEndWith("\n");
-    await expect(readFile(join(dir, "reviewbot-findings.json"), "utf8")).resolves.toBe("[]\n");
+    await expect(readFile(join(dir, "shuvbot-run.json"), "utf8")).resolves.toEndWith("\n");
+    await expect(readFile(join(dir, "shuvbot-findings.json"), "utf8")).resolves.toBe("[]\n");
     expect((await readdir(dir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
@@ -194,7 +188,7 @@ describe("review artifacts", () => {
     };
     await expect(
       writeReviewArtifacts({
-        runnerTemp: await mkdtemp(join(tmpdir(), "reviewbot-artifact-error-")),
+        runnerTemp: await mkdtemp(join(tmpdir(), "shuvbot-artifact-error-")),
         runRecord: run(),
         findings: [],
         contextManifest: { sections: [], totalBytes: 0 },
@@ -202,7 +196,7 @@ describe("review artifacts", () => {
       })
     ).rejects.toThrow("serialization failed: [REDACTED]");
 
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-artifact-write-error-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-artifact-write-error-"));
     const secretPath = join(root, secretValue(secret));
     await writeFile(secretPath, "not a directory");
     await chmod(secretPath, 0o600);
@@ -222,14 +216,14 @@ describe("review artifacts", () => {
     expect((failure as Error).message).not.toContain(secret);
   });
 
-  test("persists failure diagnostics to the reviewbot artifact directory", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "reviewbot-diagnostics-"));
+  test("persists failure diagnostics to the shuvbot artifact directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "shuvbot-diagnostics-"));
     const path = await writeFailureDiagnostics({
       runnerTemp: dir,
       message: "All review skills failed: Claude exited with 1\nstdout: Not logged in"
     });
 
-    expect(path).toBe(join(dir, "reviewbot", "reviewbot-agent-error.txt"));
+    expect(path).toBe(join(dir, "shuvbot", "shuvbot-agent-error.txt"));
     await expect(readFile(path, "utf8")).resolves.toContain("Claude exited with 1");
     await expect(readFile(path, "utf8")).resolves.toContain("Not logged in");
   });

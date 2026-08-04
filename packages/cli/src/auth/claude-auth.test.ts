@@ -8,7 +8,7 @@ describe("Claude CLI auth helpers", () => {
     const masked: string[] = [];
     const calls: Array<{ command: string; args: readonly string[] }> = [];
     const token = await runClaudeImport({
-      repo: "octo/reviewbot",
+      repo: "octo/shuvbot",
       stdin: Readable.from(["claude-oauth-token-value-12345"]) as NodeJS.ReadStream,
       masker: {
         setSecret(value) {
@@ -25,7 +25,7 @@ describe("Claude CLI auth helpers", () => {
     expect(masked).toEqual(["claude-oauth-token-value-12345"]);
     expect(calls[0]).toMatchObject({
       command: "gh",
-      args: ["secret", "set", "CLAUDE_CODE_OAUTH_TOKEN", "--repo", "octo/reviewbot", "--body", token]
+      args: ["secret", "set", "CLAUDE_CODE_OAUTH_TOKEN", "--repo", "octo/shuvbot", "--body", token]
     });
   });
 

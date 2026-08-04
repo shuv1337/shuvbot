@@ -13,10 +13,12 @@ export interface ClaudeSetupTokenOptions {
 export function runClaudeSetupToken(options: ClaudeSetupTokenOptions = {}): string {
   const spawnImpl = options.spawnSyncImpl ?? spawnSyncLike;
   const version = spawnImpl("claude", ["--version"], { encoding: "utf8" });
-  if (version.status !== 0) throw new AuthError(`Claude CLI not available: ${version.stderr || version.stdout}`);
+  if (version.status !== 0)
+    throw new AuthError(`Claude CLI not available: ${version.stderr || version.stdout}`);
 
   const result = spawnImpl("claude", ["setup-token"], { encoding: "utf8" });
-  if (result.status !== 0) throw new AuthError(`claude setup-token failed: ${result.stderr || result.stdout}`);
+  if (result.status !== 0)
+    throw new AuthError(`claude setup-token failed: ${result.stderr || result.stdout}`);
   const token = extractToken(result.stdout);
   validateClaudeToken(token);
   maskSecret(token, "Claude token", options.masker);

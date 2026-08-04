@@ -1,4 +1,4 @@
-import type { ReviewbotConfig } from "../../../core/src/config.ts";
+import type { ShuvbotConfig } from "../../../core/src/config.ts";
 import { BUILT_IN_REVIEWER_IDS, REVIEW_TIERS, type ReviewerId, type ReviewTier } from "../types.ts";
 import type { ModelRef, ReviewPlugin } from "./types.ts";
 
@@ -19,7 +19,7 @@ const REVIEWER_NAMES: Record<ReviewerId, string> = {
  * a name is settled later, against the runtime's own catalog.
  */
 export function createReviewerConfigPlugin(
-  config: ReviewbotConfig["review"],
+  config: ShuvbotConfig["review"],
   knownModels?: readonly ModelRef[]
 ): ReviewPlugin {
   return {
@@ -82,7 +82,7 @@ export function createReviewerConfigPlugin(
 }
 
 export function reviewerTierAssignments(
-  config: ReviewbotConfig["review"]
+  config: ShuvbotConfig["review"]
 ): Record<ReviewTier, readonly ReviewerId[]> {
   const assignments = {} as Record<ReviewTier, readonly ReviewerId[]>;
   for (const tier of REVIEW_TIERS) {

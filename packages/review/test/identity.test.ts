@@ -4,14 +4,14 @@ import { createLocalChangeIdentity } from "../src/identity.ts";
 describe("local change identity", () => {
   test("is independent of checkout path and ref alias spelling after canonical resolution", () => {
     const canonical = {
-      repositoryIdentity: "github.com/shuv/reviewbot",
+      repositoryIdentity: "github.com/shuv/shuvbot",
       base: { kind: "branch", name: "refs/heads/main" }
     } as const;
 
     const fromFirstCheckout = createLocalChangeIdentity(canonical);
     const fromMovedCheckout = createLocalChangeIdentity({ ...canonical });
     const fromResolvedAlias = createLocalChangeIdentity({
-      repositoryIdentity: "github.com/shuv/reviewbot",
+      repositoryIdentity: "github.com/shuv/shuvbot",
       base: { kind: "branch", name: "refs/heads/main" }
     });
 
@@ -24,18 +24,18 @@ describe("local change identity", () => {
     const upperSha = "A".repeat(40);
     expect(
       createLocalChangeIdentity({
-        repositoryIdentity: "github.com/shuv/reviewbot",
+        repositoryIdentity: "github.com/shuv/shuvbot",
         base: { kind: "commit", sha: upperSha }
       })
     ).toBe(
       createLocalChangeIdentity({
-        repositoryIdentity: "github.com/shuv/reviewbot",
+        repositoryIdentity: "github.com/shuv/shuvbot",
         base: { kind: "commit", sha: upperSha.toLowerCase() }
       })
     );
     expect(() =>
       createLocalChangeIdentity({
-        repositoryIdentity: "github.com/shuv/reviewbot",
+        repositoryIdentity: "github.com/shuv/shuvbot",
         base: { kind: "commit", sha: "abc123" }
       })
     ).toThrow("full commit SHA");

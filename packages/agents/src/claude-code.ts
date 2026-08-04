@@ -107,7 +107,7 @@ function buildClaudeArgs(input: AgentRunInput): string[] {
     "text",
     "--no-session-persistence"
   ];
-  // The config uses reviewbot slugs like "claude/sonnet"; the Claude CLI only
+  // The config uses shuvbot slugs like "claude/sonnet"; the Claude CLI only
   // accepts its own aliases ("sonnet") or full model ids ("claude-sonnet-4-5").
   // Passing the raw slug makes the CLI exit 1 ("model may not exist") even with
   // valid auth, so resolve through the registry before handing it off.
@@ -151,7 +151,7 @@ function scrubSecrets(text: string, secrets: readonly string[]): string {
 function toMcpConfig(url: string): Record<string, unknown> {
   return {
     mcpServers: {
-      reviewbot: {
+      shuvbot: {
         type: "http",
         url
       }

@@ -25,7 +25,9 @@ export async function findFailedCheckRuns(
   });
   const runs = asRecordArray(asRecord(response.data).check_runs);
   return runs
-    .filter((run) => ["failure", "timed_out", "cancelled", "action_required"].includes(stringValue(run.conclusion)))
+    .filter((run) =>
+      ["failure", "timed_out", "cancelled", "action_required"].includes(stringValue(run.conclusion))
+    )
     .map((run) => ({
       id: numberValue(run.id),
       name: stringValue(run.name),
@@ -41,9 +43,12 @@ export async function fetchCheckLog(input: {
   maxBytes: number;
   redactor: Redactor;
 }): Promise<FetchedCheckLog> {
-  const response = await input.client.request("GET /repos/{owner}/{repo}/actions/runs/{run_id}/logs", {
-    params: { owner: input.repo.owner, repo: input.repo.name, run_id: input.runId }
-  });
+  const response = await input.client.request(
+    "GET /repos/{owner}/{repo}/actions/runs/{run_id}/logs",
+    {
+      params: { owner: input.repo.owner, repo: input.repo.name, run_id: input.runId }
+    }
+  );
   const raw = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
   const redacted = input.redactor.redactString(raw);
   const bytes = Buffer.from(redacted, "utf8");
@@ -60,7 +65,9 @@ export async function fetchCheckLog(input: {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function asRecordArray(value: unknown): Record<string, unknown>[] {

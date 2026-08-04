@@ -5,7 +5,7 @@ import {
   type PrepareCoordinatorInput
 } from "../src/coordinator.ts";
 
-const workspace = "/tmp/reviewbot-review-coordinator";
+const workspace = "/tmp/shuvbot-review-coordinator";
 const securityFinding = {
   id: "security-1",
   reviewer: "security",

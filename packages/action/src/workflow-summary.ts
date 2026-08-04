@@ -7,7 +7,7 @@ export async function writeWorkflowSummary(
   redactor: Redactor = new DefaultRedactor()
 ): Promise<void> {
   const record = redactor.redact(rawRecord);
-  const summary = core.summary.addHeading("reviewbot").addTable([
+  const summary = core.summary.addHeading("shuvbot").addTable([
     [
       { data: "Field", header: true },
       { data: "Value", header: true }

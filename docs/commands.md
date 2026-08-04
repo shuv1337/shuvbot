@@ -1,14 +1,14 @@
 # Commands
 
-Mention commands use the `@reviewbot` prefix:
+Mention commands use the `@shuvbot` prefix:
 
 - `@shuvbot review` maps to review mode. Runs a real agent.
-- `@reviewbot implement <task>` maps to trusted implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
-- `@reviewbot improve <task>` maps to implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
-- `@reviewbot fix-ci` maps to CI repair mode. Not yet wired to a real agent - see `docs/workflows.md`.
-- `@reviewbot ask`, `explain`, and `summarize` map to triage mode. Not yet wired to a real agent.
-- `@reviewbot describe`, `changelog` map to release-notes mode. Not yet wired to a real agent.
-- `@reviewbot test-plan` maps to review mode.
+- `@shuvbot implement <task>` maps to trusted implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
+- `@shuvbot improve <task>` maps to implementation mode. Not yet wired to a real agent - see `docs/workflows.md`.
+- `@shuvbot fix-ci` maps to CI repair mode. Not yet wired to a real agent - see `docs/workflows.md`.
+- `@shuvbot ask`, `explain`, and `summarize` map to triage mode. Not yet wired to a real agent.
+- `@shuvbot describe`, `changelog` map to release-notes mode. Not yet wired to a real agent.
+- `@shuvbot test-plan` maps to review mode.
 
 CLI commands:
 
@@ -21,7 +21,7 @@ CLI commands:
 
 `review` uses a three-dot range and detects the VCS. Under Git it defaults to `main...HEAD`. Under
 Jujutsu, including a colocated repository, it defaults to the trunk fork point through the
-working-copy commit `@`, so work in progress is reviewed; `--base`/`--head` accept revsets there. A local `reviewbot.toml` is loaded
+working-copy commit `@`, so work in progress is reviewed; `--base`/`--head` accept revsets there. A local `shuvbot.toml` is loaded
 when present; an explicit missing `--config` is an error. Flags are strict: unknown, positional,
 missing-value, invalid, and duplicate options fail rather than being ignored.
 

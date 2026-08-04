@@ -17,7 +17,7 @@ async function packedProject(input?: {
   version?: string;
   nested?: boolean;
 }): Promise<{ cwd: string; directory: string; cleanup: () => Promise<void> }> {
-  const root = await mkdtemp(join(tmpdir(), "reviewbot-packed-"));
+  const root = await mkdtemp(join(tmpdir(), "shuvbot-packed-"));
   const cwd = input?.nested === true ? join(root, "workspace", "nested") : root;
   await mkdir(cwd, { recursive: true });
   await writeFile(join(root, "package.json"), '{"name":"host","private":true}\n');
@@ -102,7 +102,7 @@ describe("packed shuvcode package resolution", () => {
   });
 
   test("fails closed when the package is installed nowhere", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-packed-missing-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-packed-missing-"));
     try {
       await expect(
         startShuvcodeRuntime({
@@ -116,9 +116,9 @@ describe("packed shuvcode package resolution", () => {
     }
   });
 
-  test("falls back to reviewbot's own installation for a repository without the runtime", async () => {
+  test("falls back to shuvbot's own installation for a repository without the runtime", async () => {
     // Reviewing a repository that does not itself depend on the runtime must work.
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-packed-fallback-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-packed-fallback-"));
     try {
       const observed: string[] = [];
       const controller = new AbortController();

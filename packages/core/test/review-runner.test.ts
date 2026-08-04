@@ -9,11 +9,11 @@ import type { PullRequestEvent } from "../src/events.ts";
 
 describe("review runner", () => {
   test("runs a fake-agent PR review end to end", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-runner-"));
     await writeFile(join(cwd, "AGENTS.md"), "Use focused findings.");
     const result = await runReview({
       cwd,
-      repo: "octo/reviewbot",
+      repo: "octo/shuvbot",
       event: event(),
       files: [{ filename: "src/a.ts" }],
       diff: `diff --git a/src/a.ts b/src/a.ts
@@ -52,7 +52,7 @@ describe("review runner", () => {
   });
 
   test("continues with successful skill findings when some skills fail", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-partial-fail-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-runner-partial-fail-"));
     let firstSkill = true;
     const agent: ReviewAgent = {
       async run({ skillId }) {
@@ -79,7 +79,7 @@ describe("review runner", () => {
 
     const result = await runReview({
       cwd,
-      repo: "octo/reviewbot",
+      repo: "octo/shuvbot",
       event: event(),
       files: [{ filename: "src/a.ts" }],
       diff: `diff --git a/src/a.ts b/src/a.ts
@@ -105,7 +105,7 @@ describe("review runner", () => {
   });
 
   test("throws when all review skills fail", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-all-fail-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-runner-all-fail-"));
     const agent: ReviewAgent = {
       async run({ skillId }) {
         throw new Error(`${skillId} failed`);
@@ -115,7 +115,7 @@ describe("review runner", () => {
     await expect(
       runReview({
         cwd,
-        repo: "octo/reviewbot",
+        repo: "octo/shuvbot",
         event: event(),
         files: [{ filename: "src/a.ts" }],
         diff: `diff --git a/src/a.ts b/src/a.ts
@@ -138,7 +138,7 @@ describe("review runner", () => {
   });
 
   test("runs verification before pipeline filtering", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-runner-verify-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-runner-verify-"));
     const findings = [
       {
         id: "kept",
@@ -174,7 +174,7 @@ describe("review runner", () => {
 
     const result = await runReview({
       cwd,
-      repo: "octo/reviewbot",
+      repo: "octo/shuvbot",
       event: event(),
       files: [{ filename: "src/a.ts" }],
       diff: `diff --git a/src/a.ts b/src/a.ts
@@ -204,7 +204,7 @@ function event(): PullRequestEvent {
     kind: "pull_request",
     name: "pull_request",
     action: "opened",
-    repo: { owner: "octo", name: "reviewbot", fullName: "octo/reviewbot", isPrivate: false },
+    repo: { owner: "octo", name: "shuvbot", fullName: "octo/shuvbot", isPrivate: false },
     sender: { login: "alice" },
     raw: { pull_request: { body: "untrusted" } },
     pullRequest: {
@@ -218,7 +218,7 @@ function event(): PullRequestEvent {
       baseSha: "base",
       headRef: "feature",
       headSha: "head",
-      headRepoFullName: "octo/reviewbot",
+      headRepoFullName: "octo/shuvbot",
       isFork: false
     }
   };

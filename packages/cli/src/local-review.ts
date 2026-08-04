@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import {
   APPROVED_SHUVCODE_RUNTIME_VERSION,
   normalizeConfig,
-  type ReviewbotConfig
+  type ShuvbotConfig
 } from "../../core/src/config.ts";
 import { ConfigError } from "../../core/src/errors.ts";
 import type { PullRequestEvent } from "../../core/src/events.ts";
@@ -96,7 +96,7 @@ export interface LocalReviewOptions {
   base?: string;
   /** Defaults per detected VCS: `HEAD` for Git, the working-copy commit `@` for Jujutsu. */
   head?: string;
-  config?: ReviewbotConfig;
+  config?: ShuvbotConfig;
   engine?: LocalReviewEngine;
   json?: boolean;
   stdout?: Pick<NodeJS.WriteStream, "write">;
@@ -147,7 +147,7 @@ export async function runLocalReview(options: LocalReviewOptions): Promise<Local
 
 async function runLegacyLocalReview(
   options: LocalReviewOptions,
-  config: ReviewbotConfig
+  config: ShuvbotConfig
 ): Promise<RunReviewResult> {
   const dependencies = resolveDependencies(options.dependencies);
   const agent = dependencies.createLegacyAgent();
@@ -190,7 +190,7 @@ async function runLegacyLocalReview(
 
 async function runCoordinatorLocalReview(
   options: LocalReviewOptions,
-  config: ReviewbotConfig,
+  config: ShuvbotConfig,
   dependencies: LocalReviewDependencies
 ): Promise<CoordinatorLocalReviewResult | CoordinatorNoChangesLocalReviewResult> {
   const overallTimeoutMs = parseReviewDurationMs(
@@ -277,7 +277,7 @@ async function runCoordinatorLocalReview(
     }
     const startedAtMs = dependencies.now().getTime();
     const preprocessingMs = Date.now() - preprocessingStartedAt;
-    const artifactDirectory = resolve(options.cwd, ".reviewbot", "runs", randomUUID());
+    const artifactDirectory = resolve(options.cwd, ".shuvbot", "runs", randomUUID());
     if (!options.json) {
       safeWrite(
         options.stdout,
@@ -473,7 +473,7 @@ function finalWrite(stdout: LocalReviewOptions["stdout"], value: string): void {
   stdout?.write(value);
 }
 
-function assertApprovedRuntime(config: ReviewbotConfig, approvedVersion: string | null): void {
+function assertApprovedRuntime(config: ShuvbotConfig, approvedVersion: string | null): void {
   if (approvedVersion === null) {
     throw new ConfigError(
       "Coordinator local execution is disabled until a corrected published shuvcode release passes the M3 compatibility smoke test. Use the legacy engine or update the code-approved exact runtime pin after publication."
@@ -577,7 +577,7 @@ function deadlineError(signal: AbortSignal, stage: string, cause?: unknown): Con
 async function persistLocalArtifacts(input: {
   directory: string;
   redactor: DefaultRedactor;
-  config: ReviewbotConfig;
+  config: ShuvbotConfig;
   plan: ReturnType<typeof createReviewExecutionPlanFromConfig>;
   execution: CoordinatorEngineResult;
   report: ReturnType<typeof buildCoordinatorReport>;
@@ -692,13 +692,13 @@ async function persistLocalArtifacts(input: {
     );
     await Promise.all([
       atomicJsonWrite(
-        join(input.directory, "reviewbot-run.json"),
+        join(input.directory, "shuvbot-run.json"),
         input.redactor.redact(record),
         input.fileSystem,
         input.deadlineAtMs
       ),
       atomicJsonWrite(
-        join(input.directory, "reviewbot-findings.json"),
+        join(input.directory, "shuvbot-findings.json"),
         input.redactor.redact(findingsArtifact),
         input.fileSystem,
         input.deadlineAtMs
@@ -957,7 +957,7 @@ async function resolveLocalRepositoryIdentity(
     };
   }
 
-  const identityDirectory = resolve(commonDirectory, "reviewbot");
+  const identityDirectory = resolve(commonDirectory, "shuvbot");
   const identityPath = resolve(identityDirectory, "repository-id");
   await mkdir(identityDirectory, { recursive: true, mode: 0o700 });
   let repositoryId: string;
@@ -1063,7 +1063,7 @@ async function collectChangedFiles(
   range: string,
   cwd: string,
   git: LocalReviewDependencies["git"],
-  paths: ReviewbotConfig["paths"],
+  paths: ShuvbotConfig["paths"],
   signal?: AbortSignal
 ) {
   const output = await git(

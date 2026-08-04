@@ -20,7 +20,7 @@ export default defineConfig({
   // "Dynamic require of X is not supported". Inject a real `require` backed by
   // createRequire so those built-in requires resolve at runtime.
   banner: {
-    js: "import { createRequire as __reviewbotCreateRequire } from 'node:module'; const require = __reviewbotCreateRequire(import.meta.url);"
+    js: "import { createRequire as __shuvbotCreateRequire } from 'node:module'; const require = __shuvbotCreateRequire(import.meta.url);"
   },
   sourcemap: true,
   clean: true,

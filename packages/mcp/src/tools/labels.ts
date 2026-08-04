@@ -30,10 +30,13 @@ export const addLabelsTool: ToolSpec<AddLabelsInput, Record<string, unknown>> = 
   requiredPolicy: { canAddLabels: true },
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("POST /repos/{owner}/{repo}/issues/{issue_number}/labels", {
-      params: { owner: repo.owner, repo: repo.name, issue_number: input.issueNumber },
-      body: { labels: input.labels }
-    });
+    const response = await requireClient(context).request(
+      "POST /repos/{owner}/{repo}/issues/{issue_number}/labels",
+      {
+        params: { owner: repo.owner, repo: repo.name, issue_number: input.issueNumber },
+        body: { labels: input.labels }
+      }
+    );
     return {
       issueNumber: input.issueNumber,
       labels: response.data

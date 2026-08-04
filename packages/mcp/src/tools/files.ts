@@ -1,5 +1,12 @@
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { asArray, asRecord, readWorkspaceFile, requireClient, requireRepo, stringValue } from "./shared.ts";
+import {
+  asArray,
+  asRecord,
+  readWorkspaceFile,
+  requireClient,
+  requireRepo,
+  stringValue
+} from "./shared.ts";
 
 interface ReadFileInput {
   path: string;
@@ -39,7 +46,8 @@ const ANY_OBJECT_SCHEMA = {
 
 export const readFileTool: ToolSpec<ReadFileInput, Record<string, unknown>> = {
   name: "read_file",
-  description: "Read a bounded UTF-8 file from the workspace. Absolute paths and path escapes are refused.",
+  description:
+    "Read a bounded UTF-8 file from the workspace. Absolute paths and path escapes are refused.",
   inputSchema: READ_FILE_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
@@ -63,17 +71,19 @@ export const searchRepoTool: ToolSpec<SearchRepoInput, Record<string, unknown>> 
       query,
       totalCount: data.total_count ?? 0,
       incompleteResults: data.incomplete_results ?? false,
-      items: asArray(data.items).slice(0, input.limit ?? 20).map((item) => {
-        const itemRecord = asRecord(item);
-        const repoRecord = asRecord(itemRecord.repository);
-        return {
-          name: stringValue(itemRecord, "name"),
-          path: stringValue(itemRecord, "path"),
-          sha: stringValue(itemRecord, "sha"),
-          htmlUrl: stringValue(itemRecord, "html_url"),
-          repository: stringValue(repoRecord, "full_name")
-        };
-      })
+      items: asArray(data.items)
+        .slice(0, input.limit ?? 20)
+        .map((item) => {
+          const itemRecord = asRecord(item);
+          const repoRecord = asRecord(itemRecord.repository);
+          return {
+            name: stringValue(itemRecord, "name"),
+            path: stringValue(itemRecord, "path"),
+            sha: stringValue(itemRecord, "sha"),
+            htmlUrl: stringValue(itemRecord, "html_url"),
+            repository: stringValue(repoRecord, "full_name")
+          };
+        })
     };
   }
 };

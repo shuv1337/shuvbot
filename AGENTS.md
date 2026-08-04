@@ -1,6 +1,6 @@
-# shuvbot / reviewbot Project Notes
+# shuvbot Project Notes
 
-`reviewbot` is a GitHub-native code review and coding-agent bot. **Review mode
+`shuvbot` is a GitHub-native code review and coding-agent bot. **Review mode
 is live**: `packages/action/src/main.ts` wires the real `claude-code`
 driver + MCP tool server into every PR review run (as of the "wire real
 agent" work, see git log around the `feat(action): wire real Claude Code
@@ -34,7 +34,7 @@ otherwise without checking `main.ts` directly.
   `bun run smoke:runtime`. It needs `review.shuvcode.use_user_auth` and a local
   shuvcode profile; a mismatched or null pin still rejects before any Git work.
   `shuvcode` is a devDependency, and the runtime resolves from the reviewed
-  repository first and from reviewbot's own install second, so reviewing a
+  repository first and from shuvbot's own install second, so reviewing a
   repository that does not depend on shuvcode works. `legacy` still fails
   closed - it has no safe production driver and only tests inject fake agents.
   None of this affects the live Claude-backed GitHub Action review path, which
@@ -72,7 +72,7 @@ otherwise without checking `main.ts` directly.
 - ESLint and Prettier for the initial lint/format baseline
 - `tsup` targeting Node 24 for compiled GitHub Action output
 - Compiled GitHub Action output in `dist/index.js`
-- Local MCP tool server for GitHub, git, shell, filesystem, and output tools, implemented with the official MCP TypeScript SDK behind reviewbot-owned tool contracts
+- Local MCP tool server for GitHub, git, shell, filesystem, and output tools, implemented with the official MCP TypeScript SDK behind shuvbot-owned tool contracts
 - Claude Code as the first-class initial agent driver
 - A separately spawned, exact-version shuvcode runtime for local coordinator review sessions; consume only its packed public CLI and `shuvcode/client` contracts.
 
@@ -89,9 +89,9 @@ otherwise without checking `main.ts` directly.
 
 ## Repository automation
 
-- `.github/workflows/reviewbot.yml` dogfoods the published `shuv1337/shuvbot@v0` action on pull requests targeting `master`. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make reviewbot blocking.
+- `.github/workflows/shuvbot.yml` dogfoods the published `shuv1337/shuvbot@v0` action on pull requests targeting `master`. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make shuvbot blocking.
 - The workflow uses `pull_request` plus a same-repository, non-draft job guard so this public repository skips fork PRs that cannot receive `CLAUDE_CODE_OAUTH_TOKEN` and waits to review draft PRs until `ready_for_review` fires.
-- Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, mandatory Claude Code install/verify steps, SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/reviewbot`.
+- Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, mandatory Claude Code install/verify steps, SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/shuvbot`.
 
 ## Expected validation commands
 
@@ -126,7 +126,7 @@ bun run evals
   `core.setOutput`/`GITHUB_OUTPUT` does not have this problem - it reads the
   env var fresh on every call.
 - **Config model slugs must be resolved before hitting the Claude CLI.** The
-  config default `model` is `claude/sonnet` (a reviewbot slug), but the
+  config default `model` is `claude/sonnet` (a shuvbot slug), but the
   `claude` CLI only accepts its own aliases (`sonnet`, `opus`, `haiku`) or full
   ids (`claude-sonnet-4-5`). Passing the raw `claude/…` slug makes the CLI exit
   `1` with **empty stderr** and its real message on **stdout** ("issue with the
@@ -144,7 +144,7 @@ bun run evals
   into `AgentRunResult.error` (the CLI writes auth/model errors to stdout with
   empty stderr, so a bare exit code is undiagnosable). `main.ts`'s review
   branch redacts that again, logs a bounded tail via `core.error`, and writes
-  `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt` via
+  `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt` via
   `writeFailureDiagnostics` so failures leave an artifact even though the
   pipeline throws before normal artifacts are written. Redaction is
   defense-in-depth: the streaming `DefaultRedactor` is pattern-based (can miss
@@ -166,7 +166,7 @@ bun run evals
 - **Real coordinator reviews work, and four prompt-path faults were only ever
   visible in a real run.** All four are fixed and covered by tests; keep them
   in mind before changing the session or prompt path:
-  1. **`subscription/…` is a reviewbot-owned abstract namespace, not a runtime
+  1. **`subscription/…` is a shuvbot-owned abstract namespace, not a runtime
      provider.** Names resolve through the curated catalog in
      `packages/review/src/runtime/model-catalog.ts` before a session selects a
      model; that file is also where models, role defaults, and each model's
@@ -181,7 +181,7 @@ bun run evals
      any model is reached. `toRuntimeJsonSchema` in `engine.ts` removes it.
   3. **Do not select a runtime agent.** Sessions used to set `agent: "review"`;
      nothing creates that agent, so the runtime failed with `Agent not found`.
-     Reviewbot's instructions come from its own prompts and tool authorization
+     Shuvbot's instructions come from its own prompts and tool authorization
      comes from the server-enforced session policy.
   4. **Classify failures from the source event.** `sanitizeEvent` reduces an
      error to a category and status, so classifying the sanitized event cannot

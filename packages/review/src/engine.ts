@@ -261,7 +261,7 @@ export async function executeCoordinatorEngine(
   }
   validateExecutionInputs(input);
 
-  // Reviewbot's `subscription/…` names are not routable by the runtime, so they
+  // Shuvbot's `subscription/…` names are not routable by the runtime, so they
   // are resolved through the curated catalog before any review work starts. A
   // misconfigured model or effort then fails once, with a message naming what is
   // accepted, instead of being reported as an incomplete review.
@@ -319,12 +319,12 @@ export async function executeCoordinatorEngine(
     );
 
     const coordinator = await raceAbort(
-      // No agent is selected: reviewbot supplies every instruction in its own
+      // No agent is selected: shuvbot supplies every instruction in its own
       // prompts, and tool authorization comes from the server-enforced session
       // policy. Naming an agent would require one to exist in the user's runtime
       // profile, which fails the whole review with `Agent not found`.
       runtime.createSession({
-        title: "reviewbot coordinator",
+        title: "shuvbot coordinator",
         model: modelFor(input.models.coordinator),
         location: { directory: input.workspace.root }
       }),
@@ -564,7 +564,7 @@ function createSpecialistTask(options: {
     async run(context) {
       try {
         const session = await options.runtime.createSession({
-          title: `reviewbot ${options.reviewer}`,
+          title: `shuvbot ${options.reviewer}`,
           location: { directory: options.input.workspace.root },
           policy: specialistSessionPolicy(definition.tools)
         });
@@ -1330,18 +1330,18 @@ async function flushEngineArtifacts(
     deadlineAtMs,
     "artifact directory creation"
   );
-  await log.flush(join(destination, "reviewbot-events.jsonl"), {
+  await log.flush(join(destination, "shuvbot-events.jsonl"), {
     ...fileSystem,
     deadlineAtMs
   });
   await writeAtomicJson(
-    join(destination, "reviewbot-review-sessions.json"),
+    join(destination, "shuvbot-review-sessions.json"),
     input.redactor.redact({ version: 1, sessions: result.sessions }),
     fileSystem,
     deadlineAtMs
   );
   await writeAtomicJson(
-    join(destination, "reviewbot-review-result.json"),
+    join(destination, "shuvbot-review-result.json"),
     input.redactor.redact({
       version: 1,
       status: result.status,
@@ -1358,7 +1358,7 @@ async function flushEngineArtifacts(
   );
   if (rejectedSamples.length > 0) {
     await writeAtomicJson(
-      join(destination, "reviewbot-rejected-results.json"),
+      join(destination, "shuvbot-rejected-results.json"),
       { version: 1, rejected: rejectedSamples },
       fileSystem,
       deadlineAtMs

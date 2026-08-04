@@ -1,4 +1,4 @@
-import type { AgentId, ReviewbotMode } from "./types.ts";
+import type { AgentId, ShuvbotMode } from "./types.ts";
 import type { RuntimePolicy } from "./policy.ts";
 import type { ReviewFinding } from "./review-schema.ts";
 import type { ReviewerId, ReviewTier } from "../../review/src/types.ts";
@@ -80,7 +80,7 @@ export interface RunRecord {
   eventAction?: string;
   actor: string;
   trigger: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   agent: AgentId;
   model: string;
   startedAt: string;
@@ -137,7 +137,7 @@ export interface CreateRunRecordInput {
   eventAction?: string;
   actor: string;
   trigger?: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   agent: AgentId;
   model: string;
 }

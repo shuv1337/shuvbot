@@ -12,7 +12,7 @@ import type {
   GitHubRequestOptions,
   GitHubResponse
 } from "../../github/src/octokit.ts";
-import { startReviewbotMcpServer, type ReviewbotMcpServer } from "../src/server.ts";
+import { startShuvbotMcpServer, type ShuvbotMcpServer } from "../src/server.ts";
 import { executeTool, type ToolContext } from "../src/tool-spec.ts";
 import { AuditLog } from "../src/audit.ts";
 import { getCheckLogsTool, getCheckRunsTool } from "../src/tools/checks.ts";
@@ -20,7 +20,7 @@ import { readFileTool, searchRepoTool } from "../src/tools/files.ts";
 import { getIssueCommentsTool, getIssueTool, getReviewCommentsTool } from "../src/tools/issue.ts";
 import { getPrDiffTool, getPrFilesTool, getPrTool } from "../src/tools/pr.ts";
 
-let server: ReviewbotMcpServer | undefined;
+let server: ShuvbotMcpServer | undefined;
 
 afterEach(async () => {
   await server?.close();
@@ -31,7 +31,7 @@ describe("read-context MCP tools", () => {
   test("read PR metadata and diff through the MCP server with a mocked GitHub client", async () => {
     const audit = new AuditLog(new DefaultRedactor());
     const client = new MockGitHubClient({
-      "GET /repos/octo/reviewbot/pulls/42": {
+      "GET /repos/octo/shuvbot/pulls/42": {
         number: 42,
         title: "Improve MCP tools",
         body: "please review",
@@ -41,12 +41,12 @@ describe("read-context MCP tools", () => {
         mergeable: true,
         mergeable_state: "clean",
         labels: [{ name: "enhancement", color: "a2eeef" }],
-        head: { ref: "feature", sha: "abc123", repo: { full_name: "octo/reviewbot" } },
-        base: { ref: "main", sha: "def456", repo: { full_name: "octo/reviewbot" } }
+        head: { ref: "feature", sha: "abc123", repo: { full_name: "octo/shuvbot" } },
+        base: { ref: "main", sha: "def456", repo: { full_name: "octo/shuvbot" } }
       }
     });
-    client.textRoutes.set("GET /repos/octo/reviewbot/pulls/42", "diff --git a/a.ts b/a.ts\n+ok\n");
-    server = await startReviewbotMcpServer({
+    client.textRoutes.set("GET /repos/octo/shuvbot/pulls/42", "diff --git a/a.ts b/a.ts\n+ok\n");
+    server = await startShuvbotMcpServer({
       tools: [getPrTool, getPrDiffTool],
       context: context({ client, audit })
     });
@@ -73,7 +73,7 @@ describe("read-context MCP tools", () => {
       untrusted: true
     });
     expect(String((diff.structuredContent as Record<string, unknown>).diff)).toContain(
-      "[reviewbot:truncated"
+      "[shuvbot:truncated"
     );
     expect(audit.snapshot().summary).toMatchObject({ total: 2, succeeded: 2, failed: 0 });
 
@@ -82,10 +82,10 @@ describe("read-context MCP tools", () => {
 
   test("reads PR files, issues, comments, checks, logs, and search results", async () => {
     const client = new MockGitHubClient({
-      "GET /repos/octo/reviewbot/pulls/5/files": [
+      "GET /repos/octo/shuvbot/pulls/5/files": [
         { filename: "src/a.ts", status: "modified", additions: 2, deletions: 1, patch: "@@ patch" }
       ],
-      "GET /repos/octo/reviewbot/issues/7": {
+      "GET /repos/octo/shuvbot/issues/7": {
         number: 7,
         title: "Bug",
         body: "bad",
@@ -94,7 +94,7 @@ describe("read-context MCP tools", () => {
         user: { login: "alice" },
         labels: [{ name: "bug" }]
       },
-      "GET /repos/octo/reviewbot/issues/7/comments": [
+      "GET /repos/octo/shuvbot/issues/7/comments": [
         {
           id: 1,
           body: "comment",
@@ -104,7 +104,7 @@ describe("read-context MCP tools", () => {
           html_url: "url"
         }
       ],
-      "GET /repos/octo/reviewbot/pulls/5/comments": [
+      "GET /repos/octo/shuvbot/pulls/5/comments": [
         {
           id: 2,
           body: "review",
@@ -118,7 +118,7 @@ describe("read-context MCP tools", () => {
           html_url: "url"
         }
       ],
-      "GET /repos/octo/reviewbot/commits/main/check-runs": {
+      "GET /repos/octo/shuvbot/commits/main/check-runs": {
         total_count: 1,
         check_runs: [
           { id: 9, name: "test", status: "completed", conclusion: "failure", html_url: "url" }
@@ -133,12 +133,12 @@ describe("read-context MCP tools", () => {
             path: "src/a.ts",
             sha: "abc",
             html_url: "url",
-            repository: { full_name: "octo/reviewbot" }
+            repository: { full_name: "octo/shuvbot" }
           }
         ]
       }
     });
-    client.textRoutes.set("GET /repos/octo/reviewbot/actions/jobs/9/logs", "secret log line");
+    client.textRoutes.set("GET /repos/octo/shuvbot/actions/jobs/9/logs", "secret log line");
 
     const toolContext = context({ client });
     await expect(executeTool(getPrFilesTool, { number: 5 }, toolContext)).resolves.toMatchObject({
@@ -181,7 +181,7 @@ describe("read-context MCP tools", () => {
   });
 
   test("read_file bounds workspace access", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-mcp-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-mcp-"));
     await mkdir(join(cwd, "src"));
     await writeFile(join(cwd, "src", "a.txt"), "hello world");
     const toolContext = context({ cwd });
@@ -190,7 +190,7 @@ describe("read-context MCP tools", () => {
       executeTool(readFileTool, { path: "src/a.txt", maxBytes: 5 }, toolContext)
     ).resolves.toMatchObject({
       path: "src/a.txt",
-      content: "hello\n[reviewbot:truncated maxBytes=5]",
+      content: "hello\n[shuvbot:truncated maxBytes=5]",
       truncated: true
     });
     await expect(
@@ -202,7 +202,7 @@ describe("read-context MCP tools", () => {
   });
 
   test("read_file refuses credential-bearing workspace paths", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-mcp-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-mcp-"));
     await mkdir(join(cwd, ".git"));
     await mkdir(join(cwd, "src"));
     await writeFile(join(cwd, ".git", "config"), "token");
@@ -226,8 +226,8 @@ describe("read-context MCP tools", () => {
   });
 
   test("read_file rejects symlink escapes and credential targets", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-mcp-"));
-    const outside = await mkdtemp(join(tmpdir(), "reviewbot-mcp-outside-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-mcp-"));
+    const outside = await mkdtemp(join(tmpdir(), "shuvbot-mcp-outside-"));
     await mkdir(join(cwd, ".git"));
     await writeFile(join(cwd, ".git", "config"), "token");
     await writeFile(join(outside, "secret.txt"), "secret");
@@ -246,7 +246,7 @@ describe("read-context MCP tools", () => {
   test("check log access redacts secret-looking tokens", async () => {
     const client = new MockGitHubClient({});
     client.textRoutes.set(
-      "GET /repos/octo/reviewbot/actions/jobs/9/logs",
+      "GET /repos/octo/shuvbot/actions/jobs/9/logs",
       "build ok\nCLAUDE_CODE_OAUTH_TOKEN=secret-token-value\nghp_abcdefghijklmnopqrstuvwxyz"
     );
 
@@ -288,7 +288,7 @@ function context(input: {
 }): ToolContext {
   const redactor = new DefaultRedactor();
   const toolContext: ToolContext = {
-    repo: { owner: "octo", name: "reviewbot" },
+    repo: { owner: "octo", name: "shuvbot" },
     runId: "run-1",
     actor: "maintainer",
     mode: "review",

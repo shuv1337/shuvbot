@@ -51,9 +51,12 @@ export const getPrTool: ToolSpec<NumberInput, Record<string, unknown>> = {
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number }
+      }
+    );
     const pr = asRecord(response.data);
     const head = asRecord(pr.head);
     const base = asRecord(pr.base);
@@ -88,11 +91,14 @@ export const getPrDiffTool: ToolSpec<DiffInput, Record<string, unknown>> = {
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request<string>("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
-      headers: { accept: "application/vnd.github.v3.diff" },
-      responseType: "text"
-    });
+    const response = await requireClient(context).request<string>(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
+        headers: { accept: "application/vnd.github.v3.diff" },
+        responseType: "text"
+      }
+    );
     const maxBytes = input.maxBytes ?? 256_000;
     const bounded = boundedString(response.data, maxBytes);
     return {
@@ -112,9 +118,12 @@ export const getPrFilesTool: ToolSpec<NumberInput, Record<string, unknown>> = {
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
+      }
+    );
     return {
       number: input.number,
       files: asArray(response.data).map((file) => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
-import { loadConfigFile, normalizeConfig, type ReviewbotConfig } from "../../core/src/config.ts";
+import { loadConfigFile, normalizeConfig, type ShuvbotConfig } from "../../core/src/config.ts";
 import { ConfigError } from "../../core/src/errors.ts";
 import { runDoctor } from "./doctor.ts";
 import { runClaudeSetupToken } from "./auth/claude-setup-token.ts";
@@ -13,7 +13,7 @@ const [, , ...args] = process.argv;
 
 interface ReviewCommandDependencies {
   configExists(path: string): Promise<boolean>;
-  loadConfig(path: string): Promise<ReviewbotConfig>;
+  loadConfig(path: string): Promise<ShuvbotConfig>;
   review: typeof runLocalReview;
 }
 
@@ -42,7 +42,7 @@ async function run(): Promise<void> {
   const subcommand = args[1];
 
   if (command === "config" && subcommand === "validate") {
-    const path = args[2] ?? "reviewbot.toml";
+    const path = args[2] ?? "shuvbot.toml";
     await loadConfigFile(path);
     console.log(`Config valid: ${path}`);
     return;
@@ -114,7 +114,7 @@ export async function runReviewCommand(
     ...options.dependencies
   };
   const explicitConfigPath = parsed.configPath;
-  const configPath = resolve(options.cwd, explicitConfigPath ?? "reviewbot.toml");
+  const configPath = resolve(options.cwd, explicitConfigPath ?? "shuvbot.toml");
   const shouldLoad =
     explicitConfigPath !== undefined || (await dependencies.configExists(configPath));
   let config = normalizeConfig({});

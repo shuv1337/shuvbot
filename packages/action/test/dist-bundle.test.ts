@@ -87,7 +87,7 @@ describe("dist/index.js self-contained bundle", () => {
   test("loads in a bare checkout (no node_modules) without a module-resolution crash", () => {
     // Faithfully simulate GitHub's action checkout: the repo's package.json is
     // present (so `type: module` makes this ESM), but node_modules is absent.
-    const scratch = mkdtempSync(join(tmpdir(), "reviewbot-dist-bundle-"));
+    const scratch = mkdtempSync(join(tmpdir(), "shuvbot-dist-bundle-"));
     try {
       cpSync(DIST_INDEX, join(scratch, "index.js"));
       writeFileSync(join(scratch, "package.json"), JSON.stringify({ type: "module" }));
@@ -129,7 +129,7 @@ describe("dist/index.js self-contained bundle", () => {
     // Rebuild into a throwaway dir (never touching the committed dist/) and
     // byte-compare. tsup output is deterministic, so any drift means someone
     // changed source without running `bun run build`.
-    const scratch = mkdtempSync(join(tmpdir(), "reviewbot-dist-stale-"));
+    const scratch = mkdtempSync(join(tmpdir(), "shuvbot-dist-stale-"));
     try {
       const build = spawnSync("bunx", ["tsup", "--out-dir", scratch], {
         cwd: REPO_ROOT,

@@ -1,6 +1,13 @@
 import { appendMarker, findExistingMarker } from "../../../github/src/comments.ts";
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { asArray, asRecord, numberValue, requireClient, requireRepo, stringValue } from "./shared.ts";
+import {
+  asArray,
+  asRecord,
+  numberValue,
+  requireClient,
+  requireRepo,
+  stringValue
+} from "./shared.ts";
 
 interface CreateIssueCommentInput {
   issueNumber: number;
@@ -74,7 +81,8 @@ const ANY_OBJECT_SCHEMA = {
 
 export const createIssueCommentTool: ToolSpec<CreateIssueCommentInput, Record<string, unknown>> = {
   name: "create_issue_comment",
-  description: "Create or update a deduped issue/PR comment using an optional reviewbot hidden marker.",
+  description:
+    "Create or update a deduped issue/PR comment using an optional shuvbot hidden marker.",
   inputSchema: CREATE_COMMENT_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { canComment: true },
@@ -82,12 +90,22 @@ export const createIssueCommentTool: ToolSpec<CreateIssueCommentInput, Record<st
     const repo = requireRepo(context);
     const client = requireClient(context);
     const body =
-      input.markerKey !== undefined ? appendMarker(input.body, input.markerKey, input.markerPayload ?? {}) : input.body;
+      input.markerKey !== undefined
+        ? appendMarker(input.body, input.markerKey, input.markerPayload ?? {})
+        : input.body;
 
     if (input.markerKey !== undefined) {
-      const existing = await client.request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-        params: { owner: repo.owner, repo: repo.name, issue_number: input.issueNumber, per_page: 100 }
-      });
+      const existing = await client.request(
+        "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+        {
+          params: {
+            owner: repo.owner,
+            repo: repo.name,
+            issue_number: input.issueNumber,
+            per_page: 100
+          }
+        }
+      );
       const existingComment = findExistingMarker(
         asArray(existing.data).map((comment) => {
           const record = asRecord(comment);
@@ -96,18 +114,24 @@ export const createIssueCommentTool: ToolSpec<CreateIssueCommentInput, Record<st
         input.markerKey
       );
       if (existingComment?.id !== undefined) {
-        const response = await client.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
-          params: { owner: repo.owner, repo: repo.name, comment_id: existingComment.id },
-          body: { body }
-        });
+        const response = await client.request(
+          "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
+          {
+            params: { owner: repo.owner, repo: repo.name, comment_id: existingComment.id },
+            body: { body }
+          }
+        );
         return summarizeCommentResponse(response.data, true);
       }
     }
 
-    const response = await client.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-      params: { owner: repo.owner, repo: repo.name, issue_number: input.issueNumber },
-      body: { body }
-    });
+    const response = await client.request(
+      "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+      {
+        params: { owner: repo.owner, repo: repo.name, issue_number: input.issueNumber },
+        body: { body }
+      }
+    );
     return summarizeCommentResponse(response.data, false);
   }
 };
@@ -120,15 +144,21 @@ export const editIssueCommentTool: ToolSpec<EditIssueCommentInput, Record<string
   requiredPolicy: { canComment: true },
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
-      params: { owner: repo.owner, repo: repo.name, comment_id: input.commentId },
-      body: { body: input.body }
-    });
+    const response = await requireClient(context).request(
+      "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
+      {
+        params: { owner: repo.owner, repo: repo.name, comment_id: input.commentId },
+        body: { body: input.body }
+      }
+    );
     return summarizeCommentResponse(response.data, false);
   }
 };
 
-export const replyToReviewCommentTool: ToolSpec<ReplyToReviewCommentInput, Record<string, unknown>> = {
+export const replyToReviewCommentTool: ToolSpec<
+  ReplyToReviewCommentInput,
+  Record<string, unknown>
+> = {
   name: "reply_to_review_comment",
   description: "Reply to an existing pull request review comment.",
   inputSchema: REPLY_REVIEW_COMMENT_INPUT_SCHEMA,
@@ -147,7 +177,10 @@ export const replyToReviewCommentTool: ToolSpec<ReplyToReviewCommentInput, Recor
   }
 };
 
-export const updatePullRequestBodyTool: ToolSpec<UpdatePullRequestBodyInput, Record<string, unknown>> = {
+export const updatePullRequestBodyTool: ToolSpec<
+  UpdatePullRequestBodyInput,
+  Record<string, unknown>
+> = {
   name: "update_pull_request_body",
   description: "Update a pull request body.",
   inputSchema: UPDATE_PR_BODY_INPUT_SCHEMA,
@@ -155,10 +188,13 @@ export const updatePullRequestBodyTool: ToolSpec<UpdatePullRequestBodyInput, Rec
   requiredPolicy: { canUpdatePullRequest: true },
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("PATCH /repos/{owner}/{repo}/pulls/{pull_number}", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
-      body: { body: input.body }
-    });
+    const response = await requireClient(context).request(
+      "PATCH /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
+        body: { body: input.body }
+      }
+    );
     const pr = asRecord(response.data);
     return {
       number: numberValue(pr, "number"),

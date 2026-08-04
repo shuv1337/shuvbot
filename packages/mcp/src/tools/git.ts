@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
 import type { ActorPermission } from "../../../core/src/policy.ts";
-import { assertReviewbotBranchName } from "../../../github/src/branches.ts";
+import { assertShuvbotBranchName } from "../../../github/src/branches.ts";
 import type { ToolContext, ToolSchema, ToolSpec } from "../tool-spec.ts";
 import { requireCwd } from "./shared.ts";
 
@@ -132,13 +132,13 @@ export const gitFetchTool: ToolSpec<GitFetchInput, Record<string, unknown>> = {
 
 export const gitCommitTool: ToolSpec<GitCommitInput, Record<string, unknown>> = {
   name: "git_commit",
-  description: "Create a reviewbot commit after validating commit-message policy.",
+  description: "Create a shuvbot commit after validating commit-message policy.",
   inputSchema: GIT_COMMIT_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
   async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
-    assertReviewbotCommitMessage(input.message);
+    assertShuvbotCommitMessage(input.message);
     const result = await runGit(context, ["commit", "-am", input.message]);
     return { accepted: true, executed: true, stdout: result.stdout, stderr: result.stderr };
   }
@@ -146,13 +146,13 @@ export const gitCommitTool: ToolSpec<GitCommitInput, Record<string, unknown>> = 
 
 export const pushBranchTool: ToolSpec<BranchInput, Record<string, unknown>> = {
   name: "push_branch",
-  description: "Push a reviewbot branch to origin.",
+  description: "Push a shuvbot branch to origin.",
   inputSchema: BRANCH_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
   async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
-    assertReviewbotBranch(input.branch);
+    assertShuvbotBranch(input.branch);
     const result = await runGit(context, ["push", "origin", `${input.branch}:${input.branch}`]);
     return {
       accepted: true,
@@ -178,13 +178,13 @@ export const pushTagsTool: ToolSpec<EmptyInput, Record<string, unknown>> = {
 
 export const deleteBranchTool: ToolSpec<BranchInput, Record<string, unknown>> = {
   name: "delete_branch",
-  description: "Delete a local reviewbot branch.",
+  description: "Delete a local shuvbot branch.",
   inputSchema: BRANCH_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { push: "restricted" },
   async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
-    assertReviewbotBranch(input.branch);
+    assertShuvbotBranch(input.branch);
     const result = await runGit(context, ["branch", "-D", input.branch]);
     return {
       accepted: true,
@@ -198,13 +198,13 @@ export const deleteBranchTool: ToolSpec<BranchInput, Record<string, unknown>> = 
 
 export const createPullRequestTool: ToolSpec<CreatePullRequestInput, Record<string, unknown>> = {
   name: "create_pull_request",
-  description: "Create a pull request from a reviewbot branch.",
+  description: "Create a pull request from a shuvbot branch.",
   inputSchema: CREATE_PR_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   requiredPolicy: { canCreatePr: true },
   async handler(input, context) {
     assertWriteActor(context.policy.actorPermission);
-    assertReviewbotBranch(input.branch);
+    assertShuvbotBranch(input.branch);
     if (!context.client || !context.repo)
       throw new ToolExecutionError("create_pull_request requires GitHub client and repo context");
     const base = input.base ?? (await resolveDefaultBranch(context.client, context.repo));
@@ -293,17 +293,17 @@ function assertWriteActor(actorPermission: ActorPermission): void {
   }
 }
 
-function assertReviewbotBranch(branch: string): void {
+function assertShuvbotBranch(branch: string): void {
   try {
-    assertReviewbotBranchName(branch);
+    assertShuvbotBranchName(branch);
   } catch {
-    throw new ToolExecutionError("git write branch must start with reviewbot/");
+    throw new ToolExecutionError("git write branch must start with shuvbot/");
   }
 }
 
-function assertReviewbotCommitMessage(message: string): void {
-  if (!message.startsWith("reviewbot:")) {
-    throw new ToolExecutionError("git commit message must start with reviewbot:");
+function assertShuvbotCommitMessage(message: string): void {
+  if (!message.startsWith("shuvbot:")) {
+    throw new ToolExecutionError("git commit message must start with shuvbot:");
   }
   for (const required of ["Requested-by:", "Run-id:", "Mode:"]) {
     if (!message.includes(required))

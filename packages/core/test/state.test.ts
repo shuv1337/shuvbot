@@ -16,13 +16,13 @@ describe("state stores", () => {
     expect(await store.readRepoLearnings("default")).toBe("learning");
   });
 
-  test("file store writes under .reviewbot/state and redacts secrets", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-state-"));
+  test("file store writes under .shuvbot/state and redacts secrets", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-state-"));
     const store = new FileStateStore(cwd, new DefaultRedactor());
     await store.writePrSummary(2, "TOKEN=ghp_abcdefghijklmnopqrstuvwxyz");
     await store.putRun(runRecord("run-secret", "TOKEN=ghp_abcdefghijklmnopqrstuvwxyz"));
-    const stored = await readFile(join(cwd, ".reviewbot", "state", "pr-summary-2.txt"), "utf8");
-    const run = await readFile(join(cwd, ".reviewbot", "state", "runs", "run-secret.json"), "utf8");
+    const stored = await readFile(join(cwd, ".shuvbot", "state", "pr-summary-2.txt"), "utf8");
+    const run = await readFile(join(cwd, ".shuvbot", "state", "runs", "run-secret.json"), "utf8");
     expect(stored).toContain("[REDACTED]");
     expect(stored).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
     expect(run).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");

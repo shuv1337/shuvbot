@@ -5,9 +5,9 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
-import { DEFAULT_CONFIG, loadConfigFile, type ReviewbotConfig } from "../../core/src/config.ts";
+import { DEFAULT_CONFIG, loadConfigFile, type ShuvbotConfig } from "../../core/src/config.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
-import { startReviewbotMcpServer } from "../../mcp/src/server.ts";
+import { startShuvbotMcpServer } from "../../mcp/src/server.ts";
 import { AuditLog } from "../../mcp/src/audit.ts";
 import { resolveClaudeAuth } from "../../agents/src/auth.ts";
 import { startShuvcodeRuntime } from "../../review/src/runtime/shuvcode.ts";
@@ -75,9 +75,9 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorChec
   const spawnImpl = options.spawnSyncImpl ?? spawnSyncLike;
   const coordinatorDiagnostics = options.coordinatorDiagnostics ?? defaultCoordinatorDiagnostics;
   const checks: DoctorCheck[] = [];
-  let config: ReviewbotConfig = structuredClone(DEFAULT_CONFIG);
+  let config: ShuvbotConfig = structuredClone(DEFAULT_CONFIG);
 
-  const configPath = options.configPath ?? "reviewbot.toml";
+  const configPath = options.configPath ?? "shuvbot.toml";
   const resolvedConfigPath = isAbsolute(configPath) ? configPath : resolve(cwd, configPath);
   if (existsSync(resolvedConfigPath)) {
     config = await loadConfigFile(resolvedConfigPath);
@@ -105,7 +105,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorChec
   checks.push(commandCheck("node", spawnImpl("node", ["--version"], { cwd, encoding: "utf8" })));
 
   const redactor = new DefaultRedactor();
-  const server = await startReviewbotMcpServer({
+  const server = await startShuvbotMcpServer({
     tools: [],
     context: {
       runId: "doctor",
@@ -174,7 +174,7 @@ function fail(name: string, message: string): DoctorCheck {
 }
 
 async function coordinatorChecks(
-  config: ReviewbotConfig,
+  config: ShuvbotConfig,
   cwd: string,
   env: Record<string, string | undefined>,
   operations: CoordinatorDiagnosticOperations,

@@ -51,7 +51,7 @@ describe("local coordinator engine", () => {
 
     expect(result.status).toBe("completed");
     expect(runtime.maximumActive).toBe(3);
-    // Reviewbot's `subscription/…` names are never sent to the runtime; each one
+    // Shuvbot's `subscription/…` names are never sent to the runtime; each one
     // is resolved to a routable model first. This covers the coordinator session
     // as well as every specialist.
     expect(
@@ -507,13 +507,13 @@ describe("local coordinator engine", () => {
   });
 
   test("keeps a redacted sample of every refused result", async () => {
-    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-rejected-"));
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-rejected-"));
     await runEngine("trivial", new FakeRuntime({ invalidSpecialistAlways: "code-quality" }), {
       artifactDirectory
     });
 
     const rejected = JSON.parse(
-      await readFile(join(artifactDirectory, "reviewbot-rejected-results.json"), "utf8")
+      await readFile(join(artifactDirectory, "shuvbot-rejected-results.json"), "utf8")
     ) as { rejected: { role: string; repair: boolean; reason: string; sample: string }[] };
 
     // Both the first result and its repair are kept, so a rejection can be
@@ -528,13 +528,13 @@ describe("local coordinator engine", () => {
   });
 
   test("does not write a rejected-result artifact when nothing was refused", async () => {
-    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-rejected-none-"));
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-rejected-none-"));
     await runEngine("trivial", new FakeRuntime(), { artifactDirectory });
-    expect(existsSync(join(artifactDirectory, "reviewbot-rejected-results.json"))).toBe(false);
+    expect(existsSync(join(artifactDirectory, "shuvbot-rejected-results.json"))).toBe(false);
   });
 
   test("flushes durable secret-free artifacts before workspace cleanup", async () => {
-    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-artifacts-"));
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-artifacts-"));
     const { result, root } = await runEngine(
       "trivial",
       new FakeRuntime({ emitSensitiveEvents: true }),
@@ -544,11 +544,9 @@ describe("local coordinator engine", () => {
     expect(existsSync(root)).toBe(false);
     expect(result.artifacts).toEqual({ directory: artifactDirectory, status: "written" });
     const artifacts = await Promise.all(
-      [
-        "reviewbot-events.jsonl",
-        "reviewbot-review-sessions.json",
-        "reviewbot-review-result.json"
-      ].map((name) => readFile(join(artifactDirectory, name), "utf8"))
+      ["shuvbot-events.jsonl", "shuvbot-review-sessions.json", "shuvbot-review-result.json"].map(
+        (name) => readFile(join(artifactDirectory, name), "utf8")
+      )
     );
     const serialized = artifacts.join("\n");
     expect(serialized).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
@@ -559,7 +557,7 @@ describe("local coordinator engine", () => {
   });
 
   test("reports artifact persistence failure without misreporting it as written", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "reviewbot-artifact-failure-"));
+    const directory = await mkdtemp(join(tmpdir(), "shuvbot-artifact-failure-"));
     const destination = join(directory, "not-a-directory");
     await writeFile(destination, "occupied");
 
@@ -576,14 +574,14 @@ describe("local coordinator engine", () => {
   });
 
   test("times out hanging artifact I/O and leaves no atomic temp files", async () => {
-    const artifactDirectory = await mkdtemp(join(tmpdir(), "reviewbot-artifact-timeout-"));
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-artifact-timeout-"));
     const fileSystem: CoordinatorEngineFileSystem = {
       mkdir,
       rename,
       rm,
       writeFile: (async (path, ...args) => {
         await (writeFile as (...values: unknown[]) => Promise<void>)(path, ...args);
-        if (String(path).includes("reviewbot-events.jsonl")) {
+        if (String(path).includes("shuvbot-events.jsonl")) {
           await new Promise<void>(() => undefined);
         }
       }) as typeof writeFile

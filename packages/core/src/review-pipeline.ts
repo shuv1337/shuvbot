@@ -88,7 +88,10 @@ export function runReviewPipeline(input: {
     };
     const line = calibrated.line ?? calibrated.startLine;
     const side = calibrated.side ?? "RIGHT";
-    const position = line === undefined ? undefined : isCommentableLine(input.diffPositions, calibrated.path, line, side);
+    const position =
+      line === undefined
+        ? undefined
+        : isCommentableLine(input.diffPositions, calibrated.path, line, side);
     if (position) {
       pipelineFinding.inline = {
         path: finding.path,
@@ -106,8 +109,12 @@ export function runReviewPipeline(input: {
   const inlineFindings: PipelineFinding[] = [];
   const summaryFindings: PipelineFinding[] = [];
   for (const finding of findings) {
-    if (finding.inline && inlineFindings.length < input.config.maxInlineFindings) inlineFindings.push(finding);
-    else summaryFindings.push(finding.inline ? { ...finding, fallbackReason: "inline budget exceeded" } : finding);
+    if (finding.inline && inlineFindings.length < input.config.maxInlineFindings)
+      inlineFindings.push(finding);
+    else
+      summaryFindings.push(
+        finding.inline ? { ...finding, fallbackReason: "inline budget exceeded" } : finding
+      );
   }
 
   return {
@@ -137,7 +144,10 @@ export function isSuggestedFixValid(finding: ReviewFinding): boolean {
   const end = finding.endLine ?? finding.line;
   if (start === undefined || end === undefined || end < start || end - start > 10) return false;
   const lines = finding.suggestedFix.split("\n");
-  return lines.every((line) => line.trim().length === 0 || line.startsWith(" ") || line.startsWith("\t") || !/^\s/.test(line));
+  return lines.every(
+    (line) =>
+      line.trim().length === 0 || line.startsWith(" ") || line.startsWith("\t") || !/^\s/.test(line)
+  );
 }
 
 function normalizeFindingKey(finding: ReviewFinding): string {
@@ -151,7 +161,11 @@ function normalizeFindingKey(finding: ReviewFinding): string {
 }
 
 function isActionable(finding: ReviewFinding): boolean {
-  if (finding.tags?.some((tag) => ["correctness", "security", "regression", "test", "docs", "ci"].includes(tag))) {
+  if (
+    finding.tags?.some((tag) =>
+      ["correctness", "security", "regression", "test", "docs", "ci"].includes(tag)
+    )
+  ) {
     return true;
   }
   return /\b(crash|bug|security|vulnerab|secret|token|regression|test|docs|incorrect|failing|data loss)\b/i.test(
@@ -166,15 +180,24 @@ function isNoise(finding: ReviewFinding, acknowledgedText: string): boolean {
   return acknowledgedText.length > 0 && acknowledgedText.includes(finding.title.toLowerCase());
 }
 
-function shouldRequestChanges(findings: readonly PipelineFinding[], config: ReviewPipelineConfig): boolean {
+function shouldRequestChanges(
+  findings: readonly PipelineFinding[],
+  config: ReviewPipelineConfig
+): boolean {
   return Boolean(config.requestChanges && thresholdMet(findings, config.failOn));
 }
 
-function shouldFailCheck(findings: readonly PipelineFinding[], config: ReviewPipelineConfig): boolean {
+function shouldFailCheck(
+  findings: readonly PipelineFinding[],
+  config: ReviewPipelineConfig
+): boolean {
   return Boolean(config.failCheck && thresholdMet(findings, config.failOn));
 }
 
-function thresholdMet(findings: readonly PipelineFinding[], failOn: ReviewFinding["severity"] | undefined): boolean {
+function thresholdMet(
+  findings: readonly PipelineFinding[],
+  failOn: ReviewFinding["severity"] | undefined
+): boolean {
   if (!failOn) return false;
   const threshold = severityRank(failOn);
   return findings.some((finding) => severityRank(finding.severity) <= threshold);

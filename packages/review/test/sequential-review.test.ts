@@ -9,7 +9,7 @@ import { FileReviewStateStore } from "../src/state.ts";
 
 describe("sequential local review lifecycle", () => {
   test("persists new, unresolved, fixed, and user-resolved transitions atomically", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-sequential-review-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-sequential-review-"));
     const store = new FileReviewStateStore(cwd, new DefaultRedactor());
     const changeId = "local/repo:main:feature";
     const first = reconcileReviewState({

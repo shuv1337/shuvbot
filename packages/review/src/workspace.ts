@@ -51,7 +51,7 @@ export async function createReviewWorkspace(
   const requestedRoot = resolve(input.tempRoot ?? tmpdir());
   await mkdir(requestedRoot, { recursive: true, mode: 0o700 });
   const tempRoot = await realpath(requestedRoot);
-  const root = await mkdtemp(join(tempRoot, "reviewbot-review-"));
+  const root = await mkdtemp(join(tempRoot, "shuvbot-review-"));
 
   try {
     assertInside(tempRoot, root);

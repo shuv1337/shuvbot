@@ -33,9 +33,12 @@ export function buildContextManifest(sections: readonly ContextSection[]): Conte
   };
 }
 
-export async function writeContextManifest(dir: string, manifest: ContextManifest): Promise<string> {
+export async function writeContextManifest(
+  dir: string,
+  manifest: ContextManifest
+): Promise<string> {
   await mkdir(dir, { recursive: true });
-  const path = join(dir, "reviewbot-context-manifest.json");
+  const path = join(dir, "shuvbot-context-manifest.json");
   await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
   return path;
 }

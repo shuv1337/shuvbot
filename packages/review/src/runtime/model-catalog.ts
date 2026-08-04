@@ -20,7 +20,7 @@ export interface CuratedReviewModel {
 /**
  * The curated set of models a review may select, kept short on purpose.
  *
- * Reviewbot names models in its own `subscription/…` namespace so repository
+ * Shuvbot names models in its own `subscription/…` namespace so repository
  * configuration never names a provider or carries credentials, and the runtime
  * cannot route those names. This table is the mapping, maintained by hand.
  *

@@ -1,1 +1,25 @@
-{"action":"created","repository":{"owner":{"login":"octo"},"name":"repo","full_name":"octo/repo","private":false},"sender":{"login":"maintainer"},"pull_request":{"number":1,"title":"Bug","body":"","state":"open","draft":false,"user":{"login":"alice"},"head":{"ref":"feature","sha":"headsha","repo":{"full_name":"octo/repo"}},"base":{"ref":"main","sha":"basesha","repo":{"full_name":"octo/repo"}}},"comment":{"id":11,"body":"@reviewbot implement apply the suggested fix","user":{"login":"maintainer"}}}
+{
+  "action": "created",
+  "repository": {
+    "owner": { "login": "octo" },
+    "name": "repo",
+    "full_name": "octo/repo",
+    "private": false
+  },
+  "sender": { "login": "maintainer" },
+  "pull_request": {
+    "number": 1,
+    "title": "Bug",
+    "body": "",
+    "state": "open",
+    "draft": false,
+    "user": { "login": "alice" },
+    "head": { "ref": "feature", "sha": "headsha", "repo": { "full_name": "octo/repo" } },
+    "base": { "ref": "main", "sha": "basesha", "repo": { "full_name": "octo/repo" } }
+  },
+  "comment": {
+    "id": 11,
+    "body": "@shuvbot implement apply the suggested fix",
+    "user": { "login": "maintainer" }
+  }
+}

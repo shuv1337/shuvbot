@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AuthError } from "../src/errors.ts";
-import {
-  createRunRecord,
-  recordError,
-  recordReview,
-  recordToolAudit
-} from "../src/run-record.ts";
+import { createRunRecord, recordError, recordReview, recordToolAudit } from "../src/run-record.ts";
 
 describe("run record", () => {
   test("attaches tool audit summaries", () => {

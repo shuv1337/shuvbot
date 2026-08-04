@@ -1,7 +1,14 @@
 import { appendMarker, findExistingMarker } from "../../../github/src/comments.ts";
 import { ToolExecutionError } from "../../../core/src/errors.ts";
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { asArray, asRecord, numberValue, requireClient, requireRepo, stringValue } from "./shared.ts";
+import {
+  asArray,
+  asRecord,
+  numberValue,
+  requireClient,
+  requireRepo,
+  stringValue
+} from "./shared.ts";
 
 interface ReviewCommentInput {
   path: string;
@@ -49,7 +56,10 @@ const ANY_OBJECT_SCHEMA = {
   additionalProperties: true
 } satisfies ToolSchema;
 
-export const createPullRequestReviewTool: ToolSpec<CreatePullRequestReviewInput, Record<string, unknown>> = {
+export const createPullRequestReviewTool: ToolSpec<
+  CreatePullRequestReviewInput,
+  Record<string, unknown>
+> = {
   name: "create_pull_request_review",
   description: "Create a pull request review. APPROVE is rejected for v1.",
   inputSchema: CREATE_REVIEW_INPUT_SCHEMA,
@@ -63,9 +73,12 @@ export const createPullRequestReviewTool: ToolSpec<CreatePullRequestReviewInput,
     const client = requireClient(context);
 
     if (input.markerKey !== undefined) {
-      const existing = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/comments", {
-        params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
-      });
+      const existing = await client.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+        {
+          params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
+        }
+      );
       const existingComment = findExistingMarker(
         asArray(existing.data).map((comment) => {
           const record = asRecord(comment);
@@ -83,7 +96,9 @@ export const createPullRequestReviewTool: ToolSpec<CreatePullRequestReviewInput,
     }
 
     const markerBody =
-      input.markerKey !== undefined ? appendMarker(input.body, input.markerKey, input.markerPayload ?? {}) : input.body;
+      input.markerKey !== undefined
+        ? appendMarker(input.body, input.markerKey, input.markerPayload ?? {})
+        : input.body;
     const comments = (input.comments ?? []).map((comment, index) => ({
       path: comment.path,
       position: comment.position,
@@ -92,14 +107,17 @@ export const createPullRequestReviewTool: ToolSpec<CreatePullRequestReviewInput,
           ? appendMarker(comment.body, input.markerKey, input.markerPayload ?? {})
           : comment.body
     }));
-    const response = await client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
-      body: {
-        body: markerBody,
-        event: input.event,
-        comments
+    const response = await client.request(
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number },
+        body: {
+          body: markerBody,
+          event: input.event,
+          comments
+        }
       }
-    });
+    );
     const review = asRecord(response.data);
     return {
       id: numberValue(review, "id"),

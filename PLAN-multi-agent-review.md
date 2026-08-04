@@ -4,7 +4,7 @@
 
 Evolve shuvbot's `review` mode into a Cloudflare-style coordinator system without narrowing the broader product. Mention-driven implementation, CI repair, and generic action modes remain part of shuvbot. The new review engine is introduced beside the current path, dogfooded locally, and promoted only after it is useful in practice.
 
-This plan supersedes the single-agent assumptions for review orchestration in `SPEC.md`. It does not invalidate the completed implementation history in `PLAN-reviewbot-implementation.md` or `PLAN-reviewbot-remaining.md`.
+This plan supersedes the single-agent assumptions for review orchestration in `SPEC.md`. It does not invalidate the completed implementation history in `PLAN-shuvbot-implementation.md` or `PLAN-shuvbot-remaining.md`.
 
 Primary external reference:
 
@@ -39,7 +39,7 @@ Updated 2026-08-03:
 - [x] M1 contracts and deterministic preprocessing: coordinator config, diff filtering, shared workspace, risk tiers, content-relevant lite assignment, deterministic fingerprints, canonical finding metadata, and deeply immutable execution plans are implemented with tests.
 - [x] M2 plugin core: lifecycle ordering, failure semantics, immutable assembly, six built-ins, bounded repo overrides, code-owned provider/model catalogs, and narrowing-only read tools are implemented with tests. Runtime-discovered catalog values will be supplied by M4 execution.
 - [x] M3 shuvcode runtime prerequisites: `shuvcode@2.0.0-alpha-9` is published to npm across all 19 fork packages with matching dist-tags and a GitHub release on tag `v2.0.0-alpha-9`. The code-approved executable pin is `2.0.0-alpha-9`, and `bun run smoke:runtime` passes 9/9 against the published artifacts: the pinned isolated process starts, the coordinator session and narrowed specialist sessions are created and server-enforced, widening is rejected, an active session is interrupted, and shutdown leaks no process. Two defects found by that smoke are fixed: the adapter resolved the packed client with CJS `require.resolve`, which can never match the release's `import`-only export map, and specialists forked an unprompted coordinator session, which the runtime rejects with `empty_session`.
-- [x] M4 coordinator execution: all six specialist prompts, shared mandatory rules, strict typed reviewer/coordinator results, bounded scheduling, specialist/coordinator/overall hard deadlines, cancellation, one bounded structured-output repair, provenance validation, deterministic finalization, server-enforced read-only session policy integration, and the isolated runtime adapter are implemented. The exit criterion is met: `reviewbot review --engine coordinator` returned a validated coordinator result from a real local subscription session against `shuvcode@2.0.0-alpha-9` on 2026-08-04, reporting `CLEAN` with quorum met at 1/1 coverage. A full-tier run over six reviewers then produced real findings with a coordinator retry. Four defects had to be fixed first, each invisible to the fake runtime and described under the dogfood results below.
+- [x] M4 coordinator execution: all six specialist prompts, shared mandatory rules, strict typed reviewer/coordinator results, bounded scheduling, specialist/coordinator/overall hard deadlines, cancellation, one bounded structured-output repair, provenance validation, deterministic finalization, server-enforced read-only session policy integration, and the isolated runtime adapter are implemented. The exit criterion is met: `shuvbot review --engine coordinator` returned a validated coordinator result from a real local subscription session against `shuvcode@2.0.0-alpha-9` on 2026-08-04, reporting `CLEAN` with quorum met at 1/1 coverage. A full-tier run over six reviewers then produced real findings with a coordinator retry. Four defects had to be fixed first, each invisible to the fake runtime and described under the dogfood results below.
 - [x] M5 quorum, resilience, and observability: tier-aware quorum and degradation, stable error classification, bounded retries/interruption, safe runtime event and usage translation, complete repair/session accounting, run-record coverage, and durable redacted run/session/result artifacts are integrated and tested. This completes the local M5 exit criterion; GitHub artifact upload remains M8 work.
 - [x] M6 incremental lifecycle: validated atomic file state, deterministic reconciliation for unresolved, fixed, degraded, user-resolved, and materially worsened findings, paginated bot-thread/reply ingestion, and a tested two-run local lifecycle complete the M6 exit criterion. GitHub-native state writes remain gated on M8 rather than being treated as local M6 completion work.
 - [ ] M7 local dogfood UX: local engine selection, strict flags, live progress, stable JSON, no-change results, incremental state, durable artifacts, and coordinator-aware doctor diagnostics are implemented. The dogfood matrix and manual acceptance criteria have not run, so M7 remains incomplete.
@@ -64,11 +64,11 @@ Updated 2026-08-03:
 - Local `legacy` remains the config default but fails closed before Git because no safe production legacy driver exists. Tests can inject a fake `ReviewAgent`; production does not silently return fake findings.
 - Local coordinator routing and execution are implemented and the approved shuvcode runtime pin is `2.0.0-alpha-9`, so coordinator mode no longer fails closed on the pin. It still requires `review.shuvcode.use_user_auth = true` and a working local shuvcode subscription profile; an unapproved or mismatched pin continues to fail before any Git work.
 - Real local coordinator dogfood ran on 2026-08-04 against `shuvcode@2.0.0-alpha-9`. Preprocessing, planning, runtime startup, session creation, policy enforcement, prompting, progress streaming, scheduling, quorum, retries, and artifact persistence all work against the published runtime, and a failing run degrades honestly rather than claiming clean. Four defects had to be fixed to get there, none of which the fake runtime can expose:
-  - **Reviewbot model names were never resolved.** `subscription/…` is a reviewbot-owned abstract namespace, but the names were passed to `session.switchModel` unchanged and no provider serves them. The runtime accepts any model at switch time, so this only surfaced at prompt time as `{"type":"provider.no-route","message":"Model unavailable: subscription/default-coding"}`. Names are now resolved against the runtime's own catalog before any session selects a model.
+  - **Shuvbot model names were never resolved.** `subscription/…` is a shuvbot-owned abstract namespace, but the names were passed to `session.switchModel` unchanged and no provider serves them. The runtime accepts any model at switch time, so this only surfaced at prompt time as `{"type":"provider.no-route","message":"Model unavailable: subscription/default-coding"}`. Names are now resolved against the runtime's own catalog before any session selects a model.
   - **Generated JSON Schemas were rejected.** `z.toJSONSchema` emits a `$schema` dialect declaration, and the runtime answers `Invalid structured output schema: no schema with key or ref "https://json-schema.org/draft/2020-12/schema"` (`kind: structured_output.schema`). Every structured prompt failed in about a second, before any model was reached.
-  - **Sessions selected a runtime agent that does not exist.** Both session paths set `agent: "review"`; nothing creates it, so the runtime failed each session with `Agent not found: "review"`. Reviewbot supplies its own instructions and its tool authorization comes from the server-enforced session policy, so no agent is selected now.
+  - **Sessions selected a runtime agent that does not exist.** Both session paths set `agent: "review"`; nothing creates it, so the runtime failed each session with `Agent not found: "review"`. Shuvbot supplies its own instructions and its tool authorization comes from the server-enforced session policy, so no agent is selected now.
   - **Provider faults were reported as schema faults.** Unroutable models were recorded as `REVIEW_SCHEMA_INVALID` / "Structured response was invalid". They are now classified as non-retryable configuration errors, and classification reads the source event because sanitization reduces an error to a category and status.
-- Two follow-ups are open from the full-tier run. The `security` and `performance` specialists completed their model calls but their results failed reviewbot's own strict validation and were recorded as `REVIEW_SCHEMA_INVALID`; the artifacts deliberately retain no invalid payload, so diagnosing this needs a debug affordance that captures a redacted sample of a rejected result. The runtime also publishes no model list in this environment (`model.list` is empty while models route normally), so `subscription/<provider>:<model>` is currently the only usable form for naming a specific model.
+- Two follow-ups are open from the full-tier run. The `security` and `performance` specialists completed their model calls but their results failed shuvbot's own strict validation and were recorded as `REVIEW_SCHEMA_INVALID`; the artifacts deliberately retain no invalid payload, so diagnosing this needs a debug affordance that captures a redacted sample of a rejected result. The runtime also publishes no model list in this environment (`model.list` is empty while models route normally), so `subscription/<provider>:<model>` is currently the only usable form for naming a specific model.
 - M7 stays unchecked until the documented repository/change matrix and the manual quality, latency, degradation, and incremental acceptance criteria are recorded.
 - `packages/action/src/main.ts` still uses the legacy fake-agent pipeline and does not select the coordinator. GitHub-native coordinator posting, state writes, artifact upload, non-interactive auth, and cancellation remain M8 work.
 - The default is now `coordinator`. `legacy` stays selectable for comparison but has no safe production driver, so it fails closed rather than acting as a fallback.
@@ -76,7 +76,7 @@ Updated 2026-08-03:
 ## Target Architecture
 
 ```text
-reviewbot review / GitHub pull_request
+shuvbot review / GitHub pull_request
   -> deterministic event, policy, config resolution
   -> review plugin bootstrap (concurrent, non-fatal)
   -> review plugin configure (sequential, fatal)
@@ -500,7 +500,7 @@ Tests:
 
 Exit criteria:
 
-- `reviewbot review --engine coordinator` returns a validated coordinator result from a real local shuvcode subscription session.
+- `shuvbot review --engine coordinator` returns a validated coordinator result from a real local shuvcode subscription session.
 
 ### M5: Quorum, resilience, and observability
 
@@ -559,7 +559,7 @@ Files:
 - Update `packages/cli/src/local-review.ts` to select legacy or coordinator engines.
 - Add progress output for tier, scheduled reviewers, queue/running/completed state, heartbeats, and coverage.
 - Add human-readable summary plus optional JSON output.
-- Update `reviewbot doctor` with shuvcode pin, auth availability, process launch, and model resolution checks.
+- Update `shuvbot doctor` with shuvcode pin, auth availability, process launch, and model resolution checks.
 - Update docs and sample config.
 
 Dogfood targets:

@@ -3,7 +3,12 @@ import { PolicyDeniedError, StructuredOutputError } from "../../core/src/errors.
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
 import type { PolicyInput } from "../../core/src/policy.ts";
-import { executeTool, type ToolAuditRecord, type ToolContext, type ToolSpec } from "../src/tool-spec.ts";
+import {
+  executeTool,
+  type ToolAuditRecord,
+  type ToolContext,
+  type ToolSpec
+} from "../src/tool-spec.ts";
 
 interface EchoInput {
   value: string;
@@ -78,9 +83,9 @@ describe("tool spec execution", () => {
     };
 
     const audit: ToolAuditRecord[] = [];
-    await expect(executeTool(badOutputTool, { value: "ok" }, context(audit))).rejects.toBeInstanceOf(
-      StructuredOutputError
-    );
+    await expect(
+      executeTool(badOutputTool, { value: "ok" }, context(audit))
+    ).rejects.toBeInstanceOf(StructuredOutputError);
 
     expect(audit[0]?.sanitizedError).toContain("output schema failed");
   });

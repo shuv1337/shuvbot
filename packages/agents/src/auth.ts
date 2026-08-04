@@ -17,12 +17,19 @@ export function resolveClaudeAuth(env: Record<string, string | undefined>): Clau
   throw new AuthError("Claude auth missing: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY");
 }
 
-export function resolveAuthFor(driverId: AgentId, env: Record<string, string | undefined>): ClaudeAuth {
+export function resolveAuthFor(
+  driverId: AgentId,
+  env: Record<string, string | undefined>
+): ClaudeAuth {
   if (driverId === "claude-code") return resolveClaudeAuth(env);
   throw new AuthError(`Auth resolver not implemented for driver ${driverId}`);
 }
 
-export function maskSecret(value: string, label = "secret", masker: { setSecret(value: string): void } = core): void {
+export function maskSecret(
+  value: string,
+  label = "secret",
+  masker: { setSecret(value: string): void } = core
+): void {
   const trimmed = value.trim();
   if (!trimmed) throw new AuthError(`${label} is empty`);
   masker.setSecret(trimmed);

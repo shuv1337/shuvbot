@@ -7,16 +7,16 @@ import { parseReviewOptions, runDoctorCommand, runReviewCommand } from "./index.
 import { runLocalReview, type LocalReviewOptions } from "./local-review.ts";
 
 describe("review command routing", () => {
-  test("auto-loads reviewbot.toml from cwd", async () => {
+  test("auto-loads shuvbot.toml from cwd", async () => {
     const cwd = await temporaryDirectory();
-    await writeFile(join(cwd, "reviewbot.toml"), '[review]\nengine = "coordinator"\n');
+    await writeFile(join(cwd, "shuvbot.toml"), '[review]\nengine = "coordinator"\n');
 
     const received = await captureReview(cwd, []);
 
     expect(received.config?.review.engine).toBe("coordinator");
   });
 
-  test("uses normalized defaults when reviewbot.toml is absent", async () => {
+  test("uses normalized defaults when shuvbot.toml is absent", async () => {
     const cwd = await temporaryDirectory();
     let loads = 0;
 
@@ -33,7 +33,7 @@ describe("review command routing", () => {
 
   test("explicit config wins over the cwd default and is resolved from cwd", async () => {
     const cwd = await temporaryDirectory();
-    await writeFile(join(cwd, "reviewbot.toml"), '[review]\nengine = "legacy"\n');
+    await writeFile(join(cwd, "shuvbot.toml"), '[review]\nengine = "legacy"\n');
     await writeFile(join(cwd, "chosen.toml"), '[review]\nengine = "coordinator"\n');
     let loadedPath = "";
 
@@ -51,7 +51,7 @@ describe("review command routing", () => {
 
   test("explicit engine wins over loaded config", async () => {
     const cwd = await temporaryDirectory();
-    await writeFile(join(cwd, "reviewbot.toml"), '[review]\nengine = "coordinator"\n');
+    await writeFile(join(cwd, "shuvbot.toml"), '[review]\nengine = "coordinator"\n');
 
     const received = await captureReview(cwd, ["--engine", "legacy"]);
 
@@ -128,7 +128,7 @@ describe("doctor command routing", () => {
 });
 
 async function temporaryDirectory(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "reviewbot-cli-index-"));
+  return mkdtemp(join(tmpdir(), "shuvbot-cli-index-"));
 }
 
 async function captureReview(

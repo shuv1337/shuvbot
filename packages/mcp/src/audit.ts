@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ReviewbotMode } from "../../core/src/types.ts";
+import type { ShuvbotMode } from "../../core/src/types.ts";
 import type { Redactor } from "../../core/src/redaction.ts";
 
 export type ToolPolicyDecision = "allowed" | "denied";
@@ -9,7 +9,7 @@ export interface ToolAuditRecord {
   runId: string;
   toolName: string;
   actor: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   status: ToolAuditStatus;
   durationMs: number;
   policyDecision: ToolPolicyDecision;
@@ -25,7 +25,7 @@ export interface ToolAuditRecordInput {
   runId: string;
   toolName: string;
   actor: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   status: ToolAuditStatus;
   durationMs: number;
   policyDecision: ToolPolicyDecision;
@@ -84,7 +84,10 @@ export class AuditLog implements ToolAuditSink {
   }
 }
 
-export function createToolAuditRecord(input: ToolAuditRecordInput, redactor: Redactor): ToolAuditRecord {
+export function createToolAuditRecord(
+  input: ToolAuditRecordInput,
+  redactor: Redactor
+): ToolAuditRecord {
   const sanitizedInput = redactor.redact(input.input);
   const record: ToolAuditRecord = {
     runId: input.runId,

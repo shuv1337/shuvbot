@@ -10,7 +10,7 @@ export interface FinalSummaryInput {
 
 export function formatFinalSummary(input: FinalSummaryInput): string {
   return [
-    "## reviewbot summary",
+    "## shuvbot summary",
     "",
     `Requested task: ${input.requestedTask}`,
     "",

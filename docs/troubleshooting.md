@@ -6,13 +6,13 @@ Run diagnostics:
 shuvbot doctor
 ```
 
-From this repository without an installed `reviewbot` binary, use:
+From this repository without an installed `shuvbot` binary, use:
 
 ```bash
 bun packages/cli/src/index.ts doctor
 ```
 
-Doctor looks for `reviewbot.toml` in the current working directory; the CLI does not expose a doctor
+Doctor looks for `shuvbot.toml` in the current working directory; the CLI does not expose a doctor
 config-path option. It checks config loading, GitHub CLI and Claude availability, Claude auth presence,
 git, Bun, Node, MCP startup/shutdown, and redaction. Its exit is strict: any failed check makes the
 command exit nonzero, even when that check is unrelated to the selected review engine; warnings and
@@ -30,13 +30,13 @@ prerequisites; it does not replace a real review.
 
 `review.engine` defaults to `"coordinator"` and local coordinator review runs against the approved
 `shuvcode@2.0.0-alpha-9` pin. It needs a local shuvcode profile with an authenticated provider; the
-runtime resolves from the reviewed repository first and from reviewbot's own install second. A
+runtime resolves from the reviewed repository first and from shuvbot's own install second. A
 configured version that differs from the code-approved pin still fails before Git, and so does the
 `legacy` engine, which has no safe production driver. Do not work around a pin mismatch with a
 version range, workspace-private import, or guessed version.
 
 If a specialist or coordinator result is refused as `REVIEW_SCHEMA_INVALID`, the refused value is
-kept, redacted and truncated, in `.reviewbot/runs/<id>/reviewbot-rejected-results.json` together with
+kept, redacted and truncated, in `.shuvbot/runs/<id>/shuvbot-rejected-results.json` together with
 the validation reason.
 
 To run a local review:
@@ -46,17 +46,17 @@ bun run dogfood:review -- --base main --head HEAD
 ```
 
 Add `--json` for the stable sanitized JSON report, or `--config <path>` to load a particular TOML
-file instead of the auto-loaded `reviewbot.toml` in the current working directory. The script already
+file instead of the auto-loaded `shuvbot.toml` in the current working directory. The script already
 supplies `--engine coordinator`; duplicate flags are rejected, so do not append another `--engine`.
 
 Common failures:
 
-- Config rejected: run `shuvbot config validate reviewbot.toml`.
+- Config rejected: run `shuvbot config validate shuvbot.toml`.
 - Claude CLI missing (`claude: not found`): install Claude Code before the shuvbot action step and add `$HOME/.local/bin` to `GITHUB_PATH` as shown in `docs/workflows.md`.
-- No Claude auth: set `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. Review-mode agent failures include a redacted stdout/stderr tail in the step log and in `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt` when the pipeline fails before normal review artifacts are written.
+- No Claude auth: set `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. Review-mode agent failures include a redacted stdout/stderr tail in the step log and in `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt` when the pipeline fails before normal review artifacts are written.
 - No comments posted: check job `permissions`, runtime policy reasons, and fork status.
 - Shell denied: shell is disabled for forks and untrusted actors; Docker is required for restricted shell.
-- Push denied: implementation and fix-ci only push to `reviewbot/*` branches.
+- Push denied: implementation and fix-ci only push to `shuvbot/*` branches.
 - Inline comment missing: the finding line must map to a diff position; otherwise it falls back to the summary.
 - Evals failing: run `bun run evals` and inspect the markdown summary table.
 - Action startup fails with `ERR_MODULE_NOT_FOUND` for `@actions/core` or another package: the committed `dist/index.js` is not self-contained. Run `bun run build`, commit the regenerated bundle, and verify with `bun test packages/action/test/dist-bundle.test.ts`.
@@ -64,7 +64,7 @@ Common failures:
 ## Action output failures
 
 - `result` is empty or just `{"status":"initialized",...}`: the run didn't match a mode that calls a real agent. Only `review` mode does today - see `docs/workflows.md`.
-- `review_findings` is `[]` on a PR you expect findings on: check the workflow summary's "Errors" table first (redacted). Also check `reportOn`/`minConfidence`/`failOn` in your config; findings below threshold are dropped, not silently kept. If every review skill failed before findings were produced, the action fails and writes redacted agent diagnostics to the step log and `$RUNNER_TEMP/reviewbot/reviewbot-agent-error.txt`.
+- `review_findings` is `[]` on a PR you expect findings on: check the workflow summary's "Errors" table first (redacted). Also check `reportOn`/`minConfidence`/`failOn` in your config; findings below threshold are dropped, not silently kept. If every review skill failed before findings were produced, the action fails and writes redacted agent diagnostics to the step log and `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt`.
 - Setting `output_schema` in `with:` does nothing: this input was removed from `action.yml` - it isn't implemented yet (see `docs/workflows.md`).
 - A downstream step can't read `steps.<id>.outputs.result`: confirm the step has an `id:` and that `action.yml`'s `outputs:` block still lists `result`/`review_findings`/`summary` (it should - if a fork/local build stripped it, GitHub Actions won't expose the output even though `core.setOutput` still writes it to `$GITHUB_OUTPUT`).
 - Coordinator config rejected: the schema requires package name `shuvcode` and an exact semver rather than a range. Executable approval is enforced separately by the nullable code-owned runtime pin.
@@ -78,7 +78,7 @@ Common failures:
 - Coordinator model catalog unsupported: the packed client must expose public `provider.list()` and `model.list()` operations. Doctor does not create or interrupt a session as a model probe and consumes no model quota.
 - Coordinator model unresolved: use a model present in the public provider/model catalogs. Repository config cannot add a provider or credentials.
 - Coordinator appears idle: human mode prints a heartbeat after 30 seconds without session activity, with elapsed time and coverage. `--json` intentionally prints no progress so stdout remains one valid JSON document.
-- Coordinator artifacts missing: inspect `.reviewbot/runs/<run-id>/` for `reviewbot-events.jsonl`, `reviewbot-review-sessions.json`, `reviewbot-review-result.json`, `reviewbot-run.json`, and `reviewbot-findings.json`. Every invocation uses a new run ID; these files survive temporary workspace cleanup and do not replace incremental state under `.reviewbot/state/reviews/`.
+- Coordinator artifacts missing: inspect `.shuvbot/runs/<run-id>/` for `shuvbot-events.jsonl`, `shuvbot-review-sessions.json`, `shuvbot-review-result.json`, `shuvbot-run.json`, and `shuvbot-findings.json`. Every invocation uses a new run ID; these files survive temporary workspace cleanup and do not replace incremental state under `.shuvbot/state/reviews/`.
 - Coordinator report is degraded: inspect failed and timed-out reviewer names and coverage. Below quorum cannot claim clean or request changes because coverage failed, although independently verified findings may still be shown.
 - Coordinator command exits zero after a degraded report: this is current behavior. Only `failed`, `timed_out`, `cancelled`, or a thrown command error sets a nonzero exit for local coordinator review.
 - Coordinator reports `no_changes` or `no_reviewable_changes`: these are successful not-run results and exit zero. The first means the range has no changed files; the second means global paths or deterministic filters excluded every changed file.

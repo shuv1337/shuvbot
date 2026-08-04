@@ -29,7 +29,7 @@ const execFileAsync = promisify(execFile);
 
 describe("git, shell, and memory MCP tools", () => {
   test("read-only git tools expose status and diff under policy gate", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-git-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-git-"));
     await execFileAsync("git", ["init"], { cwd });
     await writeFile(join(cwd, "a.txt"), "hello\n");
     await execFileAsync("git", ["add", "a.txt"], { cwd });
@@ -45,10 +45,10 @@ describe("git, shell, and memory MCP tools", () => {
   });
 
   test("git write contracts enforce policy, actor permission, branch prefix, and commit template", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-git-write-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-git-write-"));
     await execFileAsync("git", ["init", "-b", "main"], { cwd });
-    await execFileAsync("git", ["config", "user.email", "reviewbot@example.com"], { cwd });
-    await execFileAsync("git", ["config", "user.name", "reviewbot"], { cwd });
+    await execFileAsync("git", ["config", "user.email", "shuvbot@example.com"], { cwd });
+    await execFileAsync("git", ["config", "user.name", "shuvbot"], { cwd });
     await writeFile(join(cwd, "a.txt"), "hello\n");
     await execFileAsync("git", ["add", "a.txt"], { cwd });
     await execFileAsync("git", ["commit", "-m", "initial"], { cwd });
@@ -64,7 +64,7 @@ describe("git, shell, and memory MCP tools", () => {
       })
     });
     const message =
-      "reviewbot: implement task\n\nRequested-by: shuv1337\nRun-id: run-1\nMode: implement";
+      "shuvbot: implement task\n\nRequested-by: shuv1337\nRun-id: run-1\nMode: implement";
 
     await expect(executeTool(gitCommitTool, { message }, toolContext)).resolves.toMatchObject({
       accepted: true,
@@ -72,14 +72,14 @@ describe("git, shell, and memory MCP tools", () => {
     });
     await expect(
       executeTool(pushBranchTool, { branch: "feature/nope" }, toolContext)
-    ).rejects.toThrow("must start with reviewbot/");
+    ).rejects.toThrow("must start with shuvbot/");
     await expect(
-      executeTool(pushBranchTool, { branch: "reviewbot/test" }, toolContext)
+      executeTool(pushBranchTool, { branch: "shuvbot/test" }, toolContext)
     ).rejects.toThrow();
     await expect(
       executeTool(
         createPullRequestTool,
-        { branch: "reviewbot/test", title: "Test", body: "Body", base: "main" },
+        { branch: "shuvbot/test", title: "Test", body: "Body", base: "main" },
         context({
           cwd,
           policy: toolContext.policy,
@@ -96,12 +96,12 @@ describe("git, shell, and memory MCP tools", () => {
           repo: { owner: "octo", name: "repo" }
         })
       )
-    ).resolves.toMatchObject({ accepted: true, branch: "reviewbot/test" });
+    ).resolves.toMatchObject({ accepted: true, branch: "shuvbot/test" });
     const routes: string[] = [];
     await expect(
       executeTool(
         createPullRequestTool,
-        { branch: "reviewbot/test", title: "Updated", body: "Body", base: "main" },
+        { branch: "shuvbot/test", title: "Updated", body: "Body", base: "main" },
         context({
           cwd,
           policy: toolContext.policy,
@@ -116,19 +116,19 @@ describe("git, shell, and memory MCP tools", () => {
           repo: { owner: "octo", name: "repo" }
         })
       )
-    ).resolves.toMatchObject({ accepted: true, branch: "reviewbot/test" });
+    ).resolves.toMatchObject({ accepted: true, branch: "shuvbot/test" });
     expect(routes).toEqual([
       "GET /repos/{owner}/{repo}/pulls",
       "PATCH /repos/{owner}/{repo}/pulls/{pull_number}"
     ]);
 
     await expect(executeTool(gitCommitTool, { message: "bad" }, toolContext)).rejects.toThrow(
-      "must start with reviewbot:"
+      "must start with shuvbot:"
     );
   });
 
   test("create_pull_request resolves the repo's actual default branch when base is omitted", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-git-default-branch-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-git-default-branch-"));
     await execFileAsync("git", ["init"], { cwd });
     const routes: string[] = [];
     const toolContext = context({
@@ -155,7 +155,7 @@ describe("git, shell, and memory MCP tools", () => {
     await expect(
       executeTool(
         createPullRequestTool,
-        { branch: "reviewbot/test", title: "Test", body: "Body" },
+        { branch: "shuvbot/test", title: "Test", body: "Body" },
         toolContext
       )
     ).resolves.toMatchObject({ accepted: true, base: "trunk" });
@@ -184,7 +184,7 @@ describe("git, shell, and memory MCP tools", () => {
       executeTool(
         gitCommitTool,
         {
-          message: "reviewbot: x\n\nRequested-by: reader\nRun-id: run-1\nMode: implement"
+          message: "shuvbot: x\n\nRequested-by: reader\nRun-id: run-1\nMode: implement"
         },
         deniedContext
       )
@@ -192,7 +192,7 @@ describe("git, shell, and memory MCP tools", () => {
   });
 
   test("shell tools require shell policy and fail closed until sandbox implementation", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-shell-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-shell-"));
     const fakeDocker = join(cwd, "docker");
     await writeFile(fakeDocker, '#!/bin/sh\necho docker-called "$@"\n');
     await chmod(fakeDocker, 0o755);
@@ -212,8 +212,8 @@ describe("git, shell, and memory MCP tools", () => {
     await expect(executeTool(runShellTool, { command: "echo hi" }, allowedContext)).rejects.toThrow(
       "restricted shell requires Docker"
     );
-    const previousDockerPath = process.env.REVIEWBOT_DOCKER_PATH;
-    process.env.REVIEWBOT_DOCKER_PATH = fakeDocker;
+    const previousDockerPath = process.env.SHUVBOT_DOCKER_PATH;
+    process.env.SHUVBOT_DOCKER_PATH = fakeDocker;
     try {
       await expect(
         executeTool(runShellTool, { command: "echo hi" }, allowedContext)
@@ -222,8 +222,8 @@ describe("git, shell, and memory MCP tools", () => {
         stdout: expect.stringContaining("docker-called")
       });
     } finally {
-      if (previousDockerPath === undefined) delete process.env.REVIEWBOT_DOCKER_PATH;
-      else process.env.REVIEWBOT_DOCKER_PATH = previousDockerPath;
+      if (previousDockerPath === undefined) delete process.env.SHUVBOT_DOCKER_PATH;
+      else process.env.SHUVBOT_DOCKER_PATH = previousDockerPath;
     }
     await expect(
       executeTool(killBackgroundProcessTool, { processId: "proc-1" }, allowedContext)

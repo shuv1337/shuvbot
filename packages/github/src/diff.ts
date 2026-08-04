@@ -91,10 +91,20 @@ export function mapDiffPositions(hunks: readonly DiffHunk[]): Map<string, DiffPo
     const entries = positions.get(hunk.path) ?? [];
     for (const line of hunk.lines) {
       if (line.newLine !== undefined && (line.kind === "add" || line.kind === "context")) {
-        entries.push({ path: hunk.path, line: line.newLine, side: "RIGHT", position: line.position });
+        entries.push({
+          path: hunk.path,
+          line: line.newLine,
+          side: "RIGHT",
+          position: line.position
+        });
       }
       if (line.oldLine !== undefined && (line.kind === "delete" || line.kind === "context")) {
-        entries.push({ path: hunk.path, line: line.oldLine, side: "LEFT", position: line.position });
+        entries.push({
+          path: hunk.path,
+          line: line.oldLine,
+          side: "LEFT",
+          position: line.position
+        });
       }
     }
     positions.set(hunk.path, entries);

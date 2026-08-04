@@ -103,7 +103,7 @@ async function runHardeningCase(
 
   const result = await runReview({
     cwd: root,
-    repo: "reviewbot/evals",
+    repo: "shuvbot/evals",
     event: fakePullRequestEvent(testCase.files),
     diff: testCase.diff,
     files: testCase.files,
@@ -137,7 +137,7 @@ function fakePullRequestEvent(files: Array<{ filename: string }>): PullRequestEv
     kind: "pull_request",
     name: "pull_request",
     action: "opened",
-    repo: { owner: "reviewbot", name: "evals", fullName: "reviewbot/evals", isPrivate: false },
+    repo: { owner: "shuvbot", name: "evals", fullName: "shuvbot/evals", isPrivate: false },
     sender: { login: "evals" },
     raw: { files },
     pullRequest: {
@@ -151,7 +151,7 @@ function fakePullRequestEvent(files: Array<{ filename: string }>): PullRequestEv
       baseSha: "base",
       headRef: "case",
       headSha: "head",
-      headRepoFullName: "reviewbot/evals",
+      headRepoFullName: "shuvbot/evals",
       isFork: false
     }
   };

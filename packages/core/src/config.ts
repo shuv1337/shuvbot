@@ -10,15 +10,15 @@ import {
   type AgentId,
   type Confidence,
   type PermissionLevel,
-  type ReviewbotMode,
+  type ShuvbotMode,
   type Severity,
   isOneOf
 } from "./types.ts";
 
-export interface ReviewbotConfig {
+export interface ShuvbotConfig {
   agent: AgentId;
   model: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   timeout: string;
   activityTimeout: string;
   failOn: Severity;
@@ -90,7 +90,7 @@ export const PINNED_SHUVCODE_PACKAGE = "shuvcode";
 export const SHUVCODE_SOURCE_BASELINE_VERSION = "1.18.4";
 export const APPROVED_SHUVCODE_RUNTIME_VERSION: string | null = "2.0.0-alpha-9";
 
-export const DEFAULT_CONFIG: ReviewbotConfig = {
+export const DEFAULT_CONFIG: ShuvbotConfig = {
   agent: "claude-code",
   model: "claude/sonnet",
   mode: "review",
@@ -117,7 +117,7 @@ export const DEFAULT_CONFIG: ReviewbotConfig = {
     // A review writes its run artifacts and state into the reviewed repository.
     // Jujutsu records every file in the working-copy commit, so without this a
     // review would report on the output of the previous one.
-    ignore: [".reviewbot/**"]
+    ignore: [".shuvbot/**"]
   },
   memory: {
     enabled: false,
@@ -193,12 +193,12 @@ const TOP_LEVEL_KEYS = new Set([
   "review"
 ]);
 
-export async function loadConfigFile(path: string): Promise<ReviewbotConfig> {
+export async function loadConfigFile(path: string): Promise<ShuvbotConfig> {
   const contents = await readFile(path, "utf8");
   return parseConfig(contents);
 }
 
-export function parseConfig(contents: string): ReviewbotConfig {
+export function parseConfig(contents: string): ShuvbotConfig {
   let parsed: unknown;
   try {
     parsed = parseToml(contents);
@@ -208,7 +208,7 @@ export function parseConfig(contents: string): ReviewbotConfig {
   return normalizeConfig(assertRecord(parsed, "config"));
 }
 
-export function normalizeConfig(raw: Record<string, unknown>): ReviewbotConfig {
+export function normalizeConfig(raw: Record<string, unknown>): ShuvbotConfig {
   rejectUnknownTopLevelKeys(raw);
   const config = structuredClone(DEFAULT_CONFIG);
 

@@ -64,7 +64,7 @@ export function buildDockerShellInvocation(input: {
       "-w",
       "/workspace",
       ...Object.entries(input.env).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
-      "reviewbot-shell:latest",
+      "shuvbot-shell:latest",
       "sh",
       "-lc",
       input.command

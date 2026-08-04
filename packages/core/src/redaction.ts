@@ -20,7 +20,9 @@ export class DefaultRedactor implements Redactor {
     return DEFAULT_SECRET_PATTERNS.reduce(
       (current, pattern) =>
         current.replace(pattern, (...args: unknown[]) => {
-          const captures = args.slice(1, -2).filter((capture): capture is string => typeof capture === "string");
+          const captures = args
+            .slice(1, -2)
+            .filter((capture): capture is string => typeof capture === "string");
           const prefix = captures.length > 1 ? captures[0] : "";
           return `${prefix}${this.replacement}`;
         }),
@@ -34,7 +36,9 @@ export class DefaultRedactor implements Redactor {
 
   private redactValue(value: unknown, key?: string): unknown {
     if (typeof value === "string") {
-      return key !== undefined && SECRET_KEY_PATTERN.test(key) ? this.replacement : this.redactString(value);
+      return key !== undefined && SECRET_KEY_PATTERN.test(key)
+        ? this.replacement
+        : this.redactString(value);
     }
     if (Array.isArray(value)) {
       return value.map((item) => this.redactValue(item));

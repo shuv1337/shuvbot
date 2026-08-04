@@ -30,20 +30,20 @@ function recorder(reply: (args: readonly string[]) => string): {
 describe("review artifact isolation", () => {
   // Jujutsu records every file in the working-copy commit, so a review would
   // otherwise report on the artifacts the previous review wrote.
-  test("the default ignore list excludes reviewbot's own artifacts", async () => {
+  test("the default ignore list excludes shuvbot's own artifacts", async () => {
     const { DEFAULT_CONFIG } = await import("../../core/src/config.ts");
-    expect(DEFAULT_CONFIG.paths.ignore).toContain(".reviewbot/**");
+    expect(DEFAULT_CONFIG.paths.ignore).toContain(".shuvbot/**");
   });
 
   test("a normalized config keeps artifacts ignored", async () => {
     const { normalizeConfig } = await import("../../core/src/config.ts");
-    expect(normalizeConfig({}).paths.ignore).toContain(".reviewbot/**");
+    expect(normalizeConfig({}).paths.ignore).toContain(".shuvbot/**");
   });
 });
 
 describe("local VCS detection", () => {
   test("detects a Jujutsu workspace", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-vcs-"));
     try {
       await mkdir(join(root, ".jj"));
       expect(await detectLocalVcs(root)).toBe("jj");
@@ -55,7 +55,7 @@ describe("local VCS detection", () => {
   test("detects a colocated workspace as Jujutsu", async () => {
     // Git's HEAD is the parent of the working-copy commit, so a colocated
     // repository must be read through Jujutsu or the current change is skipped.
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-vcs-"));
     try {
       await mkdir(join(root, ".jj"));
       await mkdir(join(root, ".git"));
@@ -66,7 +66,7 @@ describe("local VCS detection", () => {
   });
 
   test("finds the workspace from a nested directory", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-vcs-"));
     try {
       await mkdir(join(root, ".jj"));
       const nested = join(root, "packages", "deep");
@@ -78,7 +78,7 @@ describe("local VCS detection", () => {
   });
 
   test("falls back to Git without a workspace", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-vcs-"));
     try {
       expect(await detectLocalVcs(root)).toBe("git");
     } finally {
@@ -87,7 +87,7 @@ describe("local VCS detection", () => {
   });
 
   test("ignores a .jj file that is not a directory", async () => {
-    const root = await mkdtemp(join(tmpdir(), "reviewbot-vcs-"));
+    const root = await mkdtemp(join(tmpdir(), "shuvbot-vcs-"));
     try {
       await writeFile(join(root, ".jj"), "not a workspace");
       expect(await detectLocalVcs(root)).toBe("git");

@@ -1,16 +1,26 @@
-import { PolicyDeniedError, ReviewbotError, StructuredOutputError } from "../../core/src/errors.ts";
+import { PolicyDeniedError, ShuvbotError, StructuredOutputError } from "../../core/src/errors.ts";
 import type { Redactor } from "../../core/src/redaction.ts";
 import type { RuntimePolicy } from "../../core/src/policy.ts";
-import type { ReviewbotMode } from "../../core/src/types.ts";
+import type { ShuvbotMode } from "../../core/src/types.ts";
 import type { RunLogger } from "../../core/src/observability.ts";
 import type { GitHubClient } from "../../github/src/octokit.ts";
 import type { StateConfig } from "../../core/src/state.ts";
 import { createToolAuditRecord, type ToolAuditRecord, type ToolAuditSink } from "./audit.ts";
 
-export type { ToolAuditRecord, ToolAuditSink, ToolAuditSnapshot, ToolAuditSummary } from "./audit.ts";
+export type {
+  ToolAuditRecord,
+  ToolAuditSink,
+  ToolAuditSnapshot,
+  ToolAuditSummary
+} from "./audit.ts";
 
 export type ToolSchema =
-  | { type: "object"; required?: readonly string[]; properties: Record<string, ToolSchema>; additionalProperties?: boolean }
+  | {
+      type: "object";
+      required?: readonly string[];
+      properties: Record<string, ToolSchema>;
+      additionalProperties?: boolean;
+    }
   | { type: "array"; items: ToolSchema }
   | { type: "string"; enum?: readonly string[]; minLength?: number }
   | { type: "number"; minimum?: number; maximum?: number }
@@ -34,7 +44,7 @@ export interface ToolContext {
   };
   runId: string;
   actor: string;
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   policy: RuntimePolicy;
   client?: GitHubClient;
   cwd?: string;
@@ -81,17 +91,22 @@ export async function executeTool<Input, Output>(
     assertToolPolicy(spec, context.policy);
     const output = await spec.handler(input, context);
     validateToolOutput(spec, output);
-    await context.audit.record(createToolAuditRecord({
-      runId: context.runId,
-      toolName: spec.name,
-      actor: context.actor,
-      mode: context.mode,
-      status: "success",
-      durationMs: elapsedMs(startedAt, context),
-      policyDecision,
-      input: rawInput,
-      output
-    }, context.redactor));
+    await context.audit.record(
+      createToolAuditRecord(
+        {
+          runId: context.runId,
+          toolName: spec.name,
+          actor: context.actor,
+          mode: context.mode,
+          status: "success",
+          durationMs: elapsedMs(startedAt, context),
+          policyDecision,
+          input: rawInput,
+          output
+        },
+        context.redactor
+      )
+    );
     return output;
   } catch (error) {
     if (error instanceof PolicyDeniedError) policyDecision = "denied";
@@ -106,39 +121,53 @@ export async function executeTool<Input, Output>(
       input: rawInput,
       error
     } as const;
-    await context.audit.record(createToolAuditRecord(
-      error instanceof ReviewbotError ? { ...recordInput, errorCode: error.code } : recordInput,
-      context.redactor
-    ));
+    await context.audit.record(
+      createToolAuditRecord(
+        error instanceof ShuvbotError ? { ...recordInput, errorCode: error.code } : recordInput,
+        context.redactor
+      )
+    );
     throw error;
   }
 }
 
 export function validateToolInput<Input>(spec: ToolSpec<Input, unknown>, input: unknown): Input {
   const errors = validateSchema(spec.inputSchema, input, "input");
-  if (errors.length > 0) throw new StructuredOutputError(`${spec.name} input schema failed: ${errors.join("; ")}`);
+  if (errors.length > 0)
+    throw new StructuredOutputError(`${spec.name} input schema failed: ${errors.join("; ")}`);
   return input as Input;
 }
 
-export function validateToolOutput<Output>(spec: ToolSpec<unknown, Output>, output: unknown): Output {
+export function validateToolOutput<Output>(
+  spec: ToolSpec<unknown, Output>,
+  output: unknown
+): Output {
   const errors = validateSchema(spec.outputSchema, output, "output");
-  if (errors.length > 0) throw new StructuredOutputError(`${spec.name} output schema failed: ${errors.join("; ")}`);
+  if (errors.length > 0)
+    throw new StructuredOutputError(`${spec.name} output schema failed: ${errors.join("; ")}`);
   return output as Output;
 }
 
-export function assertToolPolicy(spec: Pick<ToolSpec<unknown, unknown>, "name" | "requiredPolicy">, policy: RuntimePolicy): void {
+export function assertToolPolicy(
+  spec: Pick<ToolSpec<unknown, unknown>, "name" | "requiredPolicy">,
+  policy: RuntimePolicy
+): void {
   const required = spec.requiredPolicy;
   if (!required) return;
 
   const failures: string[] = [];
-  if (required.shell && !allowsLevel(policy.shell, required.shell)) failures.push(`shell:${policy.shell}`);
-  if (required.push && !allowsLevel(policy.push, required.push)) failures.push(`push:${policy.push}`);
+  if (required.shell && !allowsLevel(policy.shell, required.shell))
+    failures.push(`shell:${policy.shell}`);
+  if (required.push && !allowsLevel(policy.push, required.push))
+    failures.push(`push:${policy.push}`);
   for (const key of BOOLEAN_POLICY_KEYS) {
     if (required[key] && !policy[key]) failures.push(`${key}:false`);
   }
 
   if (failures.length > 0) {
-    throw new PolicyDeniedError(`Tool ${spec.name} denied by runtime policy: ${failures.join(", ")}`);
+    throw new PolicyDeniedError(
+      `Tool ${spec.name} denied by runtime policy: ${failures.join(", ")}`
+    );
   }
 }
 
@@ -199,7 +228,8 @@ function validateStringSchema(
   if (schema.minLength !== undefined && value.length < schema.minLength) {
     return [`${path} must be at least ${schema.minLength} characters`];
   }
-  if (schema.enum && !schema.enum.includes(value)) return [`${path} must be one of ${schema.enum.join(", ")}`];
+  if (schema.enum && !schema.enum.includes(value))
+    return [`${path} must be one of ${schema.enum.join(", ")}`];
   return [];
 }
 
@@ -208,10 +238,13 @@ function validateNumberSchema(
   value: unknown,
   path: string
 ): string[] {
-  if (typeof value !== "number" || !Number.isFinite(value)) return [`${path} must be ${schema.type}`];
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return [`${path} must be ${schema.type}`];
   if (schema.type === "integer" && !Number.isInteger(value)) return [`${path} must be integer`];
-  if (schema.minimum !== undefined && value < schema.minimum) return [`${path} must be >= ${schema.minimum}`];
-  if (schema.maximum !== undefined && value > schema.maximum) return [`${path} must be <= ${schema.maximum}`];
+  if (schema.minimum !== undefined && value < schema.minimum)
+    return [`${path} must be >= ${schema.minimum}`];
+  if (schema.maximum !== undefined && value > schema.maximum)
+    return [`${path} must be <= ${schema.maximum}`];
   return [];
 }
 

@@ -82,7 +82,8 @@ export const writePrSummaryTool: ToolSpec<WritePrSummaryInput, Record<string, un
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const store = context.state?.enabled ? context.state.store : undefined;
-    if (store) await store.writePrSummary(input.pullNumber, context.redactor.redactString(input.summary));
+    if (store)
+      await store.writePrSummary(input.pullNumber, context.redactor.redactString(input.summary));
     return {
       pullNumber: input.pullNumber,
       written: Boolean(store),
@@ -98,7 +99,8 @@ export const readRepoLearningsTool: ToolSpec<RepoLearningsInput, Record<string, 
   inputSchema: REPO_LEARNINGS_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
-    const store = context.state?.enabled && context.state.learnings ? context.state.store : undefined;
+    const store =
+      context.state?.enabled && context.state.learnings ? context.state.store : undefined;
     const namespace = input.namespace ?? "default";
     return {
       namespace,
@@ -115,9 +117,11 @@ export const writeRepoLearningsTool: ToolSpec<WriteRepoLearningsInput, Record<st
   inputSchema: WRITE_REPO_LEARNINGS_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
-    const store = context.state?.enabled && context.state.learnings ? context.state.store : undefined;
+    const store =
+      context.state?.enabled && context.state.learnings ? context.state.store : undefined;
     const namespace = input.namespace ?? "default";
-    if (store) await store.writeRepoLearnings(namespace, context.redactor.redactString(input.learnings));
+    if (store)
+      await store.writeRepoLearnings(namespace, context.redactor.redactString(input.learnings));
     return {
       namespace,
       written: Boolean(store),

@@ -63,7 +63,7 @@ export class FileReviewStateStore implements ReviewStateStore {
     private readonly redactor: Redactor,
     private readonly fileSystem: ReviewStateFileSystem = defaultFileSystem
   ) {
-    this.root = resolve(cwd, ".reviewbot", "state", "reviews");
+    this.root = resolve(cwd, ".shuvbot", "state", "reviews");
   }
 
   async readReviewState(

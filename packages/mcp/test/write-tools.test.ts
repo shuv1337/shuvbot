@@ -1,19 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
-import type { GitHubClient, GitHubRequestOptions, GitHubResponse } from "../../github/src/octokit.ts";
+import type {
+  GitHubClient,
+  GitHubRequestOptions,
+  GitHubResponse
+} from "../../github/src/octokit.ts";
 import { appendMarker, findExistingMarker, formatMarker } from "../../github/src/comments.ts";
 import { AuditLog } from "../src/audit.ts";
 import { executeTool, type ToolContext } from "../src/tool-spec.ts";
 import { addLabelsTool } from "../src/tools/labels.ts";
-import { createIssueCommentTool, editIssueCommentTool, replyToReviewCommentTool, updatePullRequestBodyTool } from "../src/tools/comment.ts";
+import {
+  createIssueCommentTool,
+  editIssueCommentTool,
+  replyToReviewCommentTool,
+  updatePullRequestBodyTool
+} from "../src/tools/comment.ts";
 import { setOutputTool } from "../src/tools/output.ts";
 import { createPullRequestReviewTool } from "../src/tools/review.ts";
 
 describe("write GitHub MCP tools", () => {
   test("formats and finds hidden markers", () => {
     const marker = formatMarker("finding-1", { path: "src/a.ts" });
-    expect(marker).toStartWith("<!-- reviewbot:finding-1:");
+    expect(marker).toStartWith("<!-- shuvbot:finding-1:");
     expect(appendMarker("body", "finding-1", { path: "src/a.ts" })).toContain(marker);
     expect(findExistingMarker([{ id: 1, body: `hello\n${marker}` }], "finding-1")).toEqual({
       id: 1,
@@ -23,10 +32,10 @@ describe("write GitHub MCP tools", () => {
 
   test("dedupes issue comments by editing the existing marker comment", async () => {
     const client = new RecordingGitHubClient({
-      "GET /repos/octo/reviewbot/issues/3/comments": [
+      "GET /repos/octo/shuvbot/issues/3/comments": [
         { id: 10, body: appendMarker("old", "comment-key", { id: 1 }) }
       ],
-      "PATCH /repos/octo/reviewbot/issues/comments/10": {
+      "PATCH /repos/octo/shuvbot/issues/comments/10": {
         id: 10,
         body: "updated",
         html_url: "url"
@@ -41,19 +50,23 @@ describe("write GitHub MCP tools", () => {
       )
     ).resolves.toMatchObject({ id: 10, deduped: true });
     expect(client.calls.map((call) => call.key)).toEqual([
-      "GET /repos/octo/reviewbot/issues/3/comments",
-      "PATCH /repos/octo/reviewbot/issues/comments/10"
+      "GET /repos/octo/shuvbot/issues/3/comments",
+      "PATCH /repos/octo/shuvbot/issues/comments/10"
     ]);
   });
 
   test("creates and edits comments, replies, labels, PR body, and outputs", async () => {
     const client = new RecordingGitHubClient({
-      "GET /repos/octo/reviewbot/issues/3/comments": [],
-      "POST /repos/octo/reviewbot/issues/3/comments": { id: 11, body: "new", html_url: "url" },
-      "PATCH /repos/octo/reviewbot/issues/comments/11": { id: 11, body: "edited", html_url: "url" },
-      "POST /repos/octo/reviewbot/pulls/comments/15/replies": { id: 16, body: "reply", html_url: "url" },
-      "PATCH /repos/octo/reviewbot/pulls/3": { number: 3, body: "body", html_url: "url" },
-      "POST /repos/octo/reviewbot/issues/3/labels": [{ name: "ready-for-agent" }]
+      "GET /repos/octo/shuvbot/issues/3/comments": [],
+      "POST /repos/octo/shuvbot/issues/3/comments": { id: 11, body: "new", html_url: "url" },
+      "PATCH /repos/octo/shuvbot/issues/comments/11": { id: 11, body: "edited", html_url: "url" },
+      "POST /repos/octo/shuvbot/pulls/comments/15/replies": {
+        id: 16,
+        body: "reply",
+        html_url: "url"
+      },
+      "PATCH /repos/octo/shuvbot/pulls/3": { number: 3, body: "body", html_url: "url" },
+      "POST /repos/octo/shuvbot/issues/3/labels": [{ name: "ready-for-agent" }]
     });
     const outputs = new Map<string, unknown>();
     const toolContext = context({
@@ -66,22 +79,34 @@ describe("write GitHub MCP tools", () => {
     });
 
     await expect(
-      executeTool(createIssueCommentTool, { issueNumber: 3, body: "new", markerKey: "new-key" }, toolContext)
+      executeTool(
+        createIssueCommentTool,
+        { issueNumber: 3, body: "new", markerKey: "new-key" },
+        toolContext
+      )
     ).resolves.toMatchObject({ id: 11, deduped: false });
-    await expect(executeTool(editIssueCommentTool, { commentId: 11, body: "edited" }, toolContext)).resolves.toMatchObject({
+    await expect(
+      executeTool(editIssueCommentTool, { commentId: 11, body: "edited" }, toolContext)
+    ).resolves.toMatchObject({
       id: 11
     });
     await expect(
       executeTool(replyToReviewCommentTool, { commentId: 15, body: "reply" }, toolContext)
     ).resolves.toMatchObject({ id: 16 });
-    await expect(executeTool(updatePullRequestBodyTool, { number: 3, body: "body" }, toolContext)).resolves.toMatchObject({
+    await expect(
+      executeTool(updatePullRequestBodyTool, { number: 3, body: "body" }, toolContext)
+    ).resolves.toMatchObject({
       number: 3,
       body: "body"
     });
-    await expect(executeTool(addLabelsTool, { issueNumber: 3, labels: ["ready-for-agent"] }, toolContext)).resolves.toMatchObject({
+    await expect(
+      executeTool(addLabelsTool, { issueNumber: 3, labels: ["ready-for-agent"] }, toolContext)
+    ).resolves.toMatchObject({
       issueNumber: 3
     });
-    await expect(executeTool(setOutputTool, { name: "result", value: { ok: true } }, toolContext)).resolves.toMatchObject({
+    await expect(
+      executeTool(setOutputTool, { name: "result", value: { ok: true } }, toolContext)
+    ).resolves.toMatchObject({
       name: "result",
       set: true
     });
@@ -90,8 +115,8 @@ describe("write GitHub MCP tools", () => {
 
   test("creates PR reviews, dedupes by review comment marker, and rejects APPROVE", async () => {
     const client = new RecordingGitHubClient({
-      "GET /repos/octo/reviewbot/pulls/3/comments": [],
-      "POST /repos/octo/reviewbot/pulls/3/reviews": { id: 20, state: "COMMENTED", html_url: "url" }
+      "GET /repos/octo/shuvbot/pulls/3/comments": [],
+      "POST /repos/octo/shuvbot/pulls/3/reviews": { id: 20, state: "COMMENTED", html_url: "url" }
     });
     const toolContext = context({ client });
 
@@ -110,7 +135,7 @@ describe("write GitHub MCP tools", () => {
     ).resolves.toMatchObject({ id: 20, event: "COMMENT", deduped: false });
 
     const dedupeClient = new RecordingGitHubClient({
-      "GET /repos/octo/reviewbot/pulls/3/comments": [
+      "GET /repos/octo/shuvbot/pulls/3/comments": [
         { id: 21, body: appendMarker("inline", "review-key", {}) }
       ]
     });
@@ -123,7 +148,11 @@ describe("write GitHub MCP tools", () => {
     ).resolves.toMatchObject({ id: 21, event: "REQUEST_CHANGES", deduped: true });
 
     await expect(
-      executeTool(createPullRequestReviewTool, { number: 3, body: "summary", event: "APPROVE" }, toolContext)
+      executeTool(
+        createPullRequestReviewTool,
+        { number: 3, body: "summary", event: "APPROVE" },
+        toolContext
+      )
     ).rejects.toThrow("rejects APPROVE");
   });
 
@@ -142,9 +171,9 @@ describe("write GitHub MCP tools", () => {
       }
     });
 
-    await expect(executeTool(createIssueCommentTool, { issueNumber: 3, body: "denied" }, deniedContext)).rejects.toThrow(
-      "denied by runtime policy"
-    );
+    await expect(
+      executeTool(createIssueCommentTool, { issueNumber: 3, body: "denied" }, deniedContext)
+    ).rejects.toThrow("denied by runtime policy");
   });
 });
 
@@ -155,7 +184,7 @@ function context(input: {
 }): ToolContext {
   const redactor = new DefaultRedactor();
   const toolContext: ToolContext = {
-    repo: { owner: "octo", name: "reviewbot" },
+    repo: { owner: "octo", name: "shuvbot" },
     runId: "run-1",
     actor: "maintainer",
     mode: "review",
@@ -181,7 +210,10 @@ class RecordingGitHubClient implements GitHubClient {
 
   constructor(private readonly routes: Record<string, unknown>) {}
 
-  async request<T = unknown>(route: string, options: GitHubRequestOptions = {}): Promise<GitHubResponse<T>> {
+  async request<T = unknown>(
+    route: string,
+    options: GitHubRequestOptions = {}
+  ): Promise<GitHubResponse<T>> {
     const key = resolveRoute(route, options);
     this.calls.push({ key, body: options.body });
     if (!(key in this.routes)) throw new Error(`Missing route: ${key}`);

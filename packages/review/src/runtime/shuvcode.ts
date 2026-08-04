@@ -636,7 +636,7 @@ function clientEntry(exports: unknown): string | undefined {
 /** Walks `node_modules` from the review directory upward, as Node resolution would. */
 /**
  * Finds the installed runtime, preferring the reviewed repository and falling
- * back to reviewbot's own installation. Only the reviewed repository was
+ * back to shuvbot's own installation. Only the reviewed repository was
  * searched before, which meant reviewing any repository that did not itself
  * depend on the runtime failed before it started. The runtime still runs with
  * the reviewed repository as its working directory; only the package location
@@ -647,7 +647,7 @@ function clientEntry(exports: unknown): string | undefined {
  * linked onto `PATH` still finds the runtime installed beside its real location.
  */
 async function findInstalledPackageDirectory(packageName: string, cwd: string): Promise<string> {
-  const roots = [cwd, ...reviewbotSearchRoots()];
+  const roots = [cwd, ...shuvbotSearchRoots()];
   for (const root of roots) {
     let directory = root;
     while (true) {
@@ -659,13 +659,13 @@ async function findInstalledPackageDirectory(packageName: string, cwd: string): 
     }
   }
   throw new Error(
-    `Cannot resolve the installed ${packageName} package from ${cwd} or from reviewbot itself. ` +
+    `Cannot resolve the installed ${packageName} package from ${cwd} or from shuvbot itself. ` +
       `Install the exact configured ${packageName} release in ${cwd}.`
   );
 }
 
-/** Places reviewbot itself may be installed, most specific first. */
-function reviewbotSearchRoots(): readonly string[] {
+/** Places shuvbot itself may be installed, most specific first. */
+function shuvbotSearchRoots(): readonly string[] {
   const roots: string[] = [];
   try {
     // Absent for a compiled executable, whose modules have no real path.

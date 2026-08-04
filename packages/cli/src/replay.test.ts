@@ -7,9 +7,14 @@ describe("replay CLI", () => {
     const result = await runReplay({
       fixture: "fixtures/events/issue_comment.mention.json",
       dryRun: true,
-      stdout: { write(value: string) { output += value; return true; } }
+      stdout: {
+        write(value: string) {
+          output += value;
+          return true;
+        }
+      }
     });
     expect(result.command).toBe("implement");
-    expect(output).toContain("\"dryRun\": true");
+    expect(output).toContain('"dryRun": true');
   });
 });

@@ -25,7 +25,7 @@ describe("review session log", () => {
       }
     });
 
-    const dir = await mkdtemp(join(tmpdir(), "reviewbot-session-log-"));
+    const dir = await mkdtemp(join(tmpdir(), "shuvbot-session-log-"));
     const path = join(dir, "sessions.jsonl");
     await log.flush(path);
     const contents = await readFile(path, "utf8");

@@ -15,7 +15,7 @@ export const SUPPORTED_COMMANDS = [
 
 export type CommandName = (typeof SUPPORTED_COMMANDS)[number];
 
-export const DEFAULT_COMMAND_PREFIX = "@reviewbot";
+export const DEFAULT_COMMAND_PREFIX = "@shuvbot";
 
 export type CommandSource =
   | "issue_comment"

@@ -43,7 +43,7 @@ export function boundedString(
   if (buffer.byteLength <= maxBytes)
     return { text: value, truncated: false, bytes: buffer.byteLength };
   return {
-    text: `${buffer.subarray(0, maxBytes).toString("utf8")}\n[reviewbot:truncated maxBytes=${maxBytes}]`,
+    text: `${buffer.subarray(0, maxBytes).toString("utf8")}\n[shuvbot:truncated maxBytes=${maxBytes}]`,
     truncated: true,
     bytes: buffer.byteLength
   };

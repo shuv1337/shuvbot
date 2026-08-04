@@ -1,10 +1,10 @@
 import type { ParsedCommand, CommandName } from "./commands.ts";
 import type { BotEvent } from "./events.ts";
-import { MODES, type ReviewbotMode, isOneOf } from "./types.ts";
+import { MODES, type ShuvbotMode, isOneOf } from "./types.ts";
 
-export { MODES, type ReviewbotMode } from "./types.ts";
+export { MODES, type ShuvbotMode } from "./types.ts";
 
-export const COMMAND_TO_MODE: Record<CommandName, ReviewbotMode> = {
+export const COMMAND_TO_MODE: Record<CommandName, ShuvbotMode> = {
   review: "review",
   improve: "implement",
   ask: "triage",
@@ -18,14 +18,14 @@ export const COMMAND_TO_MODE: Record<CommandName, ReviewbotMode> = {
 };
 
 export interface ResolveModeInput {
-  explicit?: ReviewbotMode | "auto";
+  explicit?: ShuvbotMode | "auto";
   event: BotEvent | null;
   command: ParsedCommand | null;
   promptText?: string;
 }
 
 export interface ResolvedMode {
-  mode: ReviewbotMode;
+  mode: ShuvbotMode;
   reason: string;
 }
 

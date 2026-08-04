@@ -11,7 +11,7 @@ import { writeWorkflowSummary } from "./workflow-summary.ts";
 // GITHUB_STEP_SUMMARY at a fresh per-test temp dir and then deletes that dir
 // poisons every later summary-writing test in the same process with an ENOENT.
 // Use one fixed, never-deleted path for the whole process instead.
-const SUMMARY_PATH = join(tmpdir(), "reviewbot-tests-github-step-summary.md");
+const SUMMARY_PATH = join(tmpdir(), "shuvbot-tests-github-step-summary.md");
 
 describe("writeWorkflowSummary", () => {
   beforeEach(async () => {

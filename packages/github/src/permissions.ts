@@ -91,7 +91,9 @@ interface CollaboratorPermissionPayload {
   role_name?: string;
 }
 
-export async function fetchActorPermission(input: FetchActorPermissionInput): Promise<ActorPermission> {
+export async function fetchActorPermission(
+  input: FetchActorPermissionInput
+): Promise<ActorPermission> {
   try {
     const response = await input.client.request<CollaboratorPermissionPayload>(
       "GET /repos/{owner}/{repo}/collaborators/{username}/permission",

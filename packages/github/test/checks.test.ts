@@ -19,11 +19,17 @@ describe("check helpers", () => {
             }
           };
         }
-        return { status: 200, headers: {}, data: `TOKEN=ghp_abcdefghijklmnopqrstuvwxyz\n${"x".repeat(50)}` };
+        return {
+          status: 200,
+          headers: {},
+          data: `TOKEN=ghp_abcdefghijklmnopqrstuvwxyz\n${"x".repeat(50)}`
+        };
       }
     } as GitHubClient;
 
-    await expect(findFailedCheckRuns(client, { owner: "octo", name: "repo" }, "abc")).resolves.toEqual([
+    await expect(
+      findFailedCheckRuns(client, { owner: "octo", name: "repo" }, "abc")
+    ).resolves.toEqual([
       { id: 1, name: "test", conclusion: "failure", htmlUrl: "https://example.test/1" }
     ]);
     const log = await fetchCheckLog({

@@ -1,10 +1,10 @@
 # Claude Token
 
-Claude Code is the first-class initial agent driver for reviewbot.
+Claude Code is the first-class initial agent driver for shuvbot.
 
 ## Auth priority
 
-Reviewbot resolves Claude credentials in this order:
+Shuvbot resolves Claude credentials in this order:
 
 1. `CLAUDE_CODE_OAUTH_TOKEN`
 2. `ANTHROPIC_API_KEY`
@@ -42,9 +42,9 @@ claude setup-token | shuvbot auth claude import --repo owner/repo
 - Token values are masked with the GitHub Actions secret masker when available.
 - Token values are passed only to the selected Claude Code driver process.
 - Token values are not included in prompts, MCP tool inputs, logs, workflow summaries, or shell subprocesses.
-- Claude Code receives the reviewbot MCP server through the local Claude CLI `--mcp-config` flag with `--strict-mcp-config`.
-- Reviewbot model aliases such as `claude/sonnet` are resolved to Claude CLI-compatible model IDs before being passed to `--model`.
-- On non-zero Claude exits, reviewbot reports a bounded, redacted tail of stdout and stderr so CLI errors that appear on stdout remain diagnosable.
+- Claude Code receives the shuvbot MCP server through the local Claude CLI `--mcp-config` flag with `--strict-mcp-config`.
+- Shuvbot model aliases such as `claude/sonnet` are resolved to Claude CLI-compatible model IDs before being passed to `--model`.
+- On non-zero Claude exits, shuvbot reports a bounded, redacted tail of stdout and stderr so CLI errors that appear on stdout remain diagnosable.
 
 ## Doctor checks
 

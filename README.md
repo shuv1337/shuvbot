@@ -1,6 +1,6 @@
-# reviewbot
+# shuvbot
 
-`reviewbot` is a GitHub-native code review and coding-agent action. In this version it reviews pull requests with a real agent, classifies trusted `@reviewbot` mentions, runs guarded no-op implement/fix-ci paths, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
+`shuvbot` is a GitHub-native code review and coding-agent action. In this version it reviews pull requests with a real agent, classifies trusted `@shuvbot` mentions, runs guarded no-op implement/fix-ci paths, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
 
 **Status: review mode is live in this version.** It runs the real Claude Code
 driver against the MCP tool server and posts real findings. `implement` and
@@ -11,7 +11,7 @@ run summary. See `docs/workflows.md` for details.
 ## Secure Quickstart
 
 ```yaml
-name: reviewbot
+name: shuvbot
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -39,7 +39,7 @@ jobs:
       - uses: shuv1337/shuvbot@v0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          config: reviewbot.toml
+          config: shuvbot.toml
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
@@ -64,7 +64,7 @@ bun run evals
 
 ## Configuration
 
-Create `reviewbot.toml` only when defaults need changing:
+Create `shuvbot.toml` only when defaults need changing:
 
 ```toml
 agent = "claude-code"
@@ -80,7 +80,7 @@ enabled = false
 learnings = false
 ```
 
-`model` can be a reviewbot alias such as `claude/sonnet` or a direct provider model ID; Claude aliases are resolved before invoking the Claude CLI.
+`model` can be a shuvbot alias such as `claude/sonnet` or a direct provider model ID; Claude aliases are resolved before invoking the Claude CLI.
 
 `docs/quick-reference.md` covers day-to-day review usage, locally and on GitHub. See also
 `docs/config.md`, `docs/security.md`, `docs/workflows.md`, and `docs/claude-token.md`.

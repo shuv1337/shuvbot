@@ -94,12 +94,12 @@ describe("normalizeEvent", () => {
           state: "open",
           user: { login: "alice" }
         },
-        comment: { id: 99, body: "@reviewbot review", user: { login: "alice" } }
+        comment: { id: 99, body: "@shuvbot review", user: { login: "alice" } }
       }
     });
     expect(event.kind).toBe("issue_comment");
     if (event.kind !== "issue_comment") throw new Error("expected issue_comment");
-    expect(event.comment.body).toBe("@reviewbot review");
+    expect(event.comment.body).toBe("@shuvbot review");
   });
 
   test("normalizes workflow_run with conclusion", () => {
@@ -149,7 +149,9 @@ describe("normalizeEvent", () => {
   });
 
   test("rejects unsupported event names", () => {
-    expect(() => normalizeEvent({ eventName: "deployment", payload: {} })).toThrow(EventNormalizationError);
+    expect(() => normalizeEvent({ eventName: "deployment", payload: {} })).toThrow(
+      EventNormalizationError
+    );
   });
 
   test("isSupportedEventName covers the documented set", () => {
@@ -177,7 +179,14 @@ describe("validateEnvelope", () => {
   });
 
   test("rejects forbidden runtime fields", () => {
-    for (const field of ["shell", "push", "canWrite", "canUseSecrets", "permissions", "actorPermission"]) {
+    for (const field of [
+      "shell",
+      "push",
+      "canWrite",
+      "canUseSecrets",
+      "permissions",
+      "actorPermission"
+    ]) {
       expect(() => validateEnvelope({ prompt: "x", [field]: "enabled" })).toThrow(EnvelopeError);
     }
   });

@@ -38,7 +38,12 @@ export async function replayGithubEventFixture(path: string): Promise<ReplayResu
   const policy = buildRuntimePolicy({
     event,
     mode: resolved.mode,
-    actor: { login: event.sender.login, actorPermission: "write", isFork: event.kind === "pull_request" && event.pullRequest.isFork, isPrivateRepo: event.repo.isPrivate },
+    actor: {
+      login: event.sender.login,
+      actorPermission: "write",
+      isFork: event.kind === "pull_request" && event.pullRequest.isFork,
+      isPrivateRepo: event.repo.isPrivate
+    },
     configCaps: { shell: "restricted", push: "restricted" }
   });
   return {

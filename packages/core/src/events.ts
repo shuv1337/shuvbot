@@ -261,9 +261,7 @@ export function validateEnvelope(payload: unknown): BotEnvelope {
   const record = asRecord(payload, "envelope");
   for (const field of FORBIDDEN_ENVELOPE_FIELDS) {
     if (Object.hasOwn(record, field)) {
-      throw new EnvelopeError(
-        `Envelope must not declare runtime permission field: ${field}.`
-      );
+      throw new EnvelopeError(`Envelope must not declare runtime permission field: ${field}.`);
     }
   }
 

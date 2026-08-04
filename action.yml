@@ -1,6 +1,6 @@
-name: reviewbot
+name: shuvbot
 description: GitHub-native code review and coding-agent bot
-author: reviewbot
+author: shuvbot
 inputs:
   prompt:
     description: Prompt or task text for standalone and mention-driven runs.
@@ -9,7 +9,7 @@ inputs:
     description: Run mode.
     required: false
   config:
-    description: Path to reviewbot TOML config.
+    description: Path to shuvbot TOML config.
     required: false
   model:
     description: Model alias or direct model ID.

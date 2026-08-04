@@ -20,7 +20,9 @@ describe("agent auth", () => {
       kind: "api-key",
       env: { ANTHROPIC_API_KEY: "api-key-value" }
     });
-    expect(() => resolveClaudeAuth({ CLAUDE_CODE_OAUTH_TOKEN: " ", ANTHROPIC_API_KEY: "" })).toThrow(AuthError);
+    expect(() =>
+      resolveClaudeAuth({ CLAUDE_CODE_OAUTH_TOKEN: " ", ANTHROPIC_API_KEY: "" })
+    ).toThrow(AuthError);
   });
 
   test("masks non-empty secrets", () => {

@@ -1,5 +1,13 @@
 import type { ToolSchema, ToolSpec } from "../tool-spec.ts";
-import { asArray, asRecord, labelsValue, numberValue, requireClient, requireRepo, stringValue } from "./shared.ts";
+import {
+  asArray,
+  asRecord,
+  labelsValue,
+  numberValue,
+  requireClient,
+  requireRepo,
+  stringValue
+} from "./shared.ts";
 
 interface NumberInput {
   number: number;
@@ -27,9 +35,12 @@ export const getIssueTool: ToolSpec<NumberInput, Record<string, unknown>> = {
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/issues/{issue_number}", {
-      params: { owner: repo.owner, repo: repo.name, issue_number: input.number }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/issues/{issue_number}",
+      {
+        params: { owner: repo.owner, repo: repo.name, issue_number: input.number }
+      }
+    );
     const issue = asRecord(response.data);
     return {
       number: numberValue(issue, "number"),
@@ -51,9 +62,12 @@ export const getIssueCommentsTool: ToolSpec<NumberInput, Record<string, unknown>
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-      params: { owner: repo.owner, repo: repo.name, issue_number: input.number, per_page: 100 }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+      {
+        params: { owner: repo.owner, repo: repo.name, issue_number: input.number, per_page: 100 }
+      }
+    );
     return {
       number: input.number,
       comments: asArray(response.data).map((comment) => {
@@ -74,14 +88,18 @@ export const getIssueCommentsTool: ToolSpec<NumberInput, Record<string, unknown>
 
 export const getReviewCommentsTool: ToolSpec<NumberInput, Record<string, unknown>> = {
   name: "get_review_comments",
-  description: "Return pull request review comments, including path and position data where present.",
+  description:
+    "Return pull request review comments, including path and position data where present.",
   inputSchema: NUMBER_INPUT_SCHEMA,
   outputSchema: ANY_OBJECT_SCHEMA,
   async handler(input, context) {
     const repo = requireRepo(context);
-    const response = await requireClient(context).request("GET /repos/{owner}/{repo}/pulls/{pull_number}/comments", {
-      params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
-    });
+    const response = await requireClient(context).request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      {
+        params: { owner: repo.owner, repo: repo.name, pull_number: input.number, per_page: 100 }
+      }
+    );
     return {
       number: input.number,
       comments: asArray(response.data).map((comment) => {

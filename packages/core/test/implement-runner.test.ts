@@ -10,10 +10,10 @@ describe("implement runner", () => {
       runId: "run-1",
       startPoint: "abc123",
       command: {
-        prefix: "@reviewbot",
+        prefix: "@shuvbot",
         command: "implement",
         args: "fix the bug",
-        raw: "@reviewbot implement fix the bug",
+        raw: "@shuvbot implement fix the bug",
         actor: "alice",
         source: "issue_comment"
       },
@@ -41,7 +41,7 @@ describe("implement runner", () => {
       }
     });
 
-    expect(result.branch).toStartWith("reviewbot/implement-alice-fix-the-bug");
+    expect(result.branch).toStartWith("shuvbot/implement-alice-fix-the-bug");
     expect(prepared).toHaveLength(1);
     expect(result.summary).toContain("Requested task: fix the bug");
     expect(result.summary).toContain("### Work done");
@@ -55,10 +55,10 @@ describe("implement runner", () => {
         runId: "run-1",
         startPoint: "abc123",
         command: {
-          prefix: "@reviewbot",
+          prefix: "@shuvbot",
           command: "implement",
           args: "fix",
-          raw: "@reviewbot implement fix",
+          raw: "@shuvbot implement fix",
           actor: "alice",
           source: "issue_comment"
         },
@@ -70,7 +70,11 @@ describe("implement runner", () => {
           isPrivateRepo: false
         }),
         async prepareBranch() {},
-        agent: { async run() { return {}; } }
+        agent: {
+          async run() {
+            return {};
+          }
+        }
       })
     ).rejects.toThrow("trusted push");
   });

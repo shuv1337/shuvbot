@@ -5,7 +5,7 @@ import { normalizeEvent } from "../src/events.ts";
 describe("parseCommand", () => {
   test("parses a basic command with args", () => {
     const result = parseCommand({
-      text: "@reviewbot implement the TODO in src/foo.ts",
+      text: "@shuvbot implement the TODO in src/foo.ts",
       actor: "alice",
       source: "issue_comment"
     });
@@ -22,7 +22,7 @@ describe("parseCommand", () => {
 
   test("returns null for unknown commands", () => {
     const result = parseCommand({
-      text: "@reviewbot dance",
+      text: "@shuvbot dance",
       actor: "alice",
       source: "issue_comment"
     });
@@ -41,7 +41,7 @@ describe("parseCommand", () => {
 
   test("finds command inside multi-line comment", () => {
     const result = parseCommand({
-      text: "Some context here.\n@reviewbot ask why does the build fail?\nThanks!",
+      text: "Some context here.\n@shuvbot ask why does the build fail?\nThanks!",
       actor: "alice",
       source: "issue_comment"
     });
@@ -62,7 +62,7 @@ describe("parseCommand", () => {
         },
         sender: { login: "alice" },
         issue: { number: 1, title: "x", body: "x", state: "open", user: { login: "alice" } },
-        comment: { id: 1, body: "@reviewbot review", user: { login: "alice" } }
+        comment: { id: 1, body: "@shuvbot review", user: { login: "alice" } }
       }
     });
     const command = findCommandInEvent(event);
@@ -93,7 +93,7 @@ describe("parseCommand", () => {
           head: { ref: "topic", sha: "1", repo: { full_name: "acme/widget" } },
           base: { ref: "main", sha: "0", repo: { full_name: "acme/widget" } }
         },
-        comment: { id: 1, body: "@reviewbot implement this", user: { login: "maintainer" } }
+        comment: { id: 1, body: "@shuvbot implement this", user: { login: "maintainer" } }
       }
     });
     const command = findCommandInEvent(event);

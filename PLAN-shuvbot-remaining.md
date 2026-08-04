@@ -1,10 +1,10 @@
-# PLAN-reviewbot-remaining.md
+# PLAN-shuvbot-remaining.md
 
 ## Purpose
 
-Detailed implementation plan for everything still ahead of `reviewbot` after Milestones 0 and 1 (skeleton + GitHub event core + runtime policy). This document is the working reference for Milestones 2 through 9, the v0.x release slices, and the v0/v1 hardening checklists.
+Detailed implementation plan for everything still ahead of `shuvbot` after Milestones 0 and 1 (skeleton + GitHub event core + runtime policy). This document is the working reference for Milestones 2 through 9, the v0.x release slices, and the v0/v1 hardening checklists.
 
-The original spec lives in `SPEC.md`. The historical task-by-task plan lives in `PLAN-reviewbot-implementation.md`. This file expands on the remaining milestones with concrete files, signatures, tests, and commit shapes so an autonomous agent (or human) can pick up any milestone and execute it without re-deriving structure.
+The original spec lives in `SPEC.md`. The historical task-by-task plan lives in `PLAN-shuvbot-implementation.md`. This file expands on the remaining milestones with concrete files, signatures, tests, and commit shapes so an autonomous agent (or human) can pick up any milestone and execute it without re-deriving structure.
 
 ## Starting State (refreshed 2026-05-18)
 
@@ -26,7 +26,7 @@ These constraints apply across every remaining milestone. Audit before merging a
 4. **Credentials never enter prompts.** Add a redaction regression test when any new logging/serialization path is added.
 5. **MCP server binds to `127.0.0.1` on an ephemeral port.** No code path may bind it to `0.0.0.0` or a fixed port.
 6. **Approval (`canApprove`) stays disabled in v1.** Do not add a config flag yet.
-7. **All new errors extend `ReviewbotError`** with a stable `code`. Tool errors crossing the agent boundary must be sanitized.
+7. **All new errors extend `ShuvbotError`** with a stable `code`. Tool errors crossing the agent boundary must be sanitized.
 8. **Bun + TypeScript + strict tsconfig.** Maintain `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` correctness.
 9. **`dist/index.js` is committed** after each milestone that changes behavior visible to the GitHub Action runtime.
 10. **Workflow summary is non-secret** and includes the runtime policy reasons for traceability.
@@ -157,7 +157,7 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 - [x] `packages/mcp/src/server.ts`:
   - [x] Build MCP server using the official TypeScript SDK and bind to `127.0.0.1:0` (let OS pick port).
   - [ ] Register every real tool from `tools/` automatically after handlers replace placeholders.
-  - [ ] Keep or adapt the current `startReviewbotMcpServer(...).close()` API; add `connectionInfo()` only if callers need the exact `{ url, port }` shape.
+  - [ ] Keep or adapt the current `startShuvbotMcpServer(...).close()` API; add `connectionInfo()` only if callers need the exact `{ url, port }` shape.
   - [x] Hard-deny external network access by binding to `127.0.0.1` and ignoring `HOST`/`PORT` envs.
 
 #### Read-context tools (`packages/mcp/src/tools/pr.ts`, `issue.ts`, `files.ts`, `checks.ts`)
@@ -176,7 +176,7 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 
 #### Write-GitHub tools (`packages/mcp/src/tools/comment.ts`, `review.ts`, `labels.ts`, `output.ts`)
 
-- [x] `create_issue_comment` — requires `canComment`. Hidden marker `<!-- reviewbot:... -->` supports dedupe.
+- [x] `create_issue_comment` — requires `canComment`. Hidden marker `<!-- shuvbot:... -->` supports dedupe.
 - [x] `edit_issue_comment` — requires `canComment`.
 - [x] `reply_to_review_comment` — requires `canReview`.
 - [x] `create_pull_request_review` — requires `canReview`. Supports `event`: `COMMENT`, `REQUEST_CHANGES`. `APPROVE` always rejected.
@@ -187,9 +187,9 @@ Stand up a local MCP server bound to `127.0.0.1:<ephemeral>` that exposes policy
 #### Git/shell/memory tools (`packages/mcp/src/tools/git.ts`, `shell.ts`, `memory.ts`)
 
 - [x] `git_status`, `git_diff`, `git_fetch` — read-only, require `canReadChecks` or similar lightweight check.
-- [x] `git_commit` — requires `push >= restricted` and `actorPermission >= write`. Enforces `reviewbot:` commit prefix template.
-- [x] `push_branch`, `push_tags` — require `push >= restricted`. Branch name must match `reviewbot/*`; tag push fails closed in v0 conservative tooling.
-- [x] `delete_branch` — requires `push >= restricted` and branch matches `reviewbot/*`.
+- [x] `git_commit` — requires `push >= restricted` and `actorPermission >= write`. Enforces `shuvbot:` commit prefix template.
+- [x] `push_branch`, `push_tags` — require `push >= restricted`. Branch name must match `shuvbot/*`; tag push fails closed in v0 conservative tooling.
+- [x] `delete_branch` — requires `push >= restricted` and branch matches `shuvbot/*`.
 - [x] `create_pull_request` — requires `canCreatePr`. Bot-branch only.
 - [x] `run_shell` — requires `shell >= restricted`. Stub fails closed until full sandbox arrives in Milestone 6.
 - [x] `kill_background_process` — pairs with `run_shell`.
@@ -368,7 +368,7 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 - [x] `packages/core/src/context/labels.ts`:
   - [x] Wrap untrusted blocks with explicit instruction headers (SPEC §15.3).
 - [x] `packages/core/src/context/manifest.ts`:
-  - [x] Emit `reviewbot-context-manifest.json` listing every section, byte size, and untrusted flag.
+  - [x] Emit `shuvbot-context-manifest.json` listing every section, byte size, and untrusted flag.
 
 #### Review schema and pipeline
 
@@ -395,7 +395,7 @@ Implement `review` mode end-to-end with a single built-in `code-review` skill, s
 #### Run record + artifacts
 
 - [x] `packages/action/src/artifacts.ts`:
-  - [x] Write `reviewbot-run.json`, `reviewbot-findings.json`, `reviewbot-context-manifest.json` to `${RUNNER_TEMP}/reviewbot/` and upload via `actions/upload-artifact` syntax in example workflow (not done in code — just files on disk).
+  - [x] Write `shuvbot-run.json`, `shuvbot-findings.json`, `shuvbot-context-manifest.json` to `${RUNNER_TEMP}/shuvbot/` and upload via `actions/upload-artifact` syntax in example workflow (not done in code — just files on disk).
 - [x] Extend `RunRecord` with `findings`, `postedComments`, and `contextManifestPath` (already structurally allowed).
 
 #### CLI
@@ -474,7 +474,7 @@ Move review mode from MVP to low-noise, multi-skill, verified output with calibr
 - [x] `REQUEST_CHANGES` policy: global default + per-skill override. Threshold-driven.
 - [x] Failing-check support gated by `failCheck` config.
 - [x] Noise filters from SPEC §14.2 implemented as a deterministic post-filter.
-- [x] Findings artifact upload (`reviewbot-findings.json`) consistent across all skills.
+- [x] Findings artifact upload (`shuvbot-findings.json`) consistent across all skills.
 
 ### Tests
 
@@ -524,7 +524,7 @@ bun run build
 
 ### Goal
 
-Allow trusted maintainers/collaborators to invoke `implement` (and other write-capable modes) via `@reviewbot` mentions. Manage `reviewbot/*` bot branches, post progress, run restricted shell inside a sandbox, and open/update PRs with structured final summaries.
+Allow trusted maintainers/collaborators to invoke `implement` (and other write-capable modes) via `@shuvbot` mentions. Manage `shuvbot/*` bot branches, post progress, run restricted shell inside a sandbox, and open/update PRs with structured final summaries.
 
 ### Tasks
 
@@ -533,7 +533,7 @@ Allow trusted maintainers/collaborators to invoke `implement` (and other write-c
   - [x] Create one progress comment for mention/manual runs.
   - [x] Update at most every 10–15 s (debounced); replace on completion; keep on failure.
 - [x] `packages/github/src/branches.ts` (new):
-  - [x] Always derive `reviewbot/<slug>` from the run; reject any branch outside the `reviewbot/` prefix in git tools.
+  - [x] Always derive `shuvbot/<slug>` from the run; reject any branch outside the `shuvbot/` prefix in git tools.
   - [x] Create or fast-forward bot branch off the trigger commit.
 - [x] Restricted shell sandbox in `packages/mcp/src/tools/shell.ts`:
   - [x] Docker by default when available; fail closed otherwise.
@@ -554,7 +554,7 @@ Allow trusted maintainers/collaborators to invoke `implement` (and other write-c
 - [x] Bot branch naming collision avoidance.
 - [x] Sandbox: secrets stripped from child env unless explicitly allowed.
 - [x] Git writes denied when push policy is disabled.
-- [x] Commit message contains `reviewbot: …`, `Requested-by`, `Run-id`, `Mode`.
+- [x] Commit message contains `shuvbot: …`, `Requested-by`, `Run-id`, `Mode`.
 
 ### Validation commands
 
@@ -566,8 +566,8 @@ bun run build
 
 ### Completion criteria
 
-- [x] `@reviewbot implement …` fixture flow runs end-to-end with a fake agent and produces a final summary.
-- [x] Implementation path cannot bypass `reviewbot/*` branch policy or shell sandbox.
+- [x] `@shuvbot implement …` fixture flow runs end-to-end with a fake agent and produces a final summary.
+- [x] Implementation path cannot bypass `shuvbot/*` branch policy or shell sandbox.
 - [x] Final summaries are clear, non-chatty, and free of secrets.
 
 ### Suggested commit split
@@ -591,7 +591,7 @@ bun run build
 
 ### Goal
 
-Diagnose failed checks, patch, validate locally when allowed, push fixes to `reviewbot/*`. Hard attempt and runtime budgets.
+Diagnose failed checks, patch, validate locally when allowed, push fixes to `shuvbot/*`. Hard attempt and runtime budgets.
 
 ### Tasks
 
@@ -610,7 +610,7 @@ Diagnose failed checks, patch, validate locally when allowed, push fixes to `rev
   rerunChecks = true
   ```
 - [x] Enforce attempt and runtime budgets; on exhaustion, post a structured summary of what was tried.
-- [x] Only commit/push to `reviewbot/*` branches.
+- [x] Only commit/push to `shuvbot/*` branches.
 
 ### Tests
 
@@ -659,8 +659,8 @@ Optional, GitHub-native state for PR summaries and (opt-in) repo learnings. No m
 - [x] `packages/core/src/state.ts`:
   - [x] `StateStore` interface (SPEC §16.1).
   - [x] `MemoryStateStore` for tests.
-  - [x] `GitHubStateStore` using hidden bot comments (`<!-- reviewbot:pr-summary:v1:… -->`) and workflow artifacts.
-  - [x] `FileStateStore` under `.reviewbot/state/` for local CLI use.
+  - [x] `GitHubStateStore` using hidden bot comments (`<!-- shuvbot:pr-summary:v1:… -->`) and workflow artifacts.
+  - [x] `FileStateStore` under `.shuvbot/state/` for local CLI use.
   - [x] `ApiStateStore` interface stub for future hosted backend.
 - [x] Memory tools (`packages/mcp/src/tools/memory.ts`) read/write through the state store, respecting `memory.enabled` and `memory.learnings`.
 - [x] All persisted state passes through the redactor before write.
@@ -670,7 +670,7 @@ Optional, GitHub-native state for PR summaries and (opt-in) repo learnings. No m
 
 - [x] PR summary hidden comment created/updated idempotently across runs.
 - [x] Repo learnings never read/written unless `memory.learnings = true`.
-- [x] File backend writes only under `.reviewbot/state/`.
+- [x] File backend writes only under `.shuvbot/state/`.
 - [x] No secret value appears in any persisted record.
 
 ### Validation commands
@@ -830,7 +830,7 @@ Cut after Milestone 4 (and a slice of Milestone 5 if available).
 
 Cut after Milestone 6.
 
-- [ ] `@reviewbot` command mode.
+- [ ] `@shuvbot` command mode.
 - [ ] Progress comments.
 - [ ] Restricted shell.
 - [ ] Commit/push to bot branch.
@@ -872,11 +872,11 @@ Cut after Milestone 9.
 
 ## Documentation Checklist (per release)
 
-- [ ] `README.md` explains what reviewbot is and provides a secure quickstart.
+- [ ] `README.md` explains what shuvbot is and provides a secure quickstart.
 - [ ] `docs/config.md` documents TOML config and effective resolution order.
 - [ ] `docs/security.md` documents policy, fork PR handling, secrets, shell sandbox, `pull_request_target` guidance.
 - [ ] `docs/workflows.md` includes automatic review, mention bot, standalone structured output, CI repair examples.
-- [ ] `docs/commands.md` documents `@reviewbot` commands and command-to-mode mapping.
+- [ ] `docs/commands.md` documents `@shuvbot` commands and command-to-mode mapping.
 - [ ] `docs/claude-token.md` documents `claude setup-token` and `CLAUDE_CODE_OAUTH_TOKEN` handling.
 - [ ] `docs/troubleshooting.md` documents common auth, permission, comment mapping, and action-output failures.
 - [ ] `AGENTS.md` refreshed with any new operational gotchas.
@@ -884,20 +884,20 @@ Cut after Milestone 9.
 
 ## Final Validation Matrix
 
-| Area | Required validation |
-|---|---|
-| Build | `bun run build` produces `dist/index.js`. |
-| Types | `bun run typecheck` passes. |
-| Lint | `bun run lint` passes. |
-| Tests | `bun test` passes. |
-| Config | Invalid config fails early with clear diagnostics. |
-| Policy | Fork and untrusted contexts cannot escalate shell, push, or secrets. |
-| Redaction | Known secret strings do not appear in logs, artifacts, summaries, or errors. |
-| MCP | Every tool validates schema, checks policy, audits, and redacts. |
-| Review | Findings are verified, deduped, thresholded, and line-mapped or summarized. |
-| Claude auth | OAuth token and API-key paths both work; OAuth wins when both exist. |
-| Sandbox | Restricted shell fails closed when Docker is unavailable. |
-| Docs | Quickstart and workflow examples are secure by default. |
+| Area        | Required validation                                                          |
+| ----------- | ---------------------------------------------------------------------------- |
+| Build       | `bun run build` produces `dist/index.js`.                                    |
+| Types       | `bun run typecheck` passes.                                                  |
+| Lint        | `bun run lint` passes.                                                       |
+| Tests       | `bun test` passes.                                                           |
+| Config      | Invalid config fails early with clear diagnostics.                           |
+| Policy      | Fork and untrusted contexts cannot escalate shell, push, or secrets.         |
+| Redaction   | Known secret strings do not appear in logs, artifacts, summaries, or errors. |
+| MCP         | Every tool validates schema, checks policy, audits, and redacts.             |
+| Review      | Findings are verified, deduped, thresholded, and line-mapped or summarized.  |
+| Claude auth | OAuth token and API-key paths both work; OAuth wins when both exist.         |
+| Sandbox     | Restricted shell fails closed when Docker is unavailable.                    |
+| Docs        | Quickstart and workflow examples are secure by default.                      |
 
 ## Open Questions / Decisions to Revisit
 

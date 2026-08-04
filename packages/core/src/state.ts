@@ -42,8 +42,11 @@ export class MemoryStateStore implements StateStore {
 export class FileStateStore implements StateStore {
   private readonly root: string;
 
-  constructor(cwd: string, private readonly redactor: Redactor) {
-    this.root = resolve(cwd, ".reviewbot", "state");
+  constructor(
+    cwd: string,
+    private readonly redactor: Redactor
+  ) {
+    this.root = resolve(cwd, ".shuvbot", "state");
   }
 
   async readPrSummary(pullNumber: number): Promise<string | null> {
@@ -82,7 +85,8 @@ export class FileStateStore implements StateStore {
 
   private path(name: string): string {
     const path = resolve(this.root, name);
-    if (relative(this.root, path).startsWith("..")) throw new Error("state path escaped .reviewbot/state");
+    if (relative(this.root, path).startsWith(".."))
+      throw new Error("state path escaped .shuvbot/state");
     return path;
   }
 }
@@ -99,7 +103,7 @@ export class GitHubStateStore implements StateStore {
   async readPrSummary(pullNumber: number): Promise<string | null> {
     const comments = await this.issueComments(pullNumber);
     const existing = findExistingMarker(comments, markerKey("pr-summary", String(pullNumber)));
-    return existing?.body?.replace(/<!-- reviewbot:[\s\S]*?-->/, "").trim() ?? null;
+    return existing?.body?.replace(/<!-- shuvbot:[\s\S]*?-->/, "").trim() ?? null;
   }
 
   async writePrSummary(pullNumber: number, summary: string): Promise<void> {
@@ -109,12 +113,20 @@ export class GitHubStateStore implements StateStore {
     const existing = findExistingMarker(comments, key);
     if (existing?.id) {
       await this.input.client.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
-        params: { owner: this.input.repo.owner, repo: this.input.repo.name, comment_id: existing.id },
+        params: {
+          owner: this.input.repo.owner,
+          repo: this.input.repo.name,
+          comment_id: existing.id
+        },
         body: { body }
       });
     } else {
       await this.input.client.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-        params: { owner: this.input.repo.owner, repo: this.input.repo.name, issue_number: pullNumber },
+        params: {
+          owner: this.input.repo.owner,
+          repo: this.input.repo.name,
+          issue_number: pullNumber
+        },
         body: { body }
       });
     }
@@ -127,10 +139,20 @@ export class GitHubStateStore implements StateStore {
   async writeRepoLearnings(_namespace: string, _learnings: string): Promise<void> {}
   async putRun(_record: RunRecord): Promise<void> {}
 
-  private async issueComments(issueNumber: number): Promise<Array<{ id?: number; body?: string | null }>> {
-    const response = await this.input.client.request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-      params: { owner: this.input.repo.owner, repo: this.input.repo.name, issue_number: issueNumber, per_page: 100 }
-    });
+  private async issueComments(
+    issueNumber: number
+  ): Promise<Array<{ id?: number; body?: string | null }>> {
+    const response = await this.input.client.request(
+      "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+      {
+        params: {
+          owner: this.input.repo.owner,
+          repo: this.input.repo.name,
+          issue_number: issueNumber,
+          per_page: 100
+        }
+      }
+    );
     return Array.isArray(response.data)
       ? response.data.map((comment) => {
           const record = asRecord(comment);
@@ -144,9 +166,13 @@ export class GitHubStateStore implements StateStore {
 }
 
 export class ApiStateStore implements StateStore {
-  async readPrSummary(): Promise<string | null> { return null; }
+  async readPrSummary(): Promise<string | null> {
+    return null;
+  }
   async writePrSummary(): Promise<void> {}
-  async readRepoLearnings(): Promise<string | null> { return null; }
+  async readRepoLearnings(): Promise<string | null> {
+    return null;
+  }
   async writeRepoLearnings(): Promise<void> {}
   async putRun(): Promise<void> {}
 }
@@ -166,5 +192,7 @@ function markerKey(kind: string, id: string): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }

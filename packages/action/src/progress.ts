@@ -5,13 +5,17 @@ export interface ProgressCommentState {
   failed?: boolean;
 }
 
-export function createProgressBody(input: { requestedTask: string; status: string; runId: string }): string {
+export function createProgressBody(input: {
+  requestedTask: string;
+  status: string;
+  runId: string;
+}): string {
   return [
-    `reviewbot ${input.status}`,
+    `shuvbot ${input.status}`,
     "",
     `Requested task: ${input.requestedTask}`,
     `Run-id: ${input.runId}`,
-    "<!-- reviewbot:progress -->"
+    "<!-- shuvbot:progress -->"
   ].join("\n");
 }
 

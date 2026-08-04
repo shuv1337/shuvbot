@@ -49,7 +49,7 @@ function makeIssueComment(): BotEvent {
         state: "open",
         user: { login: "alice" }
       },
-      comment: { id: 1, body: "@reviewbot implement x", user: { login: "maintainer" } }
+      comment: { id: 1, body: "@shuvbot implement x", user: { login: "maintainer" } }
     }
   });
 }
@@ -170,7 +170,12 @@ describe("buildRuntimePolicy matrix", () => {
     const policy = buildRuntimePolicy({
       event: makeDispatch(),
       mode: "implement",
-      actor: { login: "operator", actorPermission: "maintain", isFork: false, isPrivateRepo: false },
+      actor: {
+        login: "operator",
+        actorPermission: "maintain",
+        isFork: false,
+        isPrivateRepo: false
+      },
       configCaps: { shell: "enabled", push: "enabled" }
     });
     // Config asks for enabled; the default matrix puts dispatch at restricted, so it stays restricted.

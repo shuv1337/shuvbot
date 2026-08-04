@@ -253,7 +253,7 @@ describe("doctor", () => {
   });
 
   test("default operations use public auth and catalog calls without creating a session", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-doctor-default-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-doctor-default-"));
     const packageDirectory = join(cwd, "node_modules", "shuvcode");
     await Bun.write(
       join(packageDirectory, "package.json"),
@@ -486,9 +486,9 @@ async function runFixture(
     env?: Record<string, string | undefined>;
   } = {}
 ) {
-  const cwd = await mkdtemp(join(tmpdir(), "reviewbot-doctor-"));
-  if (options.coordinator) await writeFile(join(cwd, "reviewbot.toml"), coordinatorConfig);
-  if (options.legacy) await writeFile(join(cwd, "reviewbot.toml"), legacyConfig);
+  const cwd = await mkdtemp(join(tmpdir(), "shuvbot-doctor-"));
+  if (options.coordinator) await writeFile(join(cwd, "shuvbot.toml"), coordinatorConfig);
+  if (options.legacy) await writeFile(join(cwd, "shuvbot.toml"), legacyConfig);
   let output = "";
   const checks = await runDoctor({
     cwd,

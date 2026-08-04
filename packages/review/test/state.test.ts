@@ -11,7 +11,7 @@ import {
 
 describe("incremental review state", () => {
   test("writes and reads redacted state using a hashed change ID", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-review-state-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-review-state-"));
     const redactor = new DefaultRedactor();
     const store = new FileReviewStateStore(cwd, redactor);
     await store.writeReviewState(
@@ -21,12 +21,12 @@ describe("incremental review state", () => {
 
     const stored = await store.readReviewState("repo:main:feature/../safe");
     expect(stored?.findings[0]?.evidence).toBe("CLAUDE_CODE_OAUTH_TOKEN=[REDACTED]");
-    await access(join(cwd, ".reviewbot", "state", "reviews"));
+    await access(join(cwd, ".shuvbot", "state", "reviews"));
     expect(await store.readReviewState("missing-change")).toBeNull();
   });
 
   test("rejects mismatched and malformed lifecycle state", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-review-state-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-review-state-"));
     const store = new FileReviewStateStore(cwd, new DefaultRedactor());
     await expect(store.writeReviewState("expected", state("evidence"))).rejects.toThrow(
       "does not match"
@@ -44,7 +44,7 @@ describe("incremental review state", () => {
   });
 
   test("bounds a delayed atomic write without replacing prior state or leaking a temp file", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "reviewbot-review-state-"));
+    const cwd = await mkdtemp(join(tmpdir(), "shuvbot-review-state-"));
     const redactor = new DefaultRedactor();
     const original = new FileReviewStateStore(cwd, redactor);
     await original.writeReviewState("repo:main:feature/../safe", state("original"));
@@ -69,7 +69,7 @@ describe("incremental review state", () => {
 
     expect((await original.readReviewState("repo:main:feature/../safe"))?.headSha).toBe("head");
     expect(
-      (await readdir(join(cwd, ".reviewbot", "state", "reviews"))).filter((name) =>
+      (await readdir(join(cwd, ".shuvbot", "state", "reviews"))).filter((name) =>
         name.endsWith(".tmp")
       )
     ).toEqual([]);

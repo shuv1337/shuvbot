@@ -1,4 +1,4 @@
-import type { ReviewbotConfig } from "./config.ts";
+import type { ShuvbotConfig } from "./config.ts";
 import type { PullRequestEvent } from "./events.ts";
 import type { RuntimePolicy } from "./policy.ts";
 import { assembleReviewContext, loadRepoInstructions } from "./context/assembler.ts";
@@ -19,7 +19,7 @@ export interface RunReviewInput {
   diff: string;
   files: unknown[];
   config: Pick<
-    ReviewbotConfig,
+    ShuvbotConfig,
     "failCheck" | "paths" | "failOn" | "minConfidence" | "reportOn" | "requestChanges"
   >;
   policy: RuntimePolicy;

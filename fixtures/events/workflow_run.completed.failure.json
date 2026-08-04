@@ -1,1 +1,16 @@
-{"action":"completed","repository":{"owner":{"login":"octo"},"name":"repo","full_name":"octo/repo","private":false},"sender":{"login":"github-actions[bot]"},"workflow_run":{"name":"CI","conclusion":"failure","head_branch":"feature","head_sha":"headsha"}}
+{
+  "action": "completed",
+  "repository": {
+    "owner": { "login": "octo" },
+    "name": "repo",
+    "full_name": "octo/repo",
+    "private": false
+  },
+  "sender": { "login": "github-actions[bot]" },
+  "workflow_run": {
+    "name": "CI",
+    "conclusion": "failure",
+    "head_branch": "feature",
+    "head_sha": "headsha"
+  }
+}

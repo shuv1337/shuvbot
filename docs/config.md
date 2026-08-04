@@ -1,6 +1,6 @@
 # Configuration
 
-Config is TOML. The local `review` command automatically loads `reviewbot.toml` from the current
+Config is TOML. The local `review` command automatically loads `shuvbot.toml` from the current
 working directory when it exists. Use `--config <path>` to select another file explicitly; a missing
 explicit file is an error, while a missing default file falls back to built-in defaults.
 
@@ -11,8 +11,8 @@ pin points at it, its packed CLI and `shuvcode/client` contracts pass `bun run s
 real local subscription reviews return validated coordinator results.
 
 Running a local review needs `review.shuvcode.use_user_auth = true` (the default) and a working local
-shuvcode profile with an authenticated provider. The pinned package is a reviewbot devDependency and
-is resolved from the reviewed repository first, then from reviewbot's own installation, so reviewing
+shuvcode profile with an authenticated provider. The pinned package is a shuvbot devDependency and
+is resolved from the reviewed repository first, then from shuvbot's own installation, so reviewing
 a repository that does not itself depend on shuvcode works.
 
 `legacy` is still selectable but fails closed before Git because it has no safe production driver;
@@ -25,7 +25,7 @@ Action's review path.
 For a local review, resolution order is:
 
 1. Built-in defaults in `packages/core/src/config.ts`.
-2. The complete normalized `reviewbot.toml` from the current working directory, when present.
+2. The complete normalized `shuvbot.toml` from the current working directory, when present.
 3. The complete normalized TOML selected by `--config <path>`, which replaces the default file.
 4. The `--engine legacy|coordinator` CLI override, if supplied.
 
@@ -46,7 +46,7 @@ review options:
 | Option                         | Behavior                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------------- |
 | `--engine legacy\|coordinator` | Overrides the engine selected by config.                                                      |
-| `--config <path>`              | Loads that TOML instead of the auto-discovered `reviewbot.toml`.                              |
+| `--config <path>`              | Loads that TOML instead of the auto-discovered `shuvbot.toml`.                                |
 | `--json`                       | Emits the stable coordinator JSON envelope instead of human coordinator progress and summary. |
 | `--base <ref>`                 | Selects the base ref; defaults to `main`.                                                     |
 | `--head <ref>`                 | Selects the head ref; defaults to `HEAD`.                                                     |
@@ -54,7 +54,7 @@ review options:
 For example, a config-selected coordinator run can omit the engine override:
 
 ```bash
-bun packages/cli/src/index.ts review --config reviewbot.toml --base main --head HEAD
+bun packages/cli/src/index.ts review --config shuvbot.toml --base main --head HEAD
 ```
 
 Unknown, positional, missing-value, invalid-value, and duplicate flags are rejected rather than
@@ -163,7 +163,7 @@ pr_summaries = true
 
 Unknown top-level keys are rejected unless they start with `x-`.
 
-`model` accepts reviewbot aliases such as `claude/sonnet` and `claude/opus`, or a direct provider model ID. The Claude Code driver resolves reviewbot aliases to Claude CLI-compatible model IDs before invoking `claude --print`.
+`model` accepts shuvbot aliases such as `claude/sonnet` and `claude/opus`, or a direct provider model ID. The Claude Code driver resolves shuvbot aliases to Claude CLI-compatible model IDs before invoking `claude --print`.
 
 Reviewer overrides are limited to the six built-ins. They may narrow paths, append bounded repository instructions, and select a known model reference. They cannot define tools, providers, credentials, or permission changes. The runtime package and source baseline are schema-controlled, but executable approval is a separate code-owned nullable pin; a parseable version is not permission to launch it.
 Coordinator model references must use the `subscription` provider and resolve against the code-owned or runtime-discovered model catalog; configuration cannot register a model by naming it.
@@ -222,7 +222,7 @@ With `use_user_auth = false`, local coordinator review fails before git inspecti
 creation, state access, or runtime startup. Non-interactive coordinator authentication is not yet
 implemented.
 
-Model values use reviewbot's own `subscription/<name>` namespace so repository config never names
+Model values use shuvbot's own `subscription/<name>` namespace so repository config never names
 provider credentials. `coordinator` selects the judge model; `standard` is the normal specialist
 tier; `light` is the fast specialist tier. A reviewer override may only reuse a model the
 configuration already selects for one of those roles, so repository config cannot register providers
@@ -261,7 +261,7 @@ alongside each model and an unsupported effort fails before the review starts.
 
 When a specialist or coordinator returns a structured result the review refuses, the run reports
 `REVIEW_SCHEMA_INVALID`. The refused value itself is kept in
-`.reviewbot/runs/<id>/reviewbot-rejected-results.json`, redacted and truncated, with the validation
+`.shuvbot/runs/<id>/shuvbot-rejected-results.json`, redacted and truncated, with the validation
 reason, the role, the reviewer, and whether the sample came from the first attempt or its repair. The
 file is written only when something was refused. Without it a refusal is undiagnosable, because the
 offending value is otherwise discarded.
@@ -284,7 +284,7 @@ canonical repository identity and resolved base commit. Repository identity pref
 owner-only ID in the shared Git common directory. Neither the remote URL nor credentials are
 persisted or reported. Base aliases that resolve to the same commit share a lineage, as do linked Git worktrees; unrelated
 repositories and different base commits do not. State is stored atomically in
-`.reviewbot/state/reviews/<sha256(change identity)>.json` in the primary checkout shared by linked
+`.shuvbot/state/reviews/<sha256(change identity)>.json` in the primary checkout shared by linked
 worktrees. The directory and file are created with owner-only permissions, and persisted values pass
 through the redactor. The state records the base and head SHAs, degraded flag, update time, and
 fingerprinted findings. Reports list lifecycle counts for fixed and user-resolved findings separately,
@@ -293,11 +293,11 @@ while only active `new` and `unresolved` findings are actionable. Absent active 
 skips state reads, reconciliation, and writes.
 
 Each coordinator invocation also writes redacted event JSONL, session summary, and result artifacts
-under `.reviewbot/runs/<run-id>/`. The collision-safe run ID is unique per invocation, so sequential
+under `.shuvbot/runs/<run-id>/`. The collision-safe run ID is unique per invocation, so sequential
 runs do not overwrite each other. These durable artifacts are outside the temporary review workspace
-and survive its cleanup; incremental state remains separately under `.reviewbot/state/reviews/`.
-Successful persistence produces `reviewbot-events.jsonl`, `reviewbot-review-sessions.json`,
-`reviewbot-review-result.json`, `reviewbot-run.json`, and `reviewbot-findings.json`. JSON mode also
+and survive its cleanup; incremental state remains separately under `.shuvbot/state/reviews/`.
+Successful persistence produces `shuvbot-events.jsonl`, `shuvbot-review-sessions.json`,
+`shuvbot-review-result.json`, `shuvbot-run.json`, and `shuvbot-findings.json`. JSON mode also
 returns the absolute artifact directory and persistence status.
 
 The local coordinator path produces reports only. GitHub posting and Action support remain future
