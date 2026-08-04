@@ -24,6 +24,14 @@ otherwise without checking `main.ts` directly.
 - `packages/` contains the TypeScript implementation: the action entrypoint,
   CLI, core runtime, agent drivers, GitHub helpers, MCP tools, and eval
   harness.
+- `packages/review/` contains deterministic preprocessing, plugin assembly,
+  specialist/coordinator execution, quorum, incremental state, scheduling,
+  observability, and the isolated shuvcode adapter. The local CLI routes to
+  this coordinator path, but the GitHub Action does not.
+- Production local review currently fails closed: `legacy` remains the config
+  default but has no safe local production driver, and coordinator execution
+  rejects before Git while the code-approved shuvcode runtime pin is `null`.
+  This does not affect the live Claude-backed GitHub Action review path.
 - `dist/index.js` is the compiled GitHub Action output produced by
   `bun run build`. It is committed but only regenerated periodically via a
   dedicated `chore(build): regenerate dist/index.js`-style commit, not on
@@ -59,6 +67,7 @@ otherwise without checking `main.ts` directly.
 - Compiled GitHub Action output in `dist/index.js`
 - Local MCP tool server for GitHub, git, shell, filesystem, and output tools, implemented with the official MCP TypeScript SDK behind reviewbot-owned tool contracts
 - Claude Code as the first-class initial agent driver
+- A separately spawned, exact-version shuvcode runtime for local coordinator review sessions; consume only its packed public CLI and `shuvcode/client` contracts.
 
 ## Operating principles
 
@@ -68,6 +77,8 @@ otherwise without checking `main.ts` directly.
 - Prefer GitHub-native state and artifacts for v1; avoid a mandatory backend.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
+- Keep `review.engine = "legacy"` as the default until the corrected shuvcode release is published, real local subscription dogfooding passes, and the default switch is explicitly approved.
+- Do not describe either local review engine as production-ready while legacy has no safe local driver and the coordinator runtime pin is unapproved. Action coordinator routing and GitHub-native coordinator writes remain future work.
 
 ## Repository automation
 

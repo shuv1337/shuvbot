@@ -3,7 +3,7 @@
 **Project codename:** `reviewbot`  
 **Primary shape:** Pullfrog-style GitHub Action / agent bridge  
 **Review discipline:** Warden-style skills, gates, findings, and inline reviews  
-**Last updated:** 2026-05-14
+**Last updated:** 2026-08-03
 
 ---
 
@@ -106,6 +106,8 @@ The design should focus on these projects, but not be limited to them:
 - [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action)
 - [Aider-AI/aider](https://github.com/Aider-AI/aider)
 - [All-Hands-AI/OpenHands](https://github.com/All-Hands-AI/OpenHands)
+- [Cloudflare AI code review](https://blog.cloudflare.com/ai-code-review/)
+- [shuvcode](https://github.com/Latitudes-Dev/shuvcode) (the pinned OpenCode v2 fork used by shuvbot)
 
 ### 2.1 Pullfrog Lessons
 
@@ -209,6 +211,21 @@ OpenHands is useful as a future-facing reference for:
 - Scalable integrations.
 
 Most important OpenHands idea: **execution isolation matters more as the bot becomes more autonomous.**
+
+### 2.7 Cloudflare AI Code Review Lessons
+
+Cloudflare provides the target shape for shuvbot's review subsystem:
+
+- A coordinator judges results from isolated specialist review sessions.
+- Specialists have narrow prompts with explicit instructions about what not to flag.
+- Deterministic risk tiers avoid spending the full reviewer roster on trivial changes.
+- Diff noise is filtered before model execution.
+- Shared context and per-file patch files avoid multiplying token usage across reviewers.
+- Structured output, quorum, timeouts, retries, and degraded-coverage reporting make failures explicit.
+- Re-reviews carry forward finding lifecycle state rather than starting over.
+- Configuration, runtime integration, and telemetry compose through isolated plugin contributions.
+
+Most important Cloudflare idea: **review quality comes from orchestration, specialization, and an independent judge, not one larger prompt.**
 
 ---
 
@@ -402,6 +419,28 @@ Responsibilities:
 - Config validation.
 - Event replay.
 - Debugging/doctor checks.
+
+### 3.5 Multi-Agent Review Subsystem
+
+The broader shuvbot runtime continues to support implementation, CI repair, triage, and structured workflow modes. Only `review` mode uses the coordinator subsystem.
+
+```text
+deterministic config + policy
+  -> plugin assembly
+  -> diff filtering + risk tier
+  -> shared review workspace
+  -> isolated pinned shuvcode process
+  -> coordinator session
+  -> read-only specialist sessions (bounded concurrency)
+  -> typed judge result + quorum
+  -> deterministic validation, posting, and state reconciliation
+```
+
+The coordinator engine is implemented beside the legacy review path behind `review.engine` for the local CLI; GitHub Action routing is not implemented. As of 2026-08-03, `legacy` remains the config default but local production legacy review fails closed because no safe driver exists, while coordinator execution fails before Git because no shuvcode release is code-approved yet. See `PLAN-multi-agent-review.md` for release, dogfood, and Action integration status.
+
+Review plugins may contribute reviewers, providers, prompt sections, model assignments, and narrower tool permissions through a controlled context API. They must not mutate final configuration directly or widen runtime policy.
+
+All coordinator and specialist sessions are read-only. They return typed results; deterministic shuvbot code decides whether to post comments, request changes, or fail a check. Review agents never submit GitHub writes directly.
 
 ---
 
@@ -813,6 +852,35 @@ push = "restricted"
 [shell_sandbox]
 allow_commands = []
 deny_commands = ["sudo", "su", "docker", "podman"]
+
+[review]
+engine = "legacy" # legacy | coordinator during migration
+max_concurrency = 3
+overall_timeout = "15m"
+incremental = true
+
+[review.shuvcode]
+package = "shuvcode"
+version = "1.18.4" # source baseline; replace with first packed release that passes M3
+use_user_auth = true
+
+[review.models]
+coordinator = "subscription/default-reasoning"
+standard = "subscription/default-coding"
+light = "subscription/default-fast"
+
+[review.tiers.trivial]
+max_lines = 10
+max_files = 20
+reviewers = ["code-quality"]
+
+[review.tiers.lite]
+max_lines = 100
+max_files = 20
+reviewers = ["code-quality", "tests", "performance", "documentation", "release"]
+
+[review.tiers.full]
+reviewers = ["code-quality", "security", "performance", "tests", "documentation", "release"]
 
 [fix_ci]
 max_attempts = 3
@@ -1265,6 +1333,24 @@ Responsibilities:
 - Repo-map-assisted implementation.
 - Test/lint loops.
 
+### 11.3 Review Orchestration Runtime
+
+The coding-agent `AgentDriver` interface remains appropriate for non-review modes. Multi-agent review uses a separate coordinator runtime contract because it owns a process plus multiple related sessions, event streams, quorum, and per-session deadlines.
+
+The first implementation uses an isolated process from an exactly pinned shuvcode release. Local model authentication belongs to the user's shuvcode profile; shuvbot must not read local subscription credential values.
+
+Required runtime capabilities:
+
+- Start and stop an isolated loopback or stdio server.
+- Create coordinator and parented specialist sessions.
+- Select an agent and model per session.
+- Submit prompts asynchronously without command-line size limits.
+- Subscribe to structured activity, idle, completion, usage, and error events.
+- Interrupt individual sessions and terminate all sessions on cancellation.
+- Validate typed reviewer and coordinator results.
+
+Shuvbot must consume released shuvcode/client/plugin APIs only. `1.18.4` is the initial source baseline, not an approved executable integration release. If a capability or packed artifact is missing, add the smallest general-purpose, upstreamable API or packaging fix in the shuvcode fork and pin shuvbot to the resulting tested release. Do not import private shuvcode workspace internals.
+
 ---
 
 ## 12. Model Registry
@@ -1347,13 +1433,16 @@ Flow:
 ```text
 fetch PR metadata
 fetch diff + files
-apply ignore/path filters
-chunk hunks
-build repo context
-run configured skills
-validate JSON findings
-verify findings in read-only pass
-dedupe
+apply deterministic noise and path filters
+assess trivial/lite/full risk tier
+build shared context and per-file patch workspace
+assemble review plugins
+start isolated pinned shuvcode runtime
+run scheduled read-only specialists with bounded concurrency
+enforce tier-aware quorum
+run coordinator judge pass
+validate typed JSON findings and evidence
+reconcile findings with prior review state
 map findings to diff positions
 post PR review
 write check summary
@@ -1365,9 +1454,12 @@ optionally fail/request changes
 ```ts
 export interface ReviewFinding {
   id: string;
+  fingerprint: string;
+  reviewer: "code-quality" | "security" | "performance" | "tests" | "documentation" | "release";
   skill: string;
   title: string;
   body: string;
+  evidence: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
   confidence: "high" | "medium" | "low";
   path: string;
@@ -1377,6 +1469,8 @@ export interface ReviewFinding {
   endLine?: number;
   suggestedFix?: string;
   tags?: string[];
+  disposition?: "new" | "unresolved" | "fixed" | "user_resolved" | "dismissed";
+  priorFindingId?: string;
 }
 ```
 
@@ -1491,41 +1585,22 @@ set action output
 
 ### 14.1 Required Stages
 
-The review path should use six stages.
+The coordinator review path uses these mandatory stages:
 
-#### 1. Candidate Generation
+1. Deterministic filtering removes lockfiles, vendored dependencies, minified assets, source maps, and reliably generated noise while preserving migrations and behavioral generated artifacts.
+2. Deterministic risk assessment selects `trivial`, `lite`, or `full`; sensitive paths always select `full`.
+3. Scheduled specialists independently generate typed candidate findings from shared context and relevant patch files.
+4. Tier-aware quorum determines whether coverage is complete enough to judge. Below-quorum output is marked degraded and cannot claim the change is clean.
+5. The coordinator verifies evidence, deduplicates root causes, re-categorizes findings, calibrates severity, and removes speculative or convention-contradicted noise.
+6. Deterministic shuvbot validation checks schemas, confidence, evidence, suggested fixes, fingerprints, and line mapping.
+7. Incremental reconciliation compares findings with previous runs and user resolution/reply state.
+8. Posting budgets select inline and summary findings.
 
-Model/agent proposes findings from diff and context.
+The coordinator is the independent judge. It may inspect source to verify a finding but has no write tools.
 
-#### 2. Verification Pass
+Initial full-review quorum requires the coordinator, code-quality reviewer, security reviewer, and at least three of performance, tests, documentation, and release. Trivial requires coordinator plus code quality. Lite requires coordinator, code quality, and two scheduled specialists.
 
-A separate read-only pass checks each finding against the source/diff.
-
-#### 3. Deduplication
-
-Merge similar findings by:
-
-- path
-- line range
-- skill
-- title similarity
-- root cause
-
-#### 4. Severity Calibration
-
-Downgrade vague or speculative findings. Delete low-confidence noise.
-
-#### 5. Actionability Check
-
-A finding must include at least one of:
-
-- concrete bug
-- security risk
-- broken test/build implication
-- specific maintainability issue
-- suggested fix
-
-#### 6. Posting Budget
+### 14.2 Posting Budget
 
 Defaults:
 
@@ -1537,7 +1612,7 @@ reportOn = "medium"
 failOn = "high"
 ```
 
-### 14.2 Noise Rules
+### 14.3 Noise Rules
 
 Do not post findings that are only:
 
@@ -1548,7 +1623,7 @@ Do not post findings that are only:
 - duplicate of existing reviewer comment
 - issue already acknowledged in PR body
 
-### 14.3 Suggested Fixes
+### 14.4 Suggested Fixes
 
 When possible, findings should include GitHub-suggested-fix blocks.
 
@@ -1589,6 +1664,9 @@ L10: repo learnings
 - Include relevant repo instructions.
 - Repo instructions must not override runtime policy.
 - Include a context manifest in workflow summary for debugging.
+- Write one shared review-context file and one patch file per changed file for coordinator reviews.
+- Pass workspace paths and manifests to specialists instead of duplicating the full diff and PR context in every prompt.
+- Keep the workspace inside a run-scoped temporary directory and remove it after artifacts are finalized.
 
 ### 15.3 Untrusted Context Labeling
 
@@ -1652,6 +1730,11 @@ export interface StateStore {
 
   putRun(run: BotRunRecord): Promise<void>;
 }
+
+export interface ReviewStateStore {
+  readReviewState(changeId: string): Promise<PersistedReviewState | null>;
+  writeReviewState(changeId: string, state: PersistedReviewState): Promise<void>;
+}
 ```
 
 ### 16.2 Backends
@@ -1688,6 +1771,8 @@ For v1:
 - Store PR summary as an updatable bot comment with a hidden marker.
 - Store repo learnings only if explicitly enabled. The default is disabled.
 - Avoid hidden mutable state unless it is easy to inspect.
+- Persist finding fingerprints, head/base SHAs, prior thread IDs, resolution status, relevant replies, and coordinator dispositions for incremental re-review.
+- Never mark a prior finding fixed merely because it is absent from a degraded or failed run.
 
 ### 16.4 Hidden Comment Marker
 
@@ -1936,7 +2021,7 @@ export interface ParsedCommand {
 ```bash
 reviewbot init
 reviewbot review
-reviewbot review --base main --head HEAD
+reviewbot review --base main --head HEAD --engine coordinator
 reviewbot run --mode implement --prompt "add tests"
 reviewbot auth claude setup-token
 reviewbot auth claude import
@@ -1968,6 +2053,10 @@ Checks:
 - MCP server availability.
 - Secret masking behavior.
 - Node/Bun versions.
+- Exact shuvcode runtime compatibility when `review.engine = "coordinator"`.
+- Ability to launch and stop an isolated shuvcode process.
+- Availability of shuvcode-managed local provider authentication without printing or importing credentials.
+- Coordinator and specialist model-reference resolution.
 
 ### 21.4 `reviewbot replay`
 
@@ -1995,9 +2084,11 @@ bun run typecheck
 
 ---
 
-## 22. Built-In Skills
+## 22. Built-In Reviewers
 
-### 22.1 `code-review`
+The coordinator engine uses six built-in specialist reviewers. Existing skill IDs may remain as migration aliases, but coordinator configuration uses the reviewer IDs below.
+
+### 22.1 `code-quality`
 
 Finds:
 
@@ -2006,9 +2097,9 @@ Finds:
 - broken async handling
 - bad error handling
 - invalid assumptions
-- performance footguns
+- concrete maintainability problems that create correctness risk
 
-### 22.2 `security-review`
+### 22.2 `security`
 
 Finds:
 
@@ -2021,7 +2112,9 @@ Finds:
 - GitHub Actions injection
 - unsafe dependency/script changes
 
-### 22.3 `workflow-security`
+Only flag exploitable or concretely dangerous issues. Do not report theoretical defense-in-depth suggestions when primary controls are adequate.
+
+GitHub workflow security remains part of the security reviewer's path-sensitive instructions:
 
 Finds:
 
@@ -2032,7 +2125,19 @@ Finds:
 - untrusted context in shell scripts
 - self-hosted runner risk
 
-### 22.4 `test-review`
+### 22.3 `performance`
+
+Finds:
+
+- algorithmic complexity regressions
+- unbounded memory or resource growth
+- blocking work introduced into hot paths
+- repeated I/O or network calls with measurable impact
+- resource leaks and missing cleanup
+
+Do not report speculative micro-optimizations.
+
+### 22.4 `tests`
 
 Finds:
 
@@ -2042,7 +2147,7 @@ Finds:
 - tests that do not assert anything useful
 - missing regression tests for changed behavior
 
-### 22.5 `docs-review`
+### 22.5 `documentation`
 
 Finds:
 
@@ -2051,11 +2156,21 @@ Finds:
 - migration notes missing
 - stale examples
 
-### 22.6 Skill Interface
+### 22.6 `release`
+
+Finds:
+
+- backward-incompatible public contract changes
+- unsafe migration or deployment ordering
+- missing versioning or changelog implications
+- rollback hazards
+- packaging and release configuration drift
+
+### 22.7 Reviewer Interface
 
 ```ts
-export interface ReviewSkill {
-  name: string;
+export interface ReviewerDefinition {
+  id: ReviewerId;
   description: string;
   paths?: string[];
   ignorePaths?: string[];
@@ -2064,8 +2179,12 @@ export interface ReviewSkill {
   reportOn?: Severity;
   minConfidence?: Confidence;
   prompt: string;
+  requiredTools: readonly ReadOnlyReviewTool[];
+  timeoutMs: number;
 }
 ```
+
+Repository configuration may append bounded instructions and override paths, thresholds, and known model references. It may not replace shared mandatory rules, define arbitrary tools, add credentials/providers, or widen permissions.
 
 ---
 
@@ -2148,6 +2267,14 @@ export interface BotRunRecord {
   comments?: PostedCommentSummary[];
   usage?: UsageEntry[];
   errors?: SerializedError[];
+  review?: {
+    engine: "legacy" | "coordinator";
+    tier: "trivial" | "lite" | "full";
+    decision: "clean" | "comments" | "minor_issues" | "significant_concerns" | "degraded";
+    quorumMet: boolean;
+    sessions: ReviewSessionSummary[];
+    retries: number;
+  };
 }
 ```
 
@@ -2168,6 +2295,10 @@ Every run should write:
 - Commits pushed.
 - Comments/reviews posted.
 - Errors.
+- Review engine and risk tier.
+- Scheduled, running, completed, failed, and timed-out specialist sessions.
+- Quorum and degraded-coverage status.
+- Coordinator decision and retry summary.
 
 ### 24.3 Artifacts
 
@@ -2177,6 +2308,8 @@ Upload:
 reviewbot-run.json
 reviewbot-findings.json
 reviewbot-context-manifest.json
+reviewbot-review-sessions.json
+reviewbot-events.jsonl
 ```
 
 Avoid uploading raw prompts if they may contain sensitive repo content unless configured.
@@ -2220,8 +2353,12 @@ export class ReviewPostingError extends Error {}
 
 - Config/auth failures fail fast.
 - Individual comment failures do not necessarily fail the entire review.
-- If all skills fail, fail the action.
-- If some skills fail, post partial summary with warnings.
+- Coordinator reviews enforce tier-aware quorum instead of treating every specialist as equally mandatory.
+- If quorum fails, mark coverage degraded and never claim the change is clean.
+- Successful findings from a degraded run may be shown, but missing coverage alone must not request changes.
+- Full reviews of security-sensitive changes require a successful security specialist.
+- Retry only classified transient provider, rate-limit, or service failures and only within the remaining overall budget.
+- Auth, context overflow, schema, policy, cancellation, and local configuration failures do not trigger model failover.
 - If output schema is provided and result is invalid, fail.
 - If implementation mode cannot push, fail with explicit policy reason.
 - If CI-fix loop exhausts attempts, post what was tried.
@@ -2257,6 +2394,12 @@ Test:
 - Model alias resolution.
 - Output schema validation.
 - Severity threshold logic.
+- Risk-tier boundaries and security-sensitive path escalation.
+- Diff filtering and migration/generated-file exemptions.
+- Plugin lifecycle ordering, isolation, and permission narrowing.
+- Finding fingerprint and reconciliation behavior.
+- Quorum and decision mapping.
+- Retryability classification and deadline budgets.
 
 ### 26.2 Integration Tests
 
@@ -2269,6 +2412,13 @@ Test:
 - Progress comment lifecycle.
 - Structured output validation.
 - Commit/push dry-run behavior.
+- Isolated pinned shuvcode process startup and teardown.
+- Coordinator plus parented specialist session lifecycle.
+- Bounded specialist concurrency and cancellation.
+- Typed result repair and validation.
+- Two-run incremental review reconciliation.
+
+Real-provider integration tests must be opt-in so ordinary `bun test` runs do not consume subscription quota.
 
 ### 26.3 Replay Fixtures
 
@@ -2532,6 +2682,20 @@ Deliver:
 - Marketplace docs.
 - Example workflows.
 
+### Milestones 10-18: Multi-Agent Review Coordinator
+
+The completed single-agent scaffold remains historical foundation. The next review milestones are defined in `PLAN-multi-agent-review.md`:
+
+1. Contracts and deterministic preprocessing.
+2. Review plugin core.
+3. Released shuvcode runtime prerequisites and exact pin.
+4. Coordinator and six specialist sessions.
+5. Quorum, resilience, JSONL observability, and deadlines.
+6. Incremental finding lifecycle.
+7. Local CLI dogfood and manual acceptance.
+8. Opt-in GitHub integration.
+9. Default switch and legacy removal after explicit approval.
+
 ---
 
 ## 29. Suggested First Cut
@@ -2620,6 +2784,18 @@ Every meaningful run should have machine-readable output.
 
 Verification, dedupe, thresholds, and posting budgets are mandatory.
 
+### 30.8 Use shuvcode for Review Orchestration
+
+Use an isolated, exactly pinned release of the shuvcode OpenCode v2 fork for coordinator and specialist sessions. Keep coding-agent drivers for non-review modes.
+
+### 30.9 Keep Review Agents Read-Only
+
+Coordinator and specialists return typed results only. Deterministic shuvbot code validates, reconciles, maps, and posts findings under runtime policy.
+
+### 30.10 Prefer Honest Degradation
+
+Tier-aware quorum permits useful partial output but forbids clean claims without required coverage.
+
 ---
 
 ## 31. Resolved Decisions and Remaining Questions
@@ -2627,12 +2803,12 @@ Verification, dedupe, thresholds, and posting budgets are mandatory.
 These decisions pin down the first implementation pass.
 
 1. Tool server protocol: implement MCP directly from v0.1.
-2. Review verification model: use the same selected model for candidate generation and verification.
+2. Legacy review verification model: use the same selected model for candidate generation and verification. Superseded for coordinator mode by decisions 19-26.
 3. `REQUEST_CHANGES` policy: use a global default with per-skill override.
 4. Implementation branch strategy: always push to `reviewbot/*` branches and open or update PRs. Do not push directly to source branches.
 5. Restricted shell sandbox: run restricted shell commands inside a container sandbox by default.
 6. Pre-v1.0 agent drivers beyond Claude Code: support `codex-cli`.
-7. v0.1 review scope: ship one built-in `code-review` skill with thresholds, inline comments, and review body.
+7. Historical v0.1 review scope: ship one built-in `code-review` skill with thresholds, inline comments, and review body. Coordinator mode supersedes this path after dogfooding.
 8. Release tag strategy: publish semver tags plus moving `v0` / `v1` tags.
 9. Repo learnings default: disabled by default; read/write only when `[memory].learnings = true`.
 10. First implementation scope: Milestone 0 plus the policy skeleton and default permission matrix tests.
@@ -2643,6 +2819,18 @@ These decisions pin down the first implementation pass.
 15. Initial model aliases: start with minimal Claude aliases, `claude/sonnet` and `claude/opus`; allow direct model IDs as overrides.
 16. v0.1 posting default: inline review comments plus a review summary.
 17. First docs scope: create stubs for all required docs with clearly marked incomplete sections.
+18. Product scope: multi-agent review is a subsystem; implementation, CI repair, triage, and generic action modes remain.
+19. Review runtime: use an isolated, exactly pinned shuvcode release; add missing generic capabilities as upstreamable shuvcode APIs.
+20. Delivery order: local CLI first, then opt-in GitHub Actions after manual dogfooding.
+21. Local auth: delegate subscription authentication to the user's shuvcode profile without reading credential values in shuvbot.
+22. Review roster: coordinator plus code quality, security, performance, tests, documentation, and release/compatibility specialists.
+23. Scheduling: deterministic trivial/lite/full tiers with a default maximum of three concurrent specialists.
+24. Agent boundary: typed JSON output and read-only tools; deterministic shuvbot code owns all writes.
+25. Merge authority: comments and configured critical blocking are allowed; AI `APPROVE` remains disabled.
+26. Reliability: tier-aware quorum, incremental re-review state from the first usable release, and a 15-minute hard cap with a full-review target under 10 minutes.
+27. Extensibility: plugin core with GitHub-only delivery initially; built-ins permit bounded repo prompt/path/model overrides.
+28. Control plane: remote configuration and external telemetry remain deferred behind plugin seams.
+29. Migration: run legacy and coordinator engines in parallel until explicit approval after dogfooding.
 
 Remaining open question: none before starting the first scaffold.
 
@@ -2661,6 +2849,8 @@ Additional references:
 - https://github.com/anthropics/claude-code-action
 - https://github.com/Aider-AI/aider
 - https://github.com/All-Hands-AI/OpenHands
+- https://blog.cloudflare.com/ai-code-review/
+- https://github.com/Latitudes-Dev/shuvcode
 
 Relevant GitHub docs:
 
@@ -2677,6 +2867,8 @@ The winning formula:
 ```text
 Pullfrog orchestration
 + Warden review rigor
++ Cloudflare-style specialist coordination
++ pinned shuvcode sessions
 + PR-Agent command ergonomics
 + Claude Code execution
 + Aider-style repo awareness

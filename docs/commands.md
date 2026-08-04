@@ -12,9 +12,26 @@ Mention commands use the `@reviewbot` prefix:
 
 CLI commands:
 
-- `reviewbot review --base main --head HEAD`
+- `reviewbot review --base main --head HEAD [--config <path>] [--engine legacy|coordinator] [--json]`
 - `reviewbot replay --fixture fixtures/events/pull_request.opened.json --dry-run`
 - `reviewbot doctor`
 - `reviewbot auth claude setup-token`
 - `reviewbot auth claude import`
 - `reviewbot config validate [path]`
+
+`review` uses a three-dot Git range and defaults to `main...HEAD`. A local `reviewbot.toml` is loaded
+when present; an explicit missing `--config` is an error. Flags are strict: unknown, positional,
+missing-value, invalid, and duplicate options fail rather than being ignored.
+
+`legacy` remains the config default but the production local command has no safe legacy driver and
+fails closed before Git. `coordinator` routing, live progress, stable JSON, explicit `no_changes` and
+`no_reviewable_changes` results, incremental state, and durable artifacts are implemented, but
+coordinator execution also fails before Git while the code-approved shuvcode runtime pin is `null`.
+The GitHub Action does not route to the coordinator.
+
+`doctor` is a strict prerequisite command: any check with status `fail` makes it exit nonzero,
+including general GitHub CLI, Claude, Claude-auth, Git, Bun, Node, MCP, or redaction failures. Warnings
+and skipped coordinator checks do not affect its exit status. With coordinator config it additionally
+checks the configured packed package/client capabilities, local auth structure, isolated launch, and
+non-generating model catalog resolution; that diagnostic does not override the separate nullable
+runtime approval gate or constitute subscription dogfood.
