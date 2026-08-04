@@ -2624,7 +2624,7 @@ var require_parseParams = __commonJS({
 var require_basename = __commonJS({
   "node_modules/@fastify/busboy/lib/utils/basename.js"(exports, module) {
     "use strict";
-    module.exports = function basename2(path) {
+    module.exports = function basename3(path) {
       if (typeof path !== "string") {
         return "";
       }
@@ -2651,7 +2651,7 @@ var require_multipart = __commonJS({
     var Dicer = require_Dicer();
     var parseParams = require_parseParams();
     var decodeText = require_decodeText();
-    var basename2 = require_basename();
+    var basename3 = require_basename();
     var getLimit = require_getLimit();
     var RE_BOUNDARY = /^boundary$/i;
     var RE_FIELD = /^form-data$/i;
@@ -2768,7 +2768,7 @@ var require_multipart = __commonJS({
               } else if (RE_FILENAME.test(parsed[i][0])) {
                 filename = parsed[i][1];
                 if (!preservePath) {
-                  filename = basename2(filename);
+                  filename = basename3(filename);
                 }
               }
             }
@@ -33167,6 +33167,9 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
 }
 
 // packages/core/src/config.ts
+var PINNED_SHUVCODE_PACKAGE = "shuvcode";
+var SHUVCODE_SOURCE_BASELINE_VERSION = "1.18.4";
+var APPROVED_SHUVCODE_RUNTIME_VERSION = null;
 var DEFAULT_CONFIG = {
   agent: "claude-code",
   model: "claude/sonnet",
@@ -33198,8 +33201,45 @@ var DEFAULT_CONFIG = {
     backend: "github",
     learnings: false,
     prSummaries: true
+  },
+  review: {
+    engine: "legacy",
+    maxConcurrency: 3,
+    overallTimeout: "15m",
+    incremental: true,
+    sensitivePaths: [],
+    shuvcode: {
+      package: PINNED_SHUVCODE_PACKAGE,
+      version: APPROVED_SHUVCODE_RUNTIME_VERSION ?? SHUVCODE_SOURCE_BASELINE_VERSION,
+      useUserAuth: true
+    },
+    models: {
+      coordinator: "subscription/default-reasoning",
+      standard: "subscription/default-coding",
+      light: "subscription/default-fast"
+    },
+    tiers: {
+      trivial: { maxLines: 10, maxFiles: 20, reviewers: ["code-quality"] },
+      lite: {
+        maxLines: 100,
+        maxFiles: 20,
+        reviewers: ["code-quality", "tests", "performance", "documentation", "release"]
+      },
+      full: {
+        reviewers: ["code-quality", "security", "performance", "tests", "documentation", "release"]
+      }
+    },
+    reviewers: []
   }
 };
+var REVIEWER_IDS = [
+  "code-quality",
+  "security",
+  "performance",
+  "tests",
+  "documentation",
+  "release"
+];
 var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "agent",
   "model",
@@ -33224,7 +33264,8 @@ var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "fix_ci",
   "push",
   "paths",
-  "memory"
+  "memory",
+  "review"
 ]);
 async function loadConfigFile(path) {
   const contents = await readFile(path, "utf8");
@@ -33330,6 +33371,107 @@ function normalizeConfig(raw) {
       config2.memory.prSummaries
     );
   }
+  if (raw.review !== void 0) {
+    const review = assertRecord(raw.review, "review");
+    config2.review.engine = enumValue(
+      review.engine,
+      ["legacy", "coordinator"],
+      "review.engine",
+      config2.review.engine
+    );
+    config2.review.maxConcurrency = boundedIntegerValue(
+      review.maxConcurrency ?? review.max_concurrency,
+      "review.max_concurrency",
+      config2.review.maxConcurrency,
+      1,
+      REVIEWER_IDS.length
+    );
+    config2.review.overallTimeout = stringValue(
+      review.overallTimeout ?? review.overall_timeout,
+      "review.overall_timeout",
+      config2.review.overallTimeout
+    );
+    config2.review.incremental = booleanValue(
+      review.incremental,
+      "review.incremental",
+      config2.review.incremental
+    );
+    config2.review.sensitivePaths = globList(
+      review.sensitivePaths ?? review.sensitive_paths,
+      "review.sensitive_paths",
+      config2.review.sensitivePaths
+    );
+    if (review.shuvcode !== void 0) {
+      const shuvcode = assertRecord(review.shuvcode, "review.shuvcode");
+      config2.review.shuvcode.package = stringValue(
+        shuvcode.package,
+        "review.shuvcode.package",
+        config2.review.shuvcode.package
+      );
+      config2.review.shuvcode.version = exactVersionValue(
+        shuvcode.version,
+        "review.shuvcode.version",
+        config2.review.shuvcode.version
+      );
+      if (config2.review.shuvcode.package !== PINNED_SHUVCODE_PACKAGE) {
+        throw new ConfigError(`review.shuvcode.package must be ${PINNED_SHUVCODE_PACKAGE}.`);
+      }
+      config2.review.shuvcode.useUserAuth = booleanValue(
+        shuvcode.useUserAuth ?? shuvcode.use_user_auth,
+        "review.shuvcode.use_user_auth",
+        config2.review.shuvcode.useUserAuth
+      );
+    }
+    if (review.models !== void 0) {
+      const models = assertRecord(review.models, "review.models");
+      config2.review.models.coordinator = subscriptionModelValue(
+        models.coordinator,
+        "review.models.coordinator",
+        config2.review.models.coordinator
+      );
+      config2.review.models.standard = subscriptionModelValue(
+        models.standard,
+        "review.models.standard",
+        config2.review.models.standard
+      );
+      config2.review.models.light = subscriptionModelValue(
+        models.light,
+        "review.models.light",
+        config2.review.models.light
+      );
+    }
+    if (review.tiers !== void 0) {
+      const tiers = assertRecord(review.tiers, "review.tiers");
+      config2.review.tiers.trivial = tierValue(
+        tiers.trivial,
+        "review.tiers.trivial",
+        config2.review.tiers.trivial
+      );
+      config2.review.tiers.lite = tierValue(
+        tiers.lite,
+        "review.tiers.lite",
+        config2.review.tiers.lite
+      );
+      config2.review.tiers.full = tierValue(
+        tiers.full,
+        "review.tiers.full",
+        config2.review.tiers.full
+      );
+      validateTierRoster("trivial", config2.review.tiers.trivial.reviewers);
+      validateTierRoster("lite", config2.review.tiers.lite.reviewers);
+      validateTierRoster("full", config2.review.tiers.full.reviewers);
+    }
+    if (review.reviewers !== void 0) {
+      if (!Array.isArray(review.reviewers))
+        throw new ConfigError("review.reviewers must be an array of tables.");
+      config2.review.reviewers = review.reviewers.map(
+        (value, index) => reviewerOverrideValue(value, index)
+      );
+      if (new Set(config2.review.reviewers.map((reviewer) => reviewer.id)).size !== config2.review.reviewers.length) {
+        throw new ConfigError("review.reviewers must not contain duplicate reviewer IDs.");
+      }
+    }
+  }
   return config2;
 }
 function rejectUnknownTopLevelKeys(raw) {
@@ -33358,6 +33500,109 @@ function integerValue(value, field, fallback) {
   if (value === void 0) return fallback;
   if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
   throw new ConfigError(`${field} must be a positive integer.`);
+}
+function boundedIntegerValue(value, field, fallback, minimum, maximum) {
+  if (value === void 0) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value >= minimum && value <= maximum)
+    return value;
+  throw new ConfigError(`${field} must be an integer from ${minimum} to ${maximum}.`);
+}
+function exactVersionValue(value, field, fallback) {
+  const version2 = stringValue(value, field, fallback);
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version2)) {
+    throw new ConfigError(`${field} must be an exact semantic version.`);
+  }
+  return version2;
+}
+function tierValue(value, field, fallback) {
+  if (value === void 0) return fallback;
+  const tier = assertRecord(value, field);
+  const result = {
+    reviewers: reviewerList(tier.reviewers, `${field}.reviewers`, fallback.reviewers)
+  };
+  const maxLines = optionalPositiveInteger(
+    tier.maxLines ?? tier.max_lines,
+    `${field}.max_lines`,
+    fallback.maxLines
+  );
+  const maxFiles = optionalPositiveInteger(
+    tier.maxFiles ?? tier.max_files,
+    `${field}.max_files`,
+    fallback.maxFiles
+  );
+  if (maxLines !== void 0) result.maxLines = maxLines;
+  if (maxFiles !== void 0) result.maxFiles = maxFiles;
+  return result;
+}
+function reviewerOverrideValue(value, index) {
+  const field = `review.reviewers[${index}]`;
+  const reviewer = assertRecord(value, field);
+  if (reviewer.id === void 0) throw new ConfigError(`${field}.id is required.`);
+  const id = enumValue(reviewer.id, REVIEWER_IDS, `${field}.id`, "code-quality");
+  const promptAppend = reviewer.promptAppend ?? reviewer.prompt_append;
+  if (promptAppend !== void 0 && (typeof promptAppend !== "string" || promptAppend.length > 8e3)) {
+    throw new ConfigError(
+      `${field}.prompt_append must be a string no longer than 8000 characters.`
+    );
+  }
+  const result = {
+    id,
+    paths: globList(reviewer.paths, `${field}.paths`, []),
+    ignorePaths: globList(
+      reviewer.ignorePaths ?? reviewer.ignore_paths,
+      `${field}.ignore_paths`,
+      []
+    ),
+    promptAppend: typeof promptAppend === "string" ? promptAppend : ""
+  };
+  if (reviewer.model !== void 0) {
+    result.model = subscriptionModelValue(
+      reviewer.model,
+      `${field}.model`,
+      "subscription/default-coding"
+    );
+  }
+  return result;
+}
+function reviewerList(value, field, fallback) {
+  if (value === void 0) return fallback;
+  if (!Array.isArray(value) || value.some((item) => !isOneOf(item, REVIEWER_IDS))) {
+    throw new ConfigError(
+      `${field} must contain only known reviewer IDs: ${REVIEWER_IDS.join(", ")}.`
+    );
+  }
+  if (new Set(value).size !== value.length)
+    throw new ConfigError(`${field} must not contain duplicates.`);
+  return [...value];
+}
+function validateTierRoster(tier, reviewers) {
+  const minimum = tier === "trivial" ? 1 : tier === "lite" ? 3 : 5;
+  if (!reviewers.includes("code-quality")) {
+    throw new ConfigError(`review.tiers.${tier}.reviewers must include code-quality.`);
+  }
+  if (tier === "lite" && !reviewers.includes("tests")) {
+    throw new ConfigError("review.tiers.lite.reviewers must include tests.");
+  }
+  if (tier === "full" && !reviewers.includes("security")) {
+    throw new ConfigError("review.tiers.full.reviewers must include security.");
+  }
+  if (reviewers.length < minimum) {
+    throw new ConfigError(
+      `review.tiers.${tier}.reviewers must contain at least ${minimum} reviewers.`
+    );
+  }
+}
+function optionalPositiveInteger(value, field, fallback) {
+  if (value === void 0) return fallback;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  throw new ConfigError(`${field} must be a positive integer.`);
+}
+function subscriptionModelValue(value, field, fallback) {
+  const model = stringValue(value, field, fallback);
+  if (!/^subscription\/[^/\s]+$/.test(model)) {
+    throw new ConfigError(`${field} must use the subscription provider.`);
+  }
+  return model;
 }
 function globList(value, field, fallback) {
   if (value === void 0) return fallback;
@@ -33635,18 +33880,80 @@ async function writeWorkflowSummary(rawRecord, redactor = new DefaultRedactor())
 }
 
 // packages/action/src/artifacts.ts
-import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
+import { randomUUID } from "crypto";
+import { mkdir, rename, rm, writeFile } from "fs/promises";
+import { basename, join } from "path";
+var ACTION_ARTIFACT_MAX_BYTES = 8 * 1024 * 1024;
+var ACTION_ARTIFACT_MAX_EVENTS = 1e4;
+var ACTION_ARTIFACT_MAX_FIELD_BYTES = 256 * 1024;
+var MAX_STRUCTURED_ITEMS = 1e4;
 async function writeReviewArtifacts(input) {
+  const redactor = input.redactor ?? new DefaultRedactor();
   const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
-  await mkdir(dir, { recursive: true });
   const runPath = join(dir, "reviewbot-run.json");
   const findingsPath = join(dir, "reviewbot-findings.json");
   const contextManifestPath = join(dir, "reviewbot-context-manifest.json");
-  await writeJson(runPath, { ...input.runRecord, contextManifestPath });
-  await writeJson(findingsPath, input.findings);
-  await writeJson(contextManifestPath, input.contextManifest);
-  return { dir, runPath, findingsPath, contextManifestPath };
+  const reviewSessionsPath = input.runRecord.review === void 0 ? void 0 : join(dir, "reviewbot-review-sessions.json");
+  const eventsPath = input.sessionLog === void 0 ? void 0 : join(dir, "reviewbot-events.jsonl");
+  assertCount("findings", input.findings.length, MAX_STRUCTURED_ITEMS);
+  assertCount(
+    "context manifest sections",
+    input.contextManifest.sections.length,
+    MAX_STRUCTURED_ITEMS
+  );
+  assertCount(
+    "review sessions",
+    input.runRecord.review?.sessions.length ?? 0,
+    MAX_STRUCTURED_ITEMS
+  );
+  assertCount("session events", input.sessionLog?.length ?? 0, ACTION_ARTIFACT_MAX_EVENTS);
+  const pending = [];
+  try {
+    pending.push(
+      prepareJson(runPath, { ...input.runRecord, contextManifestPath }, redactor),
+      prepareJson(findingsPath, input.findings, redactor),
+      prepareJson(contextManifestPath, input.contextManifest, redactor)
+    );
+    if (reviewSessionsPath !== void 0 && input.runRecord.review !== void 0) {
+      pending.push(prepareJson(reviewSessionsPath, input.runRecord.review.sessions, redactor));
+    }
+    if (eventsPath !== void 0 && input.sessionLog !== void 0) {
+      pending.push(prepareJsonLines(eventsPath, input.sessionLog, redactor));
+    }
+  } catch (error3) {
+    throw sanitizedError("Unable to prepare review artifacts", error3, redactor);
+  }
+  try {
+    await mkdir(dir, { recursive: true, mode: 448 });
+    for (const artifact of pending) {
+      artifact.temporary = `${artifact.path}.${randomUUID()}.tmp`;
+      await writeFile(artifact.temporary, artifact.contents, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 384
+      });
+    }
+    for (const artifact of pending) {
+      await rename(artifact.temporary, artifact.path);
+      delete artifact.temporary;
+    }
+  } catch (error3) {
+    throw sanitizedError("Unable to commit review artifacts", error3, redactor);
+  } finally {
+    await Promise.all(
+      pending.map(async ({ temporary }) => {
+        if (temporary !== void 0) await rm(temporary, { force: true }).catch(() => void 0);
+      })
+    );
+  }
+  return {
+    dir,
+    runPath,
+    findingsPath,
+    contextManifestPath,
+    ...reviewSessionsPath === void 0 ? {} : { reviewSessionsPath },
+    ...eventsPath === void 0 ? {} : { eventsPath }
+  };
 }
 async function writeFailureDiagnostics(input) {
   const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "reviewbot");
@@ -33656,9 +33963,72 @@ async function writeFailureDiagnostics(input) {
 `);
   return path;
 }
-async function writeJson(path, value) {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}
-`);
+function prepareJson(path, value, redactor) {
+  preflightValue(path, value);
+  const contents = `${JSON.stringify(redactor.redact(value), null, 2)}
+`;
+  assertArtifactBytes(path, Buffer.byteLength(contents, "utf8"));
+  return { path, contents };
+}
+function prepareJsonLines(path, values, redactor) {
+  preflightValue(path, values);
+  const lines = [];
+  let bytes = 0;
+  for (const value of redactor.redact(values)) {
+    const line = `${JSON.stringify(value)}
+`;
+    bytes += Buffer.byteLength(line, "utf8");
+    assertArtifactBytes(path, bytes);
+    lines.push(line);
+  }
+  return { path, contents: lines.join("") };
+}
+function preflightValue(path, value) {
+  const seen = /* @__PURE__ */ new Set();
+  let scalarBytes = 0;
+  let items = 0;
+  const visit = (current) => {
+    if (typeof current === "string") {
+      const fieldBytes = Buffer.byteLength(current, "utf8");
+      if (fieldBytes > ACTION_ARTIFACT_MAX_FIELD_BYTES) {
+        throw new RangeError(
+          `Artifact ${basename(path)} contains a field exceeding the ${ACTION_ARTIFACT_MAX_FIELD_BYTES}-byte limit; reduce model-derived text and retry.`
+        );
+      }
+      scalarBytes += fieldBytes;
+    } else if (typeof current === "object" && current !== null) {
+      if (seen.has(current)) throw new TypeError("structured artifact data must not be circular");
+      seen.add(current);
+      for (const [key, nested] of Object.entries(current)) {
+        items += 1;
+        scalarBytes += Buffer.byteLength(key, "utf8");
+        if (items > MAX_STRUCTURED_ITEMS * 100) {
+          throw new RangeError("structured artifact data has too many fields");
+        }
+        visit(nested);
+      }
+      seen.delete(current);
+    }
+    if (scalarBytes > ACTION_ARTIFACT_MAX_BYTES) {
+      throw artifactLimitError(path);
+    }
+  };
+  visit(value);
+}
+function assertCount(label, count, limit) {
+  if (count > limit) throw new RangeError(`${label} exceed the ${limit}-item artifact limit`);
+}
+function assertArtifactBytes(path, bytes) {
+  if (bytes > ACTION_ARTIFACT_MAX_BYTES) throw artifactLimitError(path);
+}
+function artifactLimitError(path) {
+  return new RangeError(
+    `Artifact ${basename(path)} exceeds the ${ACTION_ARTIFACT_MAX_BYTES}-byte limit; reduce its structured data and retry.`
+  );
+}
+function sanitizedError(prefix, error3, redactor) {
+  const message = error3 instanceof Error ? error3.message : String(error3);
+  return new Error(`${prefix}: ${redactor.redactString(message)}`);
 }
 
 // packages/core/src/events.ts
@@ -34367,7 +34737,7 @@ import { join as join3, relative as relative2 } from "path";
 
 // packages/core/src/workspace-read.ts
 import { readFile as readFile2, realpath } from "fs/promises";
-import { basename, isAbsolute, relative, resolve, sep } from "path";
+import { basename as basename2, isAbsolute, relative, resolve, sep } from "path";
 async function readSafeWorkspaceFile(cwd, filePath) {
   const workspaceRoot = resolve(cwd);
   if (isAbsolute(filePath))
@@ -34393,7 +34763,7 @@ async function readSafeWorkspaceFile(cwd, filePath) {
 }
 function assertWorkspaceReadAllowed(relativePath) {
   const segments = relativePath.split(sep).filter(Boolean);
-  const fileName = basename(relativePath).toLowerCase();
+  const fileName = basename2(relativePath).toLowerCase();
   const lowerSegments = segments.map((segment) => segment.toLowerCase());
   if (lowerSegments.includes(".git") || lowerSegments.includes(".aws") || lowerSegments.includes(".ssh") || fileName === ".env" || fileName.startsWith(".env.") || fileName === ".npmrc" || fileName === ".netrc" || fileName.includes("credentials")) {
     throw new ToolExecutionError(
@@ -34576,11 +34946,29 @@ function parseFinding(value, index, errors) {
   setOptionalNumber(finding, "endLine", record2.endLine);
   if (record2.side === "RIGHT" || record2.side === "LEFT") finding.side = record2.side;
   if (typeof record2.suggestedFix === "string") finding.suggestedFix = record2.suggestedFix;
-  if (Array.isArray(record2.tags)) finding.tags = record2.tags.filter((tag) => typeof tag === "string");
+  if (Array.isArray(record2.tags))
+    finding.tags = record2.tags.filter((tag) => typeof tag === "string");
+  if (isReviewer(record2.reviewer)) finding.reviewer = record2.reviewer;
+  if (typeof record2.evidence === "string" && record2.evidence.trim())
+    finding.evidence = record2.evidence;
+  if (typeof record2.fingerprint === "string" && record2.fingerprint.trim())
+    finding.fingerprint = record2.fingerprint;
+  if (isDisposition(record2.disposition)) finding.disposition = record2.disposition;
+  if (typeof record2.priorFindingId === "string" && record2.priorFindingId.trim()) {
+    finding.priorFindingId = record2.priorFindingId;
+  }
   return finding;
 }
 function setOptionalNumber(target, key, value) {
   if (typeof value === "number" && Number.isInteger(value)) target[key] = value;
+}
+function isReviewer(value) {
+  return ["code-quality", "security", "performance", "tests", "documentation", "release"].includes(
+    value
+  );
+}
+function isDisposition(value) {
+  return ["new", "unresolved", "fixed", "user_resolved", "dismissed"].includes(value);
 }
 
 // packages/core/src/review-pipeline.ts
@@ -34914,37 +35302,53 @@ ${formatMarker(key, payload)}`;
 }
 function findExistingMarker(comments, key) {
   const prefix = `${MARKER_PREFIX}${key}:`;
-  return comments.find((comment) => typeof comment.body === "string" && comment.body.includes(prefix));
+  return comments.find(
+    (comment) => typeof comment.body === "string" && comment.body.includes(prefix)
+  );
 }
 
 // packages/github/src/reviews.ts
+var DEFAULT_REVIEW_FINDING_INGESTION_LIMITS = Object.freeze({
+  maxPages: 100,
+  maxRootComments: 1e4,
+  maxRepliesPerRoot: 1e3,
+  maxTotalRecords: 2e4
+});
 async function postReview(input) {
-  const existing = await input.client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/comments", {
-    params: {
-      owner: input.repo.owner,
-      repo: input.repo.name,
-      pull_number: input.pullNumber,
-      per_page: 100
+  const existing = await input.client.request(
+    "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+    {
+      params: {
+        owner: input.repo.owner,
+        repo: input.repo.name,
+        pull_number: input.pullNumber,
+        per_page: 100
+      }
     }
-  });
+  );
   const existingComments = Array.isArray(existing.data) ? existing.data.map((comment) => asMarkerComment(comment)) : [];
-  const comments = input.comments.filter((comment) => !findExistingMarker(existingComments, comment.markerKey));
-  const response = await input.client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
-    params: {
-      owner: input.repo.owner,
-      repo: input.repo.name,
-      pull_number: input.pullNumber
-    },
-    body: {
-      body: input.body,
-      event: input.event,
-      comments: comments.map((comment) => ({
-        path: comment.path,
-        position: comment.position,
-        body: appendMarker(comment.body, comment.markerKey)
-      }))
+  const comments = input.comments.filter(
+    (comment) => !findExistingMarker(existingComments, comment.markerKey)
+  );
+  const response = await input.client.request(
+    "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+    {
+      params: {
+        owner: input.repo.owner,
+        repo: input.repo.name,
+        pull_number: input.pullNumber
+      },
+      body: {
+        body: input.body,
+        event: input.event,
+        comments: comments.map((comment) => ({
+          path: comment.path,
+          position: comment.position,
+          body: appendMarker(comment.body, comment.markerKey)
+        }))
+      }
     }
-  });
+  );
   const review = asRecord2(response.data);
   return {
     id: numberValue(review.id),
@@ -51950,11 +52354,11 @@ var BOOLEAN_POLICY_KEYS = [
 async function startReviewbotMcpServer(input) {
   const httpServer = createServer(async (request, response) => {
     if (request.url !== "/mcp") {
-      writeJson2(response, 404, { error: "Not found" });
+      writeJson(response, 404, { error: "Not found" });
       return;
     }
     if (request.method !== "POST") {
-      writeJson2(response, 405, {
+      writeJson(response, 405, {
         jsonrpc: "2.0",
         error: { code: -32e3, message: "Method not allowed." },
         id: null
@@ -51968,7 +52372,7 @@ async function startReviewbotMcpServer(input) {
       await transport.handleRequest(request, response, await readJsonBody(request));
     } catch {
       if (!response.headersSent) {
-        writeJson2(response, 500, {
+        writeJson(response, 500, {
           jsonrpc: "2.0",
           error: { code: -32603, message: "Internal server error" },
           id: null
@@ -52088,7 +52492,7 @@ async function readJsonBody(request) {
   if (chunks.length === 0) return void 0;
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
-function writeJson2(response, statusCode, body) {
+function writeJson(response, statusCode, body) {
   response.writeHead(statusCode, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
 }
