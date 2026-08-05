@@ -30,6 +30,7 @@ export {
   type ClassifiedReviewError as ValidatedClassifiedReviewError
 } from "./results.ts";
 export * from "./risk.ts";
+export * from "./run.ts";
 export * from "./report.ts";
 export * from "./runtime/auth.ts";
 export * from "./runtime/shuvcode.ts";
