@@ -258,6 +258,20 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
   posture that `packages/action/test/workflow-security.test.ts` pins: the
   workflow still checks out the trusted default branch, and pull request
   content is only ever data in a temporary directory.
+- **Retained failure text is fail-closed, and deliberately redacted twice.**
+  `sanitizeEvent` reduces a runtime failure to a category and a status, which
+  is right for the event stream but leaves `Provider request failed` as the only
+  thing an operator ever sees. `ShuvcodeSessionError.detail` carries a bounded
+  summary read from the **source** event, and the engine records it in
+  `shuvbot-rejected-results.json` as `kind: "failure"`. Two invariants: the
+  runtime retains detail **only** when `StartShuvcodeRuntimeOptions.redact` is
+  supplied, so a caller that cannot scrub retains nothing (the runtime's own
+  secret-leak test passes precisely because it supplies no redactor); and the
+  runtime scrubs any credential it injected by exact value even though callers
+  already wrap their redactor with `withRedactedValues` over the same value -
+  `DEFAULT_SECRET_PATTERNS` only matches shapes it knows (`sk-` needs 20+
+  trailing characters), and retained provider text is the one place a missed
+  pattern would be durable.
 - **Comment-triggered review has three couplings that are easy to break.**
   `@shuvbot review` on a pull request is live (verified end to end on PR #22).
   1. **Review skills trigger on `pull_request` actions**

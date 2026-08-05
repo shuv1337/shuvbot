@@ -83,10 +83,6 @@ What dogfood #2 proved, and what it did not:
 - **Issue #20**: intermittent `GitHub request failed (406)` about a second into
   a review, same pull request and secrets. Needs the failing endpoint named and
   one retry before an advisory check fails.
-- **Provider failures are undiagnosable.** The CI failure surfaced only as a
-  sanitised `Provider request failed`; the cause had to be inferred from the
-  model alias table. The retained-sample treatment that exists for schema
-  failures should extend to provider failures.
 - **`legacy` is overloaded.** `review.engine = "legacy"` is dead code that only
   throws, while the Action's _working_ single-agent Claude default is not called
   legacy anywhere. M9 schedules removal after a deprecation window.
@@ -97,6 +93,15 @@ What dogfood #2 proved, and what it did not:
 
 ## Recently fixed
 
+- **Provider failures are diagnosable.** A failure used to reach the operator as
+  a sanitised category and nothing else, so dogfood #1's cause had to be
+  inferred from the model roster. The runtime now retains a bounded one-line
+  summary of the source event's own error fields, and a failed session is
+  recorded in `shuvbot-rejected-results.json` alongside refused results, tagged
+  `kind: "failure"`. Retention is fail-closed - detail exists only when the
+  caller supplies a redactor - and the runtime additionally scrubs any
+  credential it injected by exact value, because the pattern redactor cannot
+  recognise a token shape it does not know.
 - **Reviewers no longer read the base revision.** Specialists are scoped to the
   temporary review workspace, which held only patches, so any cross-file
   question was answered from a checkout that is the trusted default branch, not
