@@ -17,6 +17,27 @@ export function createLocalChangeIdentity(input: {
   return `local-change:v1:${digest}`;
 }
 
+/**
+ * Identifies the change a pull request represents, stably across pushes.
+ *
+ * Deliberately keyed on the pull request rather than its base or head commit:
+ * the point of the identity is that the finding lifecycle survives a force-push
+ * and a rebase, which a commit-derived identity would reset on every push.
+ */
+export function createPullRequestChangeIdentity(input: {
+  readonly repositoryFullName: string;
+  readonly pullNumber: number;
+}): string {
+  const repository = requireCanonicalValue(input.repositoryFullName, "repositoryFullName");
+  if (!Number.isInteger(input.pullNumber) || input.pullNumber < 1) {
+    throw new TypeError("pullNumber must be a positive integer");
+  }
+  const digest = createHash("sha256")
+    .update([repository, `pull:${input.pullNumber}`].join("\0"), "utf8")
+    .digest("hex");
+  return `pull-request:v1:${digest}`;
+}
+
 function requireCanonicalValue(value: string, field: string): string {
   const canonical = value.normalize("NFKC").trim();
   if (canonical.length === 0 || canonical.includes("\0")) {

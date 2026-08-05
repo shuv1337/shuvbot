@@ -36,5 +36,6 @@ export * from "./runtime/shuvcode.ts";
 export * from "./scheduler.ts";
 export * from "./session-log.ts";
 export * from "./state.ts";
+export * from "./state-github.ts";
 export * from "./types.ts";
 export * from "./workspace.ts";

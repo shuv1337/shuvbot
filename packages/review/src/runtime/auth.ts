@@ -1,8 +1,5 @@
 import { ConfigError } from "../../../core/src/errors.ts";
-import {
-  SHUVCODE_CREDENTIAL_ENV_NAMES,
-  type ShuvcodeRuntimeCredential
-} from "./shuvcode.ts";
+import { SHUVCODE_CREDENTIAL_ENV_NAMES, type ShuvcodeRuntimeCredential } from "./shuvcode.ts";
 
 export type ShuvcodeAuthMode = "user" | "environment";
 
