@@ -39,6 +39,20 @@ For a local review, resolution order is:
 3. The complete normalized TOML selected by `--config <path>`, which replaces the default file.
 4. The `--engine legacy|coordinator` CLI override, if supplied.
 
+In the GitHub Action, resolution order is the same in spirit:
+
+1. Built-in defaults.
+2. `shuvbot.toml` from the working directory, when present.
+3. The complete normalized TOML selected by the `config:` input, which replaces the default file.
+
+The Action used to skip step 2 entirely, so a repository's committed `shuvbot.toml` applied locally
+and was silently ignored in CI. It is honoured now, which means a config file that was previously
+inert may start taking effect on your next run - check it if you have one.
+
+An explicit `config:` still wins, which is how a repository keeps a CI-only file (for example
+`review.shuvcode.auth = "environment"`, correct on a runner and wrong on a laptop) separate from the
+one developers use.
+
 `--engine` overrides only `review.engine`; every other setting still comes from the selected config
 or its built-in default.
 

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as core from "@actions/core";
@@ -51,6 +52,9 @@ import type { GitHubClient } from "../../github/src/octokit.ts";
 import type { RuntimePolicy } from "../../core/src/policy.ts";
 import type { ShuvbotConfig } from "../../core/src/config.ts";
 
+/** Same default config filename the CLI discovers. */
+const DEFAULT_CONFIG_FILENAME = "shuvbot.toml";
+
 export interface MainOverrides {
   /** Injected in tests to avoid spawning a real agent CLI subprocess. */
   driver?: AgentDriver;
@@ -65,7 +69,8 @@ export interface MainOverrides {
 export async function main(overrides: MainOverrides = {}): Promise<void> {
   const logger = new RunLogger();
   const inputs = readActionInputs();
-  const fileConfig = inputs.config ? await loadConfigFile(inputs.config) : normalizeConfig({});
+  const cwd = inputs.cwd ?? process.cwd();
+  const fileConfig = await resolveActionConfig(inputs.config, cwd, logger);
 
   const eventName = process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const eventPayload = await readEventPayload();
@@ -187,7 +192,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
           record: withPolicy,
           logger,
           botLogin: resolveBotLogin(inputs.botLogin),
-          cwd: inputs.cwd ?? process.cwd(),
+          cwd,
           ...(overrides.signal ? { signal: overrides.signal } : {}),
           ...(overrides.coordinator ? { dependencies: overrides.coordinator } : {})
         });
@@ -207,7 +212,6 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
         }
       );
 
-      const cwd = inputs.cwd ?? process.cwd();
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
       const mcpServer = await startShuvbotMcpServer({
@@ -334,7 +338,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
 
     if (mode === "implement" && command && event && policy) {
       const implementation = await runImplement({
-        cwd: inputs.cwd ?? process.cwd(),
+        cwd,
         runId: withPolicy.runId,
         command,
         policy,
@@ -654,6 +658,28 @@ function processCancellation(): { signal: AbortSignal; dispose(): void } {
 /** Login whose review comments own finding threads for lifecycle state. */
 function resolveBotLogin(configured?: string): string {
   return configured ?? "github-actions[bot]";
+}
+
+/**
+ * Resolves configuration the same way the CLI does.
+ *
+ * An explicit `config:` input must load or fail. Otherwise a `shuvbot.toml` in
+ * the working directory is used when it exists, and built-in defaults when it
+ * does not. The Action previously skipped that discovery entirely, so a
+ * repository's own committed config was silently ignored in CI while applying
+ * locally - the settings were there, they just did nothing.
+ */
+async function resolveActionConfig(
+  explicitPath: string | undefined,
+  cwd: string,
+  logger: RunLogger
+): Promise<ShuvbotConfig> {
+  if (explicitPath !== undefined) return loadConfigFile(explicitPath);
+
+  const discovered = join(cwd, DEFAULT_CONFIG_FILENAME);
+  if (!existsSync(discovered)) return normalizeConfig({});
+  logger.log("info", "config.discovered", { path: DEFAULT_CONFIG_FILENAME });
+  return loadConfigFile(discovered);
 }
 
 /** Keep the step-log annotation from ballooning if the driver tail is large. */
