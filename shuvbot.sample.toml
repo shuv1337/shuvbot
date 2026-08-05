@@ -12,8 +12,9 @@ shell = "restricted"
 push = "restricted"
 
 [review]
-# Legacy remains the migration default but has no safe production local driver.
-engine = "legacy"
+# The multi-agent coordinator. "legacy" remains selectable but has no safe
+# production driver and fails closed, so treat it as historical.
+engine = "coordinator"
 max_concurrency = 3
 overall_timeout = "15m"
 incremental = true
@@ -21,9 +22,14 @@ sensitive_paths = []
 
 [review.shuvcode]
 package = "shuvcode"
-# Parseable source baseline only. The approved executable pin is null until a corrected release ships.
-version = "1.18.4"
+# Must equal the code-approved executable pin, or the review fails before it
+# starts rather than running against an untested runtime.
+version = "2.0.0-alpha-9"
 use_user_auth = true
+# "user" authenticates from your own shuvcode profile and injects nothing.
+# "environment" is the non-interactive path for CI, where shuvbot passes one
+# credential (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY) to the runtime.
+auth = "user"
 
 [review.models]
 coordinator = "subscription/default-reasoning"
