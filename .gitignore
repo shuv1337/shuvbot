@@ -12,3 +12,8 @@ node_modules/
 
 # Compiled local CLI executable
 bin/shuvbot
+
+# Coding-agent session state. Jujutsu snapshots every non-ignored file, so
+# agent scratch state otherwise lands in the working-copy commit and fails
+# `bun run format:check`.
+.opencode/
