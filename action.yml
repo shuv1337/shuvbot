@@ -35,6 +35,11 @@ inputs:
   token:
     description: GitHub token.
     required: false
+  bot_login:
+    description: >-
+      Login that owns review comments created by token. Defaults to
+      "github-actions[bot]"; set this when using a GitHub App or bot PAT.
+    required: false
   engine:
     description: >-
       Review engine: "legacy" (default) or "coordinator". The multi-agent

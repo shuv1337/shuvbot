@@ -37,6 +37,8 @@ export const DEFAULT_GITHUB_REVIEW_STATE_LIMITS: Readonly<GitHubReviewStateLimit
 
 const STATE_MARKER_KEY = "review-state:v1";
 const STATE_FENCE = "shuvbot-review-state";
+const COMMENTS_PER_PAGE = 100;
+const MAX_COMMENT_PAGES = 100;
 
 export interface GitHubReviewStateStoreInput {
   readonly client: GitHubClient;
@@ -226,19 +228,39 @@ export class GitHubReviewStateStore implements ReviewStateStore {
   }
 
   private async issueComments(): Promise<Array<{ id?: number; body?: string | null }>> {
-    const response = await this.input.client.request(
-      "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
-      {
-        params: {
-          owner: this.input.repo.owner,
-          repo: this.input.repo.name,
-          issue_number: this.input.pullNumber,
-          per_page: 100
+    const comments: unknown[] = [];
+    for (let page = 1; page <= MAX_COMMENT_PAGES; page += 1) {
+      const response = await this.input.client.request(
+        "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+        {
+          params: {
+            owner: this.input.repo.owner,
+            repo: this.input.repo.name,
+            issue_number: this.input.pullNumber,
+            per_page: COMMENTS_PER_PAGE,
+            page
+          }
         }
+      );
+      const batch = Array.isArray(response.data) ? response.data : [];
+      comments.push(
+        ...batch.filter((comment) => {
+          if (typeof comment !== "object" || comment === null) return false;
+          const user = (comment as Record<string, unknown>).user;
+          if (typeof user !== "object" || user === null) return false;
+          const login = (user as Record<string, unknown>).login;
+          return (
+            typeof login === "string" &&
+            login.toLowerCase() === this.input.botLogin.toLowerCase()
+          );
+        })
+      );
+      if (page === MAX_COMMENT_PAGES && batch.length === COMMENTS_PER_PAGE) {
+        throw new Error("Review state comment lookup exceeded its bounded page limit");
       }
-    );
-    if (!Array.isArray(response.data)) return [];
-    return response.data.map((comment) => {
+      if (batch.length < COMMENTS_PER_PAGE) break;
+    }
+    return comments.map((comment) => {
       const record = (typeof comment === "object" && comment !== null ? comment : {}) as Record<
         string,
         unknown

@@ -32465,6 +32465,7 @@ function readActionInputs() {
   setOptional(inputs, "push", optionalEnumInput("push", PERMISSION_LEVELS));
   setOptional(inputs, "shell", optionalEnumInput("shell", PERMISSION_LEVELS));
   setOptional(inputs, "token", optionalInput("token"));
+  setOptional(inputs, "botLogin", optionalInput("bot_login"));
   setOptional(inputs, "engine", optionalEnumInput("engine", REVIEW_ENGINES));
   return inputs;
 }
@@ -35667,18 +35668,34 @@ function ingestionError(code, message) {
   return new ReviewFindingIngestionError(code, message);
 }
 async function postReview(input) {
-  const existing = await input.client.request(
-    "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-    {
-      params: {
-        owner: input.repo.owner,
-        repo: input.repo.name,
-        pull_number: input.pullNumber,
-        per_page: 100
+  const existingComments = [];
+  for (let page = 1; page <= DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages; page += 1) {
+    const existing = await input.client.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      {
+        params: {
+          owner: input.repo.owner,
+          repo: input.repo.name,
+          pull_number: input.pullNumber,
+          per_page: 100,
+          page
+        }
       }
+    );
+    const batch = Array.isArray(existing.data) ? existing.data : [];
+    existingComments.push(
+      ...batch.filter(
+        (comment) => authorLogin(asRecord2(comment))?.toLowerCase() === input.botLogin.toLowerCase()
+      ).map((comment) => asMarkerComment(comment))
+    );
+    if (page === DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages && batch.length === 100) {
+      throw ingestionError(
+        "page_limit_exceeded",
+        "Review comment lookup exceeded limits.maxPages; narrow the review history."
+      );
     }
-  );
-  const existingComments = Array.isArray(existing.data) ? existing.data.map((comment) => asMarkerComment(comment)) : [];
+    if (batch.length < 100) break;
+  }
   const comments = input.comments.filter(
     (comment) => !findExistingMarker(existingComments, comment.markerKey)
   );
@@ -35701,6 +35718,20 @@ async function postReview(input) {
       }
     }
   );
+  for (const comment of input.comments) {
+    const existing = findExistingMarker(existingComments, comment.markerKey);
+    if (existing?.id === void 0) continue;
+    const body = appendMarker(comment.body, comment.markerKey);
+    if (existing.body === body) continue;
+    await input.client.request("PATCH /repos/{owner}/{repo}/pulls/comments/{comment_id}", {
+      params: {
+        owner: input.repo.owner,
+        repo: input.repo.name,
+        comment_id: existing.id
+      },
+      body: { body }
+    });
+  }
   const review = asRecord2(response.data);
   return {
     id: numberValue(review.id),
@@ -65452,12 +65483,16 @@ async function runCoordinatorReview(input) {
         degraded: execution.result.decision === "degraded" || !execution.coverage.quorumMet,
         now: dependencies.now
       });
-      await deadline.race(
-        input.incremental.store.writeReviewState(input.incremental.changeId, reconciliation.state, {
-          deadlineAtMs: deadline.atMs
-        }),
-        "incremental state write"
-      );
+      if (!input.incremental.deferWrite) {
+        await deadline.race(
+          input.incremental.store.writeReviewState(
+            input.incremental.changeId,
+            reconciliation.state,
+            { deadlineAtMs: deadline.atMs }
+          ),
+          "incremental state write"
+        );
+      }
     }
     const reportedResult = reconciliation === void 0 ? execution.result : { ...execution.result, findings: reconciliation.activeFindings };
     const reportOptions = reconciliation === void 0 ? void 0 : {
@@ -68019,6 +68054,8 @@ var DEFAULT_GITHUB_REVIEW_STATE_LIMITS = Object.freeze({
 });
 var STATE_MARKER_KEY = "review-state:v1";
 var STATE_FENCE = "shuvbot-review-state";
+var COMMENTS_PER_PAGE = 100;
+var MAX_COMMENT_PAGES = 100;
 var GitHubReviewStateStore = class {
   constructor(input) {
     this.input = input;
@@ -68144,19 +68181,36 @@ var GitHubReviewStateStore = class {
 ${payload}`, STATE_MARKER_KEY);
   }
   async issueComments() {
-    const response = await this.input.client.request(
-      "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
-      {
-        params: {
-          owner: this.input.repo.owner,
-          repo: this.input.repo.name,
-          issue_number: this.input.pullNumber,
-          per_page: 100
+    const comments = [];
+    for (let page = 1; page <= MAX_COMMENT_PAGES; page += 1) {
+      const response = await this.input.client.request(
+        "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+        {
+          params: {
+            owner: this.input.repo.owner,
+            repo: this.input.repo.name,
+            issue_number: this.input.pullNumber,
+            per_page: COMMENTS_PER_PAGE,
+            page
+          }
         }
+      );
+      const batch = Array.isArray(response.data) ? response.data : [];
+      comments.push(
+        ...batch.filter((comment) => {
+          if (typeof comment !== "object" || comment === null) return false;
+          const user = comment.user;
+          if (typeof user !== "object" || user === null) return false;
+          const login = user.login;
+          return typeof login === "string" && login.toLowerCase() === this.input.botLogin.toLowerCase();
+        })
+      );
+      if (page === MAX_COMMENT_PAGES && batch.length === COMMENTS_PER_PAGE) {
+        throw new Error("Review state comment lookup exceeded its bounded page limit");
       }
-    );
-    if (!Array.isArray(response.data)) return [];
-    return response.data.map((comment) => {
+      if (batch.length < COMMENTS_PER_PAGE) break;
+    }
+    return comments.map((comment) => {
       const record3 = typeof comment === "object" && comment !== null ? comment : {};
       return {
         ...typeof record3.id === "number" ? { id: record3.id } : {},
@@ -68240,9 +68294,10 @@ async function runCoordinatorActionReview(input) {
       fetchPullRequestDiff(input.client, input.repo, input.pullNumber),
       "pull request diff"
     );
+    const reviewFiles = hydrateOmittedPatches(files, diff.raw);
     const preprocessingMs = Date.now() - preprocessingStartedAt;
     input.logger.log("info", "review.preprocessed", {
-      files: files.length,
+      files: reviewFiles.length,
       durationMs: preprocessingMs
     });
     const incremental = config2.review.incremental && input.policy.canReview ? {
@@ -68256,12 +68311,13 @@ async function runCoordinatorActionReview(input) {
         pullNumber: input.pullNumber,
         redactor,
         botLogin: input.botLogin
-      })
+      }),
+      deferWrite: true
     } : void 0;
     const run = await runCoordinatorReview({
       config: config2,
       cwd: input.cwd,
-      files,
+      files: reviewFiles,
       baseSha: input.baseSha,
       headSha: input.headSha,
       redactor,
@@ -68311,12 +68367,21 @@ async function runCoordinatorActionReview(input) {
           pullNumber: input.pullNumber,
           body: buildReviewBody(summary2, summaryOnly, posting),
           event: posting.reviewEvent,
-          comments: inline
+          comments: inline,
+          botLogin: input.botLogin
         }),
         "review posting"
       );
       postedComments = result.postedComments;
       posted = true;
+      if (incremental !== void 0 && run.reconciliation !== void 0) {
+        await deadline.race(
+          incremental.store.writeReviewState(incremental.changeId, run.reconciliation.state, {
+            deadlineAtMs: deadline.atMs
+          }),
+          "incremental state write"
+        );
+      }
     }
     return {
       status: run.status,
@@ -68370,7 +68435,7 @@ function partitionFindings(findings, positions) {
   return { inline, summaryOnly };
 }
 function findingMarkerKey(finding) {
-  return `finding:v1:${finding.fingerprint}`;
+  return finding.fingerprint;
 }
 function renderFindingBody(finding) {
   const parts = [
@@ -68466,6 +68531,18 @@ function toPlanFile(value) {
     ...patch === void 0 ? { binary: true } : { patch },
     ...typeof record3.previous_filename === "string" ? { previousPath: record3.previous_filename } : {}
   };
+}
+function hydrateOmittedPatches(files, rawDiff) {
+  const patches = /* @__PURE__ */ new Map();
+  for (const section3 of rawDiff.split(/(?=^diff --git )/m)) {
+    const path = section3.match(/^\+\+\+ b\/(.+)$/m)?.[1] ?? section3.match(/^--- a\/(.+)$/m)?.[1];
+    if (path !== void 0 && /^@@ /m.test(section3)) patches.set(path, section3.trimEnd());
+  }
+  return files.map((file2) => {
+    if (file2.patch !== void 0) return file2;
+    const patch = patches.get(file2.path);
+    return patch === void 0 ? file2 : { ...file2, patch, binary: false };
+  });
 }
 function toChangedFileStatus(value) {
   switch (value) {
@@ -68581,13 +68658,12 @@ async function main(overrides = {}) {
           hasCommand: Boolean(command),
           record: withPolicy,
           logger,
+          botLogin: resolveBotLogin(inputs.botLogin),
           cwd: inputs.cwd ?? process.cwd(),
           ...overrides.signal ? { signal: overrides.signal } : {},
           ...overrides.coordinator ? { dependencies: overrides.coordinator } : {}
         });
-        await writeWorkflowSummary(
-          completeRunRecord(withPolicy, withPolicy.errors?.length ? "failure" : "success")
-        );
+        await writeWorkflowSummary(withPolicy);
         return;
       }
       const diff = await fetchPullRequestDiff(client, repo, pullNumber);
@@ -68673,7 +68749,8 @@ ${boundedLogTail(message)}`);
             position: finding.inline.position,
             body: finding.body,
             markerKey: finding.markerKey
-          }))
+          })),
+          botLogin: resolveBotLogin(inputs.botLogin)
         });
         postedComments = posted.postedComments;
       } else {
@@ -68861,7 +68938,7 @@ async function executeCoordinatorReviewMode(input) {
     cwd: input.cwd,
     artifactDirectory,
     logger: input.logger,
-    botLogin: resolveBotLogin(),
+    botLogin: input.botLogin,
     ...input.signal ? { signal: input.signal } : {},
     ...input.dependencies ? { dependencies: input.dependencies } : {}
   });
@@ -68889,6 +68966,16 @@ async function executeCoordinatorReviewMode(input) {
       }
     };
   }
+  const executionFailed = ["failed", "timed_out", "cancelled"].includes(review.status);
+  if (review.failCheck || executionFailed) {
+    record3 = recordError(
+      record3,
+      new Error(
+        review.failCheck ? `Review found findings at or above the configured fail_on threshold (${input.config.failOn}).` : `Coordinator review ended with status ${review.status}.`
+      )
+    );
+  }
+  record3 = completeRunRecord(record3, review.failCheck || executionFailed ? "failure" : "success");
   try {
     await writeCoordinatorArtifacts({
       runnerTemp: artifactDirectory,
@@ -68911,7 +68998,7 @@ async function executeCoordinatorReviewMode(input) {
     core4.setOutput("review_coverage", JSON.stringify(review.coverage));
   }
   core4.setOutput("review_degraded", String(review.degraded));
-  core4.setOutput("review_findings", JSON.stringify(review.report ?? { findings: [] }));
+  core4.setOutput("review_findings", JSON.stringify(review.findings));
   core4.setOutput(
     "result",
     JSON.stringify({
@@ -68924,9 +69011,9 @@ async function executeCoordinatorReviewMode(input) {
       findings: review.findings.length
     })
   );
-  if (review.failCheck) {
+  if (review.failCheck || executionFailed) {
     core4.setFailed(
-      `shuvbot review found findings at or above the configured fail_on threshold (${input.config.failOn}).`
+      review.failCheck ? `shuvbot review found findings at or above the configured fail_on threshold (${input.config.failOn}).` : `shuvbot coordinator review ended with status ${review.status}.`
     );
   }
   return record3;
@@ -68944,9 +69031,8 @@ function processCancellation() {
     }
   };
 }
-function resolveBotLogin() {
-  const actor = process.env.GITHUB_ACTOR;
-  return actor !== void 0 && actor.length > 0 ? actor : "github-actions[bot]";
+function resolveBotLogin(configured) {
+  return configured ?? "github-actions[bot]";
 }
 function boundedLogTail(message, max = 4e3) {
   return message.length <= max ? message : `\u2026[${message.length - max} chars omitted]\u2026

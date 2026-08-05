@@ -16,6 +16,7 @@ export interface PostReviewInput {
   body: string;
   comments: ReviewCommentDraft[];
   event: "COMMENT" | "REQUEST_CHANGES";
+  botLogin: string;
 }
 
 export interface PostReviewResult {
@@ -235,20 +236,40 @@ function ingestionError(
 }
 
 export async function postReview(input: PostReviewInput): Promise<PostReviewResult> {
-  const existing = await input.client.request(
-    "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-    {
-      params: {
-        owner: input.repo.owner,
-        repo: input.repo.name,
-        pull_number: input.pullNumber,
-        per_page: 100
+  const existingComments: ReturnType<typeof asMarkerComment>[] = [];
+  for (let page = 1; page <= DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages; page += 1) {
+    const existing = await input.client.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      {
+        params: {
+          owner: input.repo.owner,
+          repo: input.repo.name,
+          pull_number: input.pullNumber,
+          per_page: 100,
+          page
+        }
       }
+    );
+    const batch = Array.isArray(existing.data) ? existing.data : [];
+    existingComments.push(
+      ...batch
+        .filter(
+          (comment) =>
+            authorLogin(asRecord(comment))?.toLowerCase() === input.botLogin.toLowerCase()
+        )
+        .map((comment) => asMarkerComment(comment))
+    );
+    if (
+      page === DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages &&
+      batch.length === 100
+    ) {
+      throw ingestionError(
+        "page_limit_exceeded",
+        "Review comment lookup exceeded limits.maxPages; narrow the review history."
+      );
     }
-  );
-  const existingComments = Array.isArray(existing.data)
-    ? existing.data.map((comment) => asMarkerComment(comment))
-    : [];
+    if (batch.length < 100) break;
+  }
   const comments = input.comments.filter(
     (comment) => !findExistingMarker(existingComments, comment.markerKey)
   );
@@ -271,6 +292,22 @@ export async function postReview(input: PostReviewInput): Promise<PostReviewResu
       }
     }
   );
+  // Publish the new review first. Existing comments are updated only after
+  // GitHub accepts the review, so a rejected position cannot partially publish.
+  for (const comment of input.comments) {
+    const existing = findExistingMarker(existingComments, comment.markerKey);
+    if (existing?.id === undefined) continue;
+    const body = appendMarker(comment.body, comment.markerKey);
+    if (existing.body === body) continue;
+    await input.client.request("PATCH /repos/{owner}/{repo}/pulls/comments/{comment_id}", {
+      params: {
+        owner: input.repo.owner,
+        repo: input.repo.name,
+        comment_id: existing.id
+      },
+      body: { body }
+    });
+  }
   const review = asRecord(response.data);
   return {
     id: numberValue(review.id),

@@ -150,9 +150,10 @@ export async function runCoordinatorActionReview(
       fetchPullRequestDiff(input.client, input.repo, input.pullNumber),
       "pull request diff"
     );
+    const reviewFiles = hydrateOmittedPatches(files, diff.raw);
     const preprocessingMs = Date.now() - preprocessingStartedAt;
     input.logger.log("info", "review.preprocessed", {
-      files: files.length,
+      files: reviewFiles.length,
       durationMs: preprocessingMs
     });
 
@@ -174,14 +175,15 @@ export async function runCoordinatorActionReview(
               pullNumber: input.pullNumber,
               redactor,
               botLogin: input.botLogin
-            })
+            }),
+            deferWrite: true
           }
         : undefined;
 
     const run = await runCoordinatorReview({
       config,
       cwd: input.cwd,
-      files,
+      files: reviewFiles,
       baseSha: input.baseSha,
       headSha: input.headSha,
       redactor,
@@ -237,12 +239,22 @@ export async function runCoordinatorActionReview(
           pullNumber: input.pullNumber,
           body: buildReviewBody(summary, summaryOnly, posting),
           event: posting.reviewEvent,
-          comments: inline
+          comments: inline,
+          botLogin: input.botLogin
         }),
         "review posting"
       );
       postedComments = result.postedComments;
       posted = true;
+
+      if (incremental !== undefined && run.reconciliation !== undefined) {
+        await deadline.race(
+          incremental.store.writeReviewState(incremental.changeId, run.reconciliation.state, {
+            deadlineAtMs: deadline.atMs
+          }),
+          "incremental state write"
+        );
+      }
     }
 
     return {
@@ -316,7 +328,7 @@ export function partitionFindings(
 
 /** Stable per-finding marker so a re-review updates rather than duplicates. */
 export function findingMarkerKey(finding: CoordinatedFinding): string {
-  return `finding:v1:${finding.fingerprint}`;
+  return finding.fingerprint;
 }
 
 function renderFindingBody(finding: CoordinatedFinding): string {
@@ -430,6 +442,23 @@ function toPlanFile(value: unknown): ReviewPlanFile | undefined {
       ? { previousPath: record.previous_filename }
       : {})
   };
+}
+
+/** Recovers text patches that GitHub omits from the changed-files response. */
+function hydrateOmittedPatches(
+  files: readonly ReviewPlanFile[],
+  rawDiff: string
+): ReviewPlanFile[] {
+  const patches = new Map<string, string>();
+  for (const section of rawDiff.split(/(?=^diff --git )/m)) {
+    const path = section.match(/^\+\+\+ b\/(.+)$/m)?.[1] ?? section.match(/^--- a\/(.+)$/m)?.[1];
+    if (path !== undefined && /^@@ /m.test(section)) patches.set(path, section.trimEnd());
+  }
+  return files.map((file) => {
+    if (file.patch !== undefined) return file;
+    const patch = patches.get(file.path);
+    return patch === undefined ? file : { ...file, patch, binary: false };
+  });
 }
 
 function toChangedFileStatus(value: unknown): ChangedFileStatus | undefined {

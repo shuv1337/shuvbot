@@ -70,7 +70,13 @@ function store(
     limits?: ConstructorParameters<typeof GitHubReviewStateStore>[0]["limits"];
   } = {}
 ) {
-  const transport = client(input.comments ?? []);
+  const transport = client(
+    (input.comments ?? []).map((comment) =>
+      typeof comment === "object" && comment !== null && !("user" in comment)
+        ? { ...comment, user: { login: "shuvbot[bot]" } }
+        : comment
+    )
+  );
   const subject = new GitHubReviewStateStore({
     client: transport.client,
     repo: { owner: "octo", name: "shuvbot" },
@@ -139,6 +145,54 @@ describe("GitHub review state store", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]?.route).toContain("PATCH");
     expect(writes[0]?.params?.comment_id).toBe(9);
+  });
+
+  test("finds a state comment after the first page", async () => {
+    const body = await storedComment(state());
+    const requests: RecordedRequest[] = [];
+    const subject = new GitHubReviewStateStore({
+      client: {
+        async request(route, options) {
+          requests.push({
+            route,
+            ...(options?.params === undefined ? {} : { params: options.params }),
+            ...(options?.body === undefined ? {} : { body: options.body })
+          });
+          const page = Number(options?.params?.page);
+          return {
+            status: 200,
+            data: (page === 1
+              ? Array.from({ length: 100 }, (_, id) => ({
+                  id,
+                  body: "ordinary",
+                  user: { login: "someone" }
+                }))
+              : [{ id: 101, body, user: { login: "shuvbot[bot]" } }]) as never
+          };
+        }
+      },
+      repo: { owner: "octo", name: "shuvbot" },
+      pullNumber: 7,
+      redactor: new DefaultRedactor(),
+      botLogin: "shuvbot[bot]",
+      readThreads: async () => []
+    });
+
+    expect(await subject.readReviewState(CHANGE_ID)).toMatchObject({ changeId: CHANGE_ID });
+    expect(requests.map((request) => request.params?.page)).toEqual([1, 2]);
+  });
+
+  test("ignores a state marker owned by another user", async () => {
+    const body = await storedComment(state());
+    const { subject, requests } = store({
+      comments: [{ id: 9, body, user: { login: "contributor" } }]
+    });
+
+    expect(await subject.readReviewState(CHANGE_ID)).toBeNull();
+    await subject.writeReviewState(CHANGE_ID, state());
+
+    expect(requests.some((request) => request.route.startsWith("PATCH "))).toBe(false);
+    expect(requests.some((request) => request.route.startsWith("POST "))).toBe(true);
   });
 
   test("a resolved thread marks the finding user_resolved so it is not reposted", async () => {

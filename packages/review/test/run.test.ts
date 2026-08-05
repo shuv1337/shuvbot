@@ -205,6 +205,19 @@ describe("shared coordinator review run", () => {
     expect(run.kind === "reviewed" && run.reconciliation).toBeDefined();
   });
 
+  test("can defer state persistence until a platform publishes the review", async () => {
+    const store = memoryStateStore();
+    const input = runInput({
+      incremental: { changeId: "pull-request:v1:abc", store, deferWrite: true }
+    });
+
+    const run = await runCoordinatorReview(input);
+    input.deadline.dispose();
+
+    expect(store.written).toHaveLength(0);
+    expect(run.kind === "reviewed" && run.reconciliation).toBeDefined();
+  });
+
   test("a cancelled deadline aborts the run", async () => {
     const controller = new AbortController();
     const input = runInput({ deadline: createReviewDeadline(30_000, controller.signal) });

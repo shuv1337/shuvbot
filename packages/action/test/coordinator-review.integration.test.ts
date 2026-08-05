@@ -251,7 +251,9 @@ describe("main() coordinator review mode", () => {
     expect(body.comments).toHaveLength(1);
     expect(body.comments[0]?.path).toBe("src/app.ts");
     expect(body.comments[0]?.body).toContain("Unsanitized input logged");
-    expect(body.comments[0]?.body).toContain("<!-- shuvbot:finding:v1:");
+    const marker = body.comments[0]?.body.match(/<!-- shuvbot:([^:]+:[^:]+:[^:]+):/i)?.[1];
+    expect(marker).toMatch(/^finding:v1:[a-f0-9]{64}$/);
+    expect(body.comments[0]?.body).not.toContain("finding:v1:finding:v1:");
   });
 
   test("the review runtime credential never reaches GitHub or the outputs", async () => {
@@ -417,8 +419,12 @@ describe("main() coordinator review mode", () => {
     });
 
     const run = JSON.parse(await readFile(join(cwd, "shuvbot", "shuvbot-run.json"), "utf8")) as {
+      status: string;
+      completedAt?: string;
       review?: { engine: string; tier: string; sessions: unknown[] };
     };
+    expect(run.status).toBe("success");
+    expect(run.completedAt).toBeDefined();
     expect(run.review?.engine).toBe("coordinator");
     expect(run.review?.sessions).toHaveLength(1);
     const sessions = await readFile(join(cwd, "shuvbot", "shuvbot-review-sessions.json"), "utf8");
@@ -443,6 +449,70 @@ describe("main() coordinator review mode", () => {
     );
     expect(stateComment).toBeDefined();
     expect(JSON.stringify(stateComment!.body)).toContain("shuvbot:review-state:v1:");
+    const reviewIndex = server.calls.findIndex(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
+    const stateIndex = server.calls.findIndex(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/issues/1/comments"
+    );
+    expect(stateIndex).toBeGreaterThan(reviewIndex);
+  });
+
+  test("does not persist unseen findings when review posting fails", async () => {
+    const server = fakeGitHubServer(
+      routes({
+        "POST /repos/octo/repo/pulls/1/reviews": {
+          status: 422,
+          body: { message: "invalid review position" }
+        }
+      })
+    );
+
+    await expect(
+      main({
+        fetchImpl: server.fetchImpl,
+        coordinator: {
+          executeCoordinator: async () => engineResult({ findings: [finding()] }),
+          startRuntime: async () => {
+            throw new Error("unused");
+          }
+        }
+      })
+    ).rejects.toThrow("invalid review position");
+
+    expect(
+      server.calls.some(
+        (call) => call.method === "POST" && call.path === "/repos/octo/repo/issues/1/comments"
+      )
+    ).toBe(false);
+  });
+
+  test("recovers an omitted text patch from the raw pull request diff", async () => {
+    const server = fakeGitHubServer(
+      routes({
+        "GET /repos/octo/repo/pulls/1/files": {
+          status: 200,
+          body: [{ filename: "src/app.ts", status: "modified", additions: 2, deletions: 1 }]
+        }
+      })
+    );
+    let recoveredPatch = "";
+
+    await main({
+      fetchImpl: server.fetchImpl,
+      coordinator: {
+        executeCoordinator: async ({ plan }) => {
+          recoveredPatch = plan.diff.entries[0]?.patch ?? "";
+          return engineResult();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        }
+      }
+    });
+
+    expect(recoveredPatch).toContain("TODO: sanitize");
+    expect(recoveredPatch).toContain("console.log(name)");
   });
 
   test("refuses to run without a non-interactive credential", async () => {

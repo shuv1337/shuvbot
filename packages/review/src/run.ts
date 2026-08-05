@@ -47,6 +47,8 @@ export interface CoordinatorReviewDependencies {
 export interface CoordinatorReviewIncremental {
   readonly changeId: string;
   readonly store: ReviewStateStore;
+  /** Platform callers may persist only after their report is published. */
+  readonly deferWrite?: boolean;
 }
 
 export interface RunCoordinatorReviewInput {
@@ -201,12 +203,16 @@ export async function runCoordinatorReview(
         degraded: execution.result.decision === "degraded" || !execution.coverage.quorumMet,
         now: dependencies.now
       });
-      await deadline.race(
-        input.incremental.store.writeReviewState(input.incremental.changeId, reconciliation.state, {
-          deadlineAtMs: deadline.atMs
-        }),
-        "incremental state write"
-      );
+      if (!input.incremental.deferWrite) {
+        await deadline.race(
+          input.incremental.store.writeReviewState(
+            input.incremental.changeId,
+            reconciliation.state,
+            { deadlineAtMs: deadline.atMs }
+          ),
+          "incremental state write"
+        );
+      }
     }
 
     const reportedResult =

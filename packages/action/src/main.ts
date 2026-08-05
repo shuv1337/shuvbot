@@ -186,13 +186,12 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
           hasCommand: Boolean(command),
           record: withPolicy,
           logger,
+          botLogin: resolveBotLogin(inputs.botLogin),
           cwd: inputs.cwd ?? process.cwd(),
           ...(overrides.signal ? { signal: overrides.signal } : {}),
           ...(overrides.coordinator ? { dependencies: overrides.coordinator } : {})
         });
-        await writeWorkflowSummary(
-          completeRunRecord(withPolicy, withPolicy.errors?.length ? "failure" : "success")
-        );
+        await writeWorkflowSummary(withPolicy);
         return;
       }
       const diff = await fetchPullRequestDiff(client, repo, pullNumber);
@@ -286,7 +285,8 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
               position: finding.inline!.position,
               body: finding.body,
               markerKey: finding.markerKey
-            }))
+            })),
+          botLogin: resolveBotLogin(inputs.botLogin)
         });
         postedComments = posted.postedComments;
       } else {
@@ -480,6 +480,7 @@ async function runCoordinatorReviewMode(input: {
   hasCommand: boolean;
   record: RunRecord;
   logger: RunLogger;
+  botLogin: string;
   cwd: string;
   signal?: AbortSignal;
   dependencies?: CoordinatorActionReviewInput["dependencies"];
@@ -513,6 +514,7 @@ async function executeCoordinatorReviewMode(input: {
   hasCommand: boolean;
   record: RunRecord;
   logger: RunLogger;
+  botLogin: string;
   cwd: string;
   artifactDirectory: string;
   signal?: AbortSignal;
@@ -532,7 +534,7 @@ async function executeCoordinatorReviewMode(input: {
     cwd: input.cwd,
     artifactDirectory,
     logger: input.logger,
-    botLogin: resolveBotLogin(),
+    botLogin: input.botLogin,
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.dependencies ? { dependencies: input.dependencies } : {})
   });
@@ -567,6 +569,19 @@ async function executeCoordinatorReviewMode(input: {
     };
   }
 
+  const executionFailed = ["failed", "timed_out", "cancelled"].includes(review.status);
+  if (review.failCheck || executionFailed) {
+    record = recordError(
+      record,
+      new Error(
+        review.failCheck
+          ? `Review found findings at or above the configured fail_on threshold (${input.config.failOn}).`
+          : `Coordinator review ended with status ${review.status}.`
+      )
+    );
+  }
+  record = completeRunRecord(record, review.failCheck || executionFailed ? "failure" : "success");
+
   // Artifacts are written even when posting was refused: a fork review that
   // cannot be published is exactly the run whose output someone needs to read.
   try {
@@ -592,7 +607,7 @@ async function executeCoordinatorReviewMode(input: {
     core.setOutput("review_coverage", JSON.stringify(review.coverage));
   }
   core.setOutput("review_degraded", String(review.degraded));
-  core.setOutput("review_findings", JSON.stringify(review.report ?? { findings: [] }));
+  core.setOutput("review_findings", JSON.stringify(review.findings));
   core.setOutput(
     "result",
     JSON.stringify({
@@ -606,9 +621,11 @@ async function executeCoordinatorReviewMode(input: {
     })
   );
 
-  if (review.failCheck) {
+  if (review.failCheck || executionFailed) {
     core.setFailed(
-      `shuvbot review found findings at or above the configured fail_on threshold (${input.config.failOn}).`
+      review.failCheck
+        ? `shuvbot review found findings at or above the configured fail_on threshold (${input.config.failOn}).`
+        : `shuvbot coordinator review ended with status ${review.status}.`
     );
   }
   return record;
@@ -635,9 +652,8 @@ function processCancellation(): { signal: AbortSignal; dispose(): void } {
 }
 
 /** Login whose review comments own finding threads for lifecycle state. */
-function resolveBotLogin(): string {
-  const actor = process.env.GITHUB_ACTOR;
-  return actor !== undefined && actor.length > 0 ? actor : "github-actions[bot]";
+function resolveBotLogin(configured?: string): string {
+  return configured ?? "github-actions[bot]";
 }
 
 /** Keep the step-log annotation from ballooning if the driver tail is large. */

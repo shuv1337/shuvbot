@@ -110,9 +110,9 @@ otherwise without checking `main.ts` directly.
 - **"Commenting on a pull request" is two GitHub events**, and the workflow subscribes to both: `issue_comment` (the conversation tab) and `pull_request_review_comment` (an inline comment on a diff line). They look like one act in the UI, so subscribing to only one leaves the other silently dead - it starts no run and reports nothing. The action has always handled both (`normalizeEvent`, `resolveReviewTarget`, `fixtures/events/review_comment.mention.json`); only the subscription was missing. Both paths are covered end to end in `main.integration.test.ts`.
 - `issue_comment` also fires for **plain issues**, which carry no diff and nothing shuvbot can act on, so the job guard requires `github.event.issue.pull_request != null`. Without it a mention on an ordinary issue starts a run that can only fail (see the "fails loudly when an explicit mention refers to no pull request" test).
 - The actor gate is `github.event.comment.user.login == 'shuv1337'`. GitHub sets that field, so it cannot be spoofed - but it is the **only** identity gate. The action re-checks write access and has no concept of an actor allowlist, so weakening that line is not caught anywhere downstream.
-- The workflow runs the **checked-out** action (`uses: ./`), not the published `shuv1337/shuvbot@v0`, so a pull request is reviewed by the shuvbot revision it contains. Required for now because `engine: coordinator` does not exist in the published v0. Caveat: it runs the committed `dist/index.js`, which is regenerated periodically rather than per source change, so a PR that edits source without `bun run build` is reviewed by the older bundle.
+- The workflow runs the action from an explicit checkout of the **trusted default branch** (`uses: ./`), not from the pull request and not from published `shuv1337/shuvbot@v0`. Coordinator review fetches the pull request diff through GitHub's API. Never change this back to a merge-ref checkout: doing so lets a same-repository pull request replace `dist/index.js` or the pinned runtime and execute attacker-controlled code with `CLAUDE_CODE_OAUTH_TOKEN`. The local checkout remains necessary until `engine: coordinator` exists in a published release.
 - It runs the **coordinator** engine, which needs two things the single-agent path does not: the pinned shuvcode runtime installed in the job (`bun install --frozen-lockfile`, since shuvcode is an exact devDependency, so the lockfile is the pin) and `config: .github/shuvbot.ci.toml`. That CI config exists separately from any root `shuvbot.toml` because the Action does **not** auto-discover a config file the way the CLI does, and because `auth = "environment"` is correct on a runner and wrong on a laptop - one shared file would force local review to require a CI secret.
-- Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, the same-repo-only merge-ref checkout (never check out fork code into a job holding `CLAUDE_CODE_OAUTH_TOKEN`), SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/shuvbot`.
+- Keep its top-level `permissions: {}` deny-by-default posture, job-level least-privilege permissions, explicit trusted-default-branch checkout (never pull request code), SHA-pinned third-party actions, and artifact upload for `$RUNNER_TEMP/shuvbot`.
 
 ## Expected validation commands
 
@@ -131,8 +131,8 @@ on `master`, so it is now enforced rather than conventional. It ends with a
 `dist-bundle.test.ts`**: that test byte-compares `dist/index.js` only, so a
 comment-only source change leaves `index.js` identical while `index.js.map`
 drifts and the test still passes (verified by doing exactly that). Since
-shuvbot's own review workflow runs `uses: ./`, a stale bundle means a pull
-request is reviewed by code that is not the code under review - so regenerate
+shuvbot's own review workflow runs the default branch's `uses: ./`, a stale
+bundle means the next manually requested review still runs old source. Regenerate
 with `bun run build` and commit `index.js` and `index.js.map` together.
 
 ## Notes for future agents
@@ -237,9 +237,7 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
      `createSession({ policy })`, not forked. `createSession` rejects any policy
      that widens `REVIEW_SESSION_POLICY` before the server enforces it.
 - **Comment-triggered review has three couplings that are easy to break.**
-  `@shuvbot review` on a pull request is live (verified end to end on PR #22:
-  the `issue_comment` run resolved `refs/pull/22/merge`, checked it out, and
-  posted inline findings).
+  `@shuvbot review` on a pull request is live (verified end to end on PR #22).
   1. **Review skills trigger on `pull_request` actions**
      (`core/src/skills/*.ts`), so a comment event selects _no_ skills and
      reviews nothing. `resolveReviewTarget`
@@ -259,10 +257,10 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
      every comment on every pull request starts one. The workflow additionally
      requires write access purely to avoid spending a run; the action does not
      trust it.
-     The workflow checks out `refs/pull/N/merge` **only for a same-repo head** -
-     fork code must never land in a job holding `CLAUDE_CODE_OAUTH_TOKEN`. Fork
-     pull requests are still reviewed but never posted to, and that refusal is now
-     reported rather than silent.
+     The workflow always checks out the trusted default branch and obtains the
+     pull request patch through the API. Pull request code must never land in a
+     job holding `CLAUDE_CODE_OAUTH_TOKEN`. Fork pull requests are still reviewed
+     but never posted to, and that refusal is reported rather than silent.
 - **`main()` no longer exits green when nothing handled the run.** The
   fall-through used to emit `status: "initialized"` and a success summary, so
   an `@shuvbot` mention that matched no handler produced no review, no error,

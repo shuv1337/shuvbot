@@ -22,6 +22,8 @@ export interface ActionInputs {
   push?: PermissionLevel;
   shell?: PermissionLevel;
   token?: string;
+  /** Login that owns review comments created with the configured token. */
+  botLogin?: string;
   /**
    * Review engine, opt-in only. The config default is `coordinator`, but the
    * Action must not adopt it silently: the coordinator needs a pinned shuvcode
@@ -47,6 +49,7 @@ export function readActionInputs(): ActionInputs {
   setOptional(inputs, "push", optionalEnumInput("push", PERMISSION_LEVELS));
   setOptional(inputs, "shell", optionalEnumInput("shell", PERMISSION_LEVELS));
   setOptional(inputs, "token", optionalInput("token"));
+  setOptional(inputs, "botLogin", optionalInput("bot_login"));
   setOptional(inputs, "engine", optionalEnumInput("engine", REVIEW_ENGINES));
   return inputs;
 }
