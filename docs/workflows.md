@@ -78,7 +78,7 @@ single-agent path does not.
    (or `ANTHROPIC_API_KEY`) to the step. That one credential is the only variable
    shuvbot passes into the runtime; nothing else in the job environment reaches it.
 
-The Claude Code CLI is *not* needed for coordinator review - it replaces that driver.
+The Claude Code CLI is _not_ needed for coordinator review - it replaces that driver.
 
 ```yaml
 name: shuvbot
@@ -148,7 +148,33 @@ Fork pull requests are reviewed but never posted to, and never receive state.
 ## Comment-Triggered Review
 
 Commenting `@shuvbot review` on a pull request reviews it on demand. This is the same review that
-the `pull_request` trigger runs; only the way it starts differs.
+the `pull_request` trigger runs; only the way it starts differs. Used on its own, without a
+`pull_request` trigger, it makes review entirely manual - shuvbot then does nothing until asked.
+
+**Subscribe to both comment events.** "Commenting on a pull request" is two distinct GitHub events,
+and they look like a single act from the UI:
+
+```yaml
+on:
+  issue_comment: # the conversation tab
+    types: [created, edited]
+  pull_request_review_comment: # an inline comment on a diff line
+    types: [created, edited]
+```
+
+The action handles both. Subscribing to only `issue_comment` - the easy mistake - leaves
+`@shuvbot review` typed on a diff line silently dead: no run, no error, no reply. Note that
+`github.event.issue.number` is undefined for `pull_request_review_comment`, so guards, concurrency
+groups, and any PR-number lookup need `github.event.issue.number || github.event.pull_request.number`.
+
+`issue_comment` also fires for **plain issues**, which carry no diff. Require
+`github.event.issue.pull_request != null` so a mention on an ordinary issue starts no run at all;
+without it, the run starts and then fails, because there is nothing to review.
+
+To restrict who can invoke shuvbot, match the login directly - `github.event.comment.user.login ==
+'<you>'`. GitHub sets that field, so it cannot be spoofed. Be aware this is then the _only_ identity
+gate: the action re-checks write access but has no actor allowlist, so it will not catch a mistake
+in that expression.
 
 The action resolves which pull request a comment refers to, then presents it to the review pipeline
 as a `pull_request` event. That indirection is not cosmetic: review skills trigger on
