@@ -21,10 +21,19 @@ import type { CoordinatorResult } from "./results.ts";
 import type { ModelRef } from "./plugins/types.ts";
 import type { ShuvcodeRuntime, StartShuvcodeRuntimeOptions } from "./runtime/shuvcode.ts";
 import type { ReviewStateStore } from "./state.ts";
-import type { ReviewExecutionPlan } from "./types.ts";
-import { createReviewWorkspace } from "./workspace.ts";
+import type { ChangedFileStatus, ReviewExecutionPlan } from "./types.ts";
+import { createReviewWorkspace, type WorkspaceChangedFile } from "./workspace.ts";
 
 export const REVIEW_CLEANUP_TIMEOUT_MS = 5_000;
+/**
+ * Ceiling on files whose post-change content is sourced from the platform.
+ *
+ * Each one is a separate API request, so a sprawling pull request would other-
+ * wise spend its whole deadline fetching context nobody reads. The files a
+ * reviewer most needs are the ones it was assigned, and those come first.
+ */
+export const MAX_SOURCED_CONTENT_FILES = 100;
+const CONTENT_SOURCE_CONCURRENCY = 4;
 const MAX_TIMER_MS = 2_147_483_647;
 
 export type CoordinatorRunStatus = "completed" | "degraded" | "failed" | "timed_out" | "cancelled";
@@ -68,9 +77,34 @@ export interface RunCoordinatorReviewInput {
   readonly plugins?: readonly ReviewPlugin[];
   /** Header line of the shared reviewer context; names the review surface. */
   readonly contextHeader: string;
+  /**
+   * Supplies a changed file's post-change content, when the caller can.
+   *
+   * Reviewers are scoped to the temporary workspace, and in the GitHub Action
+   * the checkout is the trusted default branch rather than the pull request, so
+   * anything a reviewer needs to read must be materialised as data. The source
+   * is a callback rather than a field on the input files because it must run
+   * only for files that survive filtering: fetching content for a lockfile no
+   * reviewer will ever see is pure cost.
+   *
+   * Best-effort by contract. A file whose content cannot be sourced is reviewed
+   * from its patch alone, which is what happened for every file before this
+   * existed.
+   */
+  readonly sourceContent?: ReviewContentSource;
   readonly onPlan?: (plan: ReviewExecutionPlan) => void;
   readonly onProgress?: (event: CoordinatorEngineProgressEvent) => void | Promise<void>;
 }
+
+export interface ReviewContentSourceFile {
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly status: ChangedFileStatus;
+}
+
+export type ReviewContentSource = (
+  file: ReviewContentSourceFile
+) => Promise<string | undefined> | string | undefined;
 
 export interface CoordinatorReviewReportOptions {
   readonly lifecycle: {
@@ -143,14 +177,13 @@ export async function runCoordinatorReview(
           "incremental state read"
         );
 
+  const workspaceFiles = await deadline.race(
+    collectWorkspaceFiles(plan, input.sourceContent),
+    "post-change content collection"
+  );
+
   const workspaceOperation = createReviewWorkspace({
-    files: plan.diff.entries
-      .filter((file) => file.included)
-      .map((file) => ({
-        path: file.path,
-        patch: file.patch ?? "",
-        ...(file.content === undefined ? {} : { content: file.content })
-      })),
+    files: workspaceFiles,
     sharedContext: renderSharedReviewContext(plan, input.contextHeader),
     ...(previous === null ? {} : { previousFindings: previous.findings })
   });
@@ -258,6 +291,57 @@ export async function runCoordinatorReview(
       );
     }
   }
+}
+
+/**
+ * Builds the workspace's file set, sourcing post-change content for the files a
+ * reviewer will actually see.
+ *
+ * A deleted file has no post-change content by definition, and a file that
+ * already carries content keeps it. Failures are swallowed on purpose: content
+ * is context, and a review that dies because one blob could not be fetched is
+ * strictly worse than a review that reads that file's patch alone.
+ */
+async function collectWorkspaceFiles(
+  plan: ReviewExecutionPlan,
+  sourceContent: ReviewContentSource | undefined
+): Promise<WorkspaceChangedFile[]> {
+  const included = plan.diff.entries.filter((file) => file.included);
+  const files = included.map(
+    (file): WorkspaceChangedFile => ({
+      path: file.path,
+      patch: file.patch ?? "",
+      ...(file.content === undefined ? {} : { content: file.content })
+    })
+  );
+  if (sourceContent === undefined) return files;
+
+  const pending = included
+    .map((file, index) => ({ file, index }))
+    .filter(({ file }) => file.content === undefined && file.status !== "deleted")
+    .slice(0, MAX_SOURCED_CONTENT_FILES);
+
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let cursor = next++; cursor < pending.length; cursor = next++) {
+      const { file, index } = pending[cursor]!;
+      let content: string | undefined;
+      try {
+        content = await sourceContent({
+          path: file.path,
+          ...(file.previousPath === undefined ? {} : { previousPath: file.previousPath }),
+          status: file.status
+        });
+      } catch {
+        continue;
+      }
+      if (content !== undefined) files[index] = { ...files[index]!, content };
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CONTENT_SOURCE_CONCURRENCY, pending.length) }, worker)
+  );
+  return files;
 }
 
 /**

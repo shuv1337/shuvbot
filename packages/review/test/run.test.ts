@@ -5,6 +5,7 @@ import type { CoordinatorEngineResult } from "../src/engine.ts";
 import { createReviewExecutionPlanFromConfig, type ReviewPlanFile } from "../src/plan.ts";
 import { parseCoordinatorResult, type CoordinatorResult } from "../src/results.ts";
 import {
+  MAX_SOURCED_CONTENT_FILES,
   coordinatorRunStatus,
   createReviewDeadline,
   parseReviewDurationMs,
@@ -199,6 +200,99 @@ describe("shared coordinator review run", () => {
       path: "src/helpers.ts",
       content: "export function added(): void {}\n"
     });
+  });
+
+  test("sources content only for files that survive filtering, and never for deletions", async () => {
+    const requested: string[] = [];
+    const materialised = new Map<string, string | undefined>();
+    const input = runInput({
+      files: [
+        changedFile({ path: "src/helpers.ts" }),
+        changedFile({ path: "src/gone.ts", status: "deleted" }),
+        changedFile({ path: "bun.lock", patch: "@@ -1 +1 @@\n-a\n+b\n" })
+      ],
+      sourceContent: async ({ path }) => {
+        requested.push(path);
+        return `sourced content for ${path}`;
+      },
+      dependencies: {
+        executeCoordinator: async ({ workspace }) => {
+          for (const file of workspace.manifest.files) {
+            materialised.set(
+              file.path,
+              file.contentPath === undefined
+                ? undefined
+                : await Bun.file(`${workspace.root}/${file.contentPath}`).text()
+            );
+          }
+          return execution();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        },
+        now: () => new Date()
+      }
+    });
+
+    await runCoordinatorReview(input);
+    input.deadline.dispose();
+
+    // A lockfile is filtered out of review, so fetching its content would be a
+    // request whose result no reviewer can ever read.
+    expect(requested).toEqual(["src/helpers.ts"]);
+    expect(materialised.get("src/helpers.ts")).toBe("sourced content for src/helpers.ts");
+    expect(materialised.get("src/gone.ts")).toBeUndefined();
+  });
+
+  test("reviews from the patch alone when sourcing a file's content fails", async () => {
+    let entries: Array<{ path: string; contentPath?: string }> = [];
+    const input = runInput({
+      files: [changedFile({ path: "src/a.ts" }), changedFile({ path: "src/b.ts" })],
+      sourceContent: async ({ path }) => {
+        if (path === "src/a.ts") throw new Error("GitHub request failed (404)");
+        return "content for b";
+      },
+      dependencies: {
+        executeCoordinator: async ({ workspace }) => {
+          entries = workspace.manifest.files.map((file) => ({
+            path: file.path,
+            ...(file.contentPath === undefined ? {} : { contentPath: file.contentPath })
+          }));
+          return execution();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        },
+        now: () => new Date()
+      }
+    });
+
+    const run = await runCoordinatorReview(input);
+    input.deadline.dispose();
+
+    expect(run.kind).toBe("reviewed");
+    expect(entries.find(({ path }) => path === "src/a.ts")?.contentPath).toBeUndefined();
+    expect(entries.find(({ path }) => path === "src/b.ts")?.contentPath).toBeDefined();
+  });
+
+  test("bounds how many files have their content sourced", async () => {
+    const requested: string[] = [];
+    const files = Array.from({ length: MAX_SOURCED_CONTENT_FILES + 5 }, (_unused, index) =>
+      changedFile({ path: `src/file-${index}.ts` })
+    );
+    const input = runInput({
+      files,
+      sourceContent: ({ path }) => {
+        requested.push(path);
+        return "content";
+      }
+    });
+
+    await runCoordinatorReview(input);
+    input.deadline.dispose();
+
+    expect(requested).toHaveLength(MAX_SOURCED_CONTENT_FILES);
+    expect(requested[0]).toBe("src/file-0.ts");
   });
 
   test("cleans up the workspace even when the engine fails", async () => {
