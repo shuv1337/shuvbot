@@ -16,7 +16,11 @@ import {
   coordinatorPostingPolicy,
   type CoordinatorPostingPolicy
 } from "../../review/src/posting-policy.ts";
-import { renderCoordinatorReport } from "../../review/src/report.ts";
+import {
+  buildCoordinatorFindingsArtifact,
+  type CoordinatorFindingsArtifact,
+  renderCoordinatorReport
+} from "../../review/src/report.ts";
 import type { CoordinatedFinding } from "../../review/src/results.ts";
 import { resolveShuvcodeCredential } from "../../review/src/runtime/auth.ts";
 import { startShuvcodeRuntime } from "../../review/src/runtime/shuvcode.ts";
@@ -75,7 +79,8 @@ export interface CoordinatorActionReviewResult {
   readonly degraded: boolean;
   readonly summary: string;
   readonly findings: readonly CoordinatedFinding[];
-  readonly report?: unknown;
+  /** Canonical `shuvbot-findings.json` payload; identical in shape to the CLI's. */
+  readonly report?: CoordinatorFindingsArtifact;
   readonly postedComments: number;
   readonly posted: boolean;
   readonly failCheck: boolean;
@@ -271,7 +276,11 @@ export async function runCoordinatorActionReview(
       degraded: posting.degraded,
       summary,
       findings: run.reportedResult.findings,
-      report: run.report,
+      report: buildCoordinatorFindingsArtifact({
+        report: run.report,
+        baseSha: input.baseSha,
+        headSha: input.headSha
+      }),
       postedComments,
       posted,
       failCheck: posting.failCheck,

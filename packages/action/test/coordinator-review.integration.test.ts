@@ -403,6 +403,14 @@ describe("main() coordinator review mode", () => {
       await readFile(join(cwd, "shuvbot", "shuvbot-findings.json"), "utf8")
     ) as { findings: unknown[] };
     expect(findings.findings).toHaveLength(1);
+    // Same canonical shape the CLI writes; see the local-review artifact test.
+    expect(findings).toMatchObject({
+      version: 1,
+      baseSha: expect.any(String),
+      headSha: expect.any(String),
+      degraded: expect.any(Boolean),
+      coverage: expect.objectContaining({ quorumMet: expect.any(Boolean) })
+    });
   });
 
   test("writes redacted run, findings, and session artifacts", async () => {

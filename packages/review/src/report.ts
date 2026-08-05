@@ -158,6 +158,29 @@ export function stringifyCoordinatorReport(
   return `${JSON.stringify(buildCoordinatorReport(value, options), null, 2)}\n`;
 }
 
+/** The revision range a report describes, plus the report itself. */
+export interface CoordinatorFindingsArtifact extends CoordinatorReportJson {
+  readonly baseSha: string;
+  readonly headSha: string;
+}
+
+/**
+ * Builds the canonical `shuvbot-findings.json` payload.
+ *
+ * Both the CLI and the Action write a file under that name, and they used to
+ * write different shapes: the local one carried `baseSha`/`headSha` but dropped
+ * `coverage` and `degraded`, and the Action's did the reverse. Anything reading
+ * the artifact - a script, a later run, a person diffing local against CI - hit
+ * two schemas behind one filename. This is the single shape both now emit.
+ */
+export function buildCoordinatorFindingsArtifact(input: {
+  readonly report: CoordinatorReportJson;
+  readonly baseSha: string;
+  readonly headSha: string;
+}): CoordinatorFindingsArtifact {
+  return { ...input.report, baseSha: input.baseSha, headSha: input.headSha };
+}
+
 function count(values: readonly string[], expected: string): number {
   return values.filter((value) => value === expected).length;
 }
