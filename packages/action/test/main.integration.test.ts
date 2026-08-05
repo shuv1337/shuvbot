@@ -360,6 +360,37 @@ describe("main() unhandled requests", () => {
     );
   }
 
+  /**
+   * An inline comment on a diff line. This is `pull_request_review_comment`,
+   * a different event from `issue_comment`, even though both are "commenting
+   * on a pull request" from the UI. The repository workflow subscribes to
+   * both, so both have to actually start a review.
+   */
+  async function writeReviewCommentEvent(body: string) {
+    process.env.GITHUB_EVENT_NAME = "pull_request_review_comment";
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        action: "created",
+        repository: {
+          owner: { login: "octo" },
+          name: "repo",
+          full_name: "octo/repo",
+          private: false
+        },
+        sender: { login: "alice" },
+        pull_request: pullRequestPayload(),
+        comment: {
+          id: 11,
+          body,
+          user: { login: "alice" },
+          path: "src/app.ts",
+          position: 2
+        }
+      })
+    );
+  }
+
   test("fails loudly when an explicit mention refers to no pull request", async () => {
     await writeCommentEvent("@shuvbot review", { onPullRequest: false });
     const server = fakeGitHubServer({
@@ -426,6 +457,49 @@ describe("main() unhandled requests", () => {
     };
     expect(reviewBody.comments[0]!.path).toBe("src/app.ts");
     expect(JSON.stringify(reviewBody)).toContain(INJECTED_FINDING.body);
+  });
+
+  test("@shuvbot review on an inline diff comment posts a review", async () => {
+    await writeReviewCommentEvent("@shuvbot review");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      },
+      "GET /repos/octo/repo/pulls/1 [diff]": { status: 200, body: PR_DIFF },
+      "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] },
+      "GET /repos/octo/repo/pulls/1/comments": { status: 200, body: [] },
+      "POST /repos/octo/repo/pulls/1/reviews": {
+        status: 200,
+        body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
+      }
+    });
+
+    await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
+
+    const postedReview = server.calls.find(
+      (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+    );
+    expect(postedReview).toBeDefined();
+    expect(JSON.stringify(postedReview!.body)).toContain(INJECTED_FINDING.body);
+  });
+
+  test("an inline diff comment without a mention reviews nothing", async () => {
+    await writeReviewCommentEvent("this line looks wrong to me");
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      }
+    });
+
+    await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
+
+    expect(
+      server.calls.some(
+        (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+      )
+    ).toBe(false);
   });
 
   test("runs the review but refuses to post it when the head is a fork", async () => {
