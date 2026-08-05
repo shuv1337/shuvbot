@@ -184,6 +184,13 @@ describe("main() coordinator review mode", () => {
         'package = "shuvcode"',
         `version = "${APPROVED_SHUVCODE_RUNTIME_VERSION}"`,
         'auth = "environment"',
+        "",
+        // Environment auth forwards one credential, so the roster must sit on
+        // one provider. The built-in defaults span three and are refused.
+        "[review.models]",
+        'coordinator = "subscription/claude-opus-5@medium"',
+        'standard = "subscription/claude-fable-5@high"',
+        'light = "subscription/claude-fable-5@low"',
         ""
       ].join("\n")
     );
@@ -403,6 +410,14 @@ describe("main() coordinator review mode", () => {
       await readFile(join(cwd, "shuvbot", "shuvbot-findings.json"), "utf8")
     ) as { findings: unknown[] };
     expect(findings.findings).toHaveLength(1);
+    // Same canonical shape the CLI writes; see the local-review artifact test.
+    expect(findings).toMatchObject({
+      version: 1,
+      baseSha: expect.any(String),
+      headSha: expect.any(String),
+      degraded: expect.any(Boolean),
+      coverage: expect.objectContaining({ quorumMet: expect.any(Boolean) })
+    });
   });
 
   test("writes redacted run, findings, and session artifacts", async () => {
@@ -530,6 +545,51 @@ describe("main() coordinator review mode", () => {
         }
       })
     ).rejects.toThrow("requires a credential in the environment");
+  });
+
+  test("discovers shuvbot.toml in the working directory without an explicit input", async () => {
+    // The repository's own committed config used to be ignored in CI while
+    // applying locally, so the same file meant two different things.
+    // configPath is already cwd/shuvbot.toml, the discovery location.
+    delete process.env.INPUT_CONFIG;
+    const server = fakeGitHubServer(routes());
+
+    await main({
+      fetchImpl: server.fetchImpl,
+      coordinator: {
+        executeCoordinator: async () => engineResult({ findings: [finding()] }),
+        startRuntime: async () => {
+          throw new Error("unused");
+        }
+      }
+    });
+
+    // Reached posting at all, which means auth = "environment" was picked up
+    // from the discovered file rather than falling back to the "user" default.
+    expect(
+      server.calls.some(
+        (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
+      )
+    ).toBe(true);
+  });
+
+  test("falls back to defaults when no config file exists", async () => {
+    delete process.env.INPUT_CONFIG;
+    await rm(configPath, { force: true });
+    const server = fakeGitHubServer(routes());
+
+    // No shuvbot.toml written, so auth stays "user" and a runner run refuses.
+    await expect(
+      main({
+        fetchImpl: server.fetchImpl,
+        coordinator: {
+          executeCoordinator: async () => engineResult(),
+          startRuntime: async () => {
+            throw new Error("unused");
+          }
+        }
+      })
+    ).rejects.toThrow('requires review.shuvcode.auth = "environment"');
   });
 
   test("refuses local profile auth on a runner", async () => {

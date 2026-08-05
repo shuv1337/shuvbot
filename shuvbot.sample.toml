@@ -1,0 +1,70 @@
+agent = "claude-code"
+model = "claude/sonnet"
+mode = "review"
+timeout = "1h"
+activity_timeout = "5m"
+fail_on = "high"
+fail_check = false
+request_changes = false
+report_on = "medium"
+min_confidence = "medium"
+shell = "restricted"
+push = "restricted"
+
+[review]
+# The multi-agent coordinator. "legacy" remains selectable but has no safe
+# production driver and fails closed, so treat it as historical.
+engine = "coordinator"
+max_concurrency = 3
+overall_timeout = "15m"
+incremental = true
+sensitive_paths = []
+
+[review.shuvcode]
+package = "shuvcode"
+# Must equal the code-approved executable pin, or the review fails before it
+# starts rather than running against an untested runtime.
+version = "2.0.0-alpha-9"
+use_user_auth = true
+# "user" authenticates from your own shuvcode profile and injects nothing.
+# "environment" is the non-interactive path for CI, where shuvbot passes one
+# credential (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY) to the runtime.
+auth = "user"
+
+[review.models]
+coordinator = "subscription/default-reasoning"
+standard = "subscription/default-coding"
+light = "subscription/default-fast"
+
+[review.tiers.trivial]
+max_lines = 10
+max_files = 20
+reviewers = ["code-quality"]
+
+[review.tiers.lite]
+max_lines = 100
+max_files = 20
+# The planner chooses one content-aware specialist from performance, documentation, and release.
+reviewers = ["code-quality", "tests", "performance", "documentation", "release"]
+
+[review.tiers.full]
+reviewers = ["code-quality", "security", "performance", "tests", "documentation", "release"]
+
+[paths]
+include = ["**/*"]
+ignore = []
+
+[shell_sandbox]
+allow_commands = []
+deny_commands = ["sudo", "su", "docker", "podman"]
+
+[fix_ci]
+max_attempts = 3
+max_runtime = "90m"
+rerun_checks = true
+
+[memory]
+enabled = false
+backend = "github"
+learnings = false
+pr_summaries = true

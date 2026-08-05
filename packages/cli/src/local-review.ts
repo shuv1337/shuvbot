@@ -28,7 +28,11 @@ import {
 import { createLocalChangeIdentity } from "../../review/src/identity.ts";
 import { createReviewExecutionPlanFromConfig } from "../../review/src/plan.ts";
 import { createLocalReviewPlugin } from "../../review/src/plugins/index.ts";
-import { buildCoordinatorReport, renderCoordinatorReport } from "../../review/src/report.ts";
+import {
+  buildCoordinatorFindingsArtifact,
+  buildCoordinatorReport,
+  renderCoordinatorReport
+} from "../../review/src/report.ts";
 import type { ReconcileReviewStateResult } from "../../review/src/reconcile.ts";
 import {
   startShuvcodeRuntime,
@@ -494,16 +498,11 @@ async function persistLocalArtifacts(input: {
         ? "success"
         : "failure"
     );
-    const findingsArtifact = {
-      version: 1,
+    const findingsArtifact = buildCoordinatorFindingsArtifact({
+      report: input.report,
       baseSha: input.baseSha,
-      headSha: input.headSha,
-      decision: input.report.decision,
-      counts: input.report.counts,
-      findings: input.report.findings,
-      lifecycle: input.report.lifecycle,
-      dropped: input.report.dropped
-    };
+      headSha: input.headSha
+    });
     await localFsWithinDeadline(
       input.fileSystem.mkdir(input.directory, { recursive: true, mode: 0o700 }),
       input.deadlineAtMs,

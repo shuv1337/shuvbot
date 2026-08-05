@@ -1089,6 +1089,20 @@ describe("local review CLI", () => {
 
     const run = JSON.parse(await readFile(join(directory, "shuvbot-run.json"), "utf8"));
     const findings = await readFile(join(directory, "shuvbot-findings.json"), "utf8");
+    // One canonical findings shape, identical to the one the Action writes, so
+    // a reader does not meet two schemas behind a single filename.
+    expect(JSON.parse(findings)).toMatchObject({
+      version: 1,
+      baseSha: expect.any(String),
+      headSha: expect.any(String),
+      decision: expect.any(String),
+      degraded: expect.any(Boolean),
+      coverage: expect.objectContaining({ quorumMet: expect.any(Boolean) }),
+      counts: expect.any(Object),
+      findings: expect.any(Array),
+      lifecycle: expect.any(Object),
+      dropped: expect.any(Array)
+    });
     expect(run.review).toMatchObject({
       engine: "coordinator",
       tier: "trivial",

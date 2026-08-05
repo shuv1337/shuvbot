@@ -250,8 +250,7 @@ export class GitHubReviewStateStore implements ReviewStateStore {
           if (typeof user !== "object" || user === null) return false;
           const login = (user as Record<string, unknown>).login;
           return (
-            typeof login === "string" &&
-            login.toLowerCase() === this.input.botLogin.toLowerCase()
+            typeof login === "string" && login.toLowerCase() === this.input.botLogin.toLowerCase()
           );
         })
       );

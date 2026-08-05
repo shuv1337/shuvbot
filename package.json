@@ -16,7 +16,8 @@
     "evals": "bun packages/evals/src/harness.ts",
     "smoke:runtime": "bun scripts/runtime-compat-smoke.ts",
     "dogfood:review": "bun packages/cli/src/index.ts review",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@actions/core": "^1.11.1",

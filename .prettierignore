@@ -1,0 +1,5 @@
+# Generated bundle: tsup owns its formatting, and reformatting it would break
+# the byte-comparison staleness guard in dist-bundle.test.ts.
+dist/
+node_modules/
+bun.lock

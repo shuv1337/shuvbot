@@ -32384,6 +32384,7 @@ var core5 = __toESM(require_core(), 1);
 // packages/action/src/main.ts
 var core4 = __toESM(require_core(), 1);
 import { readFile as readFile5 } from "fs/promises";
+import { existsSync } from "fs";
 import { join as join9 } from "path";
 import { tmpdir as tmpdir2 } from "os";
 
@@ -63772,6 +63773,9 @@ function renderCoordinatorReport(value, options = {}) {
   }
   return lines.join("\n");
 }
+function buildCoordinatorFindingsArtifact(input) {
+  return { ...input.report, baseSha: input.baseSha, headSha: input.headSha };
+}
 function count(values, expected) {
   return values.filter((value) => value === expected).length;
 }
@@ -63785,6 +63789,103 @@ function sanitize(value, redact) {
   }).join("");
   const withoutCommonSecrets = withoutControls.replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "[REDACTED]").replace(/github_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED]").replace(/sk-[A-Za-z0-9_-]{20,}/g, "[REDACTED]").replace(/((?:TOKEN|SECRET|PASSWORD|API_KEY)\s*=\s*)[^\s]+/gi, "$1[REDACTED]");
   return redact ? redact(withoutCommonSecrets) : withoutCommonSecrets;
+}
+
+// packages/review/src/runtime/model-catalog.ts
+var SUBSCRIPTION_PREFIX = "subscription/";
+var VARIANT_SEPARATOR = "@";
+var CURATED_REVIEW_MODELS = Object.freeze({
+  "gpt-5.6-luna": {
+    providerID: "openai",
+    id: "gpt-5.6-luna",
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
+  },
+  "gpt-5.6-sol": {
+    providerID: "openai",
+    id: "gpt-5.6-sol",
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
+  },
+  "claude-opus-5": {
+    providerID: "anthropic",
+    id: "claude-opus-5",
+    efforts: ["low", "medium", "high", "xhigh", "max"]
+  },
+  "claude-fable-5": {
+    providerID: "anthropic",
+    id: "claude-fable-5",
+    efforts: ["low", "medium", "high", "xhigh", "max"]
+  },
+  "grok-4.5": { providerID: "xai", id: "grok-4.5", efforts: ["low", "medium", "high"] }
+});
+var REVIEW_MODEL_ALIASES = Object.freeze({
+  "default-reasoning": "claude-opus-5@medium",
+  "default-coding": "grok-4.5@high",
+  "default-fast": "gpt-5.6-luna@max"
+});
+function curatedModelNames() {
+  return [...Object.keys(REVIEW_MODEL_ALIASES), ...Object.keys(CURATED_REVIEW_MODELS)];
+}
+function resolveReviewModels(refs) {
+  const resolved = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    if (!resolved.has(ref)) resolved.set(ref, resolveReviewModel(ref));
+  }
+  return resolved;
+}
+function resolveReviewModel(ref) {
+  if (!ref.startsWith(SUBSCRIPTION_PREFIX)) {
+    throw modelConfigError(`Review model must use the subscription provider: ${ref}`);
+  }
+  const name = ref.slice(SUBSCRIPTION_PREFIX.length);
+  if (name.length === 0) throw modelConfigError(`Review model is missing a name: ${ref}`);
+  return resolveName(name, ref);
+}
+function resolveName(name, ref) {
+  const { base, variant } = splitVariant(name, ref);
+  const provider = base.indexOf(":");
+  if (provider !== -1) {
+    const providerID = base.slice(0, provider);
+    const id = base.slice(provider + 1);
+    if (providerID.length === 0 || id.length === 0) {
+      throw modelConfigError(
+        `Review model must name both a provider and a model as subscription/<provider>:<model>: ${ref}`
+      );
+    }
+    return variant === void 0 ? { providerID, id } : { providerID, id, variant };
+  }
+  const alias = REVIEW_MODEL_ALIASES[base];
+  if (alias !== void 0) {
+    const resolved = resolveName(alias, ref);
+    return variant === void 0 ? resolved : { ...resolved, variant };
+  }
+  const curated = CURATED_REVIEW_MODELS[base];
+  if (curated === void 0) {
+    throw modelConfigError(
+      `Unknown review model ${base}. Curated models: ${curatedModelNames().join(", ")}. Use subscription/<provider>:${base} to select an uncurated model.`
+    );
+  }
+  if (variant !== void 0 && !curated.efforts.includes(variant)) {
+    throw modelConfigError(
+      `Unknown reasoning effort ${variant} for ${base}. Accepted efforts: ${curated.efforts.join(", ")}.`
+    );
+  }
+  return variant === void 0 ? { providerID: curated.providerID, id: curated.id } : { providerID: curated.providerID, id: curated.id, variant };
+}
+function splitVariant(name, ref) {
+  const separator = name.indexOf(VARIANT_SEPARATOR);
+  if (separator === -1) return { base: name };
+  const base = name.slice(0, separator);
+  const variant = name.slice(separator + 1);
+  if (base.length === 0 || variant.length === 0) {
+    throw modelConfigError(
+      `Review model must name both a model and an effort as <model>@<effort>: ${ref}`
+    );
+  }
+  return { base, variant };
+}
+function modelConfigError(message) {
+  const classified = classifyReviewError({ category: "config", message });
+  return Object.assign(new Error(message), classified);
 }
 
 // packages/review/src/runtime/shuvcode.ts
@@ -64522,6 +64623,27 @@ async function settlesWithin(operation, timeoutMs) {
 }
 
 // packages/review/src/runtime/auth.ts
+var CREDENTIAL_PROVIDERS = Object.freeze({
+  CLAUDE_CODE_OAUTH_TOKEN: "anthropic",
+  ANTHROPIC_API_KEY: "anthropic"
+});
+function assertReviewModelsReachable(input) {
+  const available = CREDENTIAL_PROVIDERS[input.credential.name];
+  const unreachable = [];
+  for (const [role, ref] of Object.entries(input.models)) {
+    let providerID;
+    try {
+      providerID = resolveReviewModel(ref).providerID;
+    } catch {
+      continue;
+    }
+    if (providerID !== available) unreachable.push(`${role} (${ref} needs ${providerID})`);
+  }
+  if (unreachable.length === 0) return;
+  throw new ConfigError(
+    `review.shuvcode.auth = "environment" supplies a ${available} credential via ${input.credential.name}, but these review models need another provider: ${unreachable.join(", ")}. Configure [review.models] with ${available} models, or authenticate the review runtime with a profile that has those providers.`
+  );
+}
 function resolveShuvcodeCredential(input) {
   if (input.mode === "user") return void 0;
   for (const name of SHUVCODE_CREDENTIAL_ENV_NAMES) {
@@ -65406,6 +65528,9 @@ var REVIEW_CLEANUP_TIMEOUT_MS = 5e3;
 var MAX_TIMER_MS = 2147483647;
 async function runCoordinatorReview(input) {
   const { config: config2, deadline, redactor, dependencies } = input;
+  if (input.credential !== void 0) {
+    assertReviewModelsReachable({ credential: input.credential, models: config2.review.models });
+  }
   const plan = createReviewExecutionPlanFromConfig({
     files: input.files,
     baseSha: input.baseSha,
@@ -66375,103 +66500,6 @@ function validateEvent(event) {
   if (event.error !== void 0 && !["session.failed", "session.timed_out", "session.cancelled"].includes(event.event)) {
     throw new TypeError("errors are only valid on terminal failure events");
   }
-}
-
-// packages/review/src/runtime/model-catalog.ts
-var SUBSCRIPTION_PREFIX = "subscription/";
-var VARIANT_SEPARATOR = "@";
-var CURATED_REVIEW_MODELS = Object.freeze({
-  "gpt-5.6-luna": {
-    providerID: "openai",
-    id: "gpt-5.6-luna",
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
-  },
-  "gpt-5.6-sol": {
-    providerID: "openai",
-    id: "gpt-5.6-sol",
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
-  },
-  "claude-opus-5": {
-    providerID: "anthropic",
-    id: "claude-opus-5",
-    efforts: ["low", "medium", "high", "xhigh", "max"]
-  },
-  "claude-fable-5": {
-    providerID: "anthropic",
-    id: "claude-fable-5",
-    efforts: ["low", "medium", "high", "xhigh", "max"]
-  },
-  "grok-4.5": { providerID: "xai", id: "grok-4.5", efforts: ["low", "medium", "high"] }
-});
-var REVIEW_MODEL_ALIASES = Object.freeze({
-  "default-reasoning": "claude-opus-5@medium",
-  "default-coding": "grok-4.5@high",
-  "default-fast": "gpt-5.6-luna@max"
-});
-function curatedModelNames() {
-  return [...Object.keys(REVIEW_MODEL_ALIASES), ...Object.keys(CURATED_REVIEW_MODELS)];
-}
-function resolveReviewModels(refs) {
-  const resolved = /* @__PURE__ */ new Map();
-  for (const ref of refs) {
-    if (!resolved.has(ref)) resolved.set(ref, resolveReviewModel(ref));
-  }
-  return resolved;
-}
-function resolveReviewModel(ref) {
-  if (!ref.startsWith(SUBSCRIPTION_PREFIX)) {
-    throw modelConfigError(`Review model must use the subscription provider: ${ref}`);
-  }
-  const name = ref.slice(SUBSCRIPTION_PREFIX.length);
-  if (name.length === 0) throw modelConfigError(`Review model is missing a name: ${ref}`);
-  return resolveName(name, ref);
-}
-function resolveName(name, ref) {
-  const { base, variant } = splitVariant(name, ref);
-  const provider = base.indexOf(":");
-  if (provider !== -1) {
-    const providerID = base.slice(0, provider);
-    const id = base.slice(provider + 1);
-    if (providerID.length === 0 || id.length === 0) {
-      throw modelConfigError(
-        `Review model must name both a provider and a model as subscription/<provider>:<model>: ${ref}`
-      );
-    }
-    return variant === void 0 ? { providerID, id } : { providerID, id, variant };
-  }
-  const alias = REVIEW_MODEL_ALIASES[base];
-  if (alias !== void 0) {
-    const resolved = resolveName(alias, ref);
-    return variant === void 0 ? resolved : { ...resolved, variant };
-  }
-  const curated = CURATED_REVIEW_MODELS[base];
-  if (curated === void 0) {
-    throw modelConfigError(
-      `Unknown review model ${base}. Curated models: ${curatedModelNames().join(", ")}. Use subscription/<provider>:${base} to select an uncurated model.`
-    );
-  }
-  if (variant !== void 0 && !curated.efforts.includes(variant)) {
-    throw modelConfigError(
-      `Unknown reasoning effort ${variant} for ${base}. Accepted efforts: ${curated.efforts.join(", ")}.`
-    );
-  }
-  return variant === void 0 ? { providerID: curated.providerID, id: curated.id } : { providerID: curated.providerID, id: curated.id, variant };
-}
-function splitVariant(name, ref) {
-  const separator = name.indexOf(VARIANT_SEPARATOR);
-  if (separator === -1) return { base: name };
-  const base = name.slice(0, separator);
-  const variant = name.slice(separator + 1);
-  if (base.length === 0 || variant.length === 0) {
-    throw modelConfigError(
-      `Review model must name both a model and an effort as <model>@<effort>: ${ref}`
-    );
-  }
-  return { base, variant };
-}
-function modelConfigError(message) {
-  const classified = classifyReviewError({ category: "config", message });
-  return Object.assign(new Error(message), classified);
 }
 
 // packages/review/src/runtime/events.ts
@@ -68397,7 +68425,11 @@ async function runCoordinatorActionReview(input) {
       degraded: posting.degraded,
       summary: summary2,
       findings: run.reportedResult.findings,
-      report: run.report,
+      report: buildCoordinatorFindingsArtifact({
+        report: run.report,
+        baseSha: input.baseSha,
+        headSha: input.headSha
+      }),
       postedComments,
       posted,
       failCheck: posting.failCheck,
@@ -68564,10 +68596,12 @@ function toChangedFileStatus(value) {
 }
 
 // packages/action/src/main.ts
+var DEFAULT_CONFIG_FILENAME = "shuvbot.toml";
 async function main(overrides = {}) {
   const logger = new RunLogger();
   const inputs = readActionInputs();
-  const fileConfig = inputs.config ? await loadConfigFile(inputs.config) : normalizeConfig({});
+  const cwd = inputs.cwd ?? process.cwd();
+  const fileConfig = await resolveActionConfig(inputs.config, cwd, logger);
   const eventName = process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const eventPayload = await readEventPayload();
   const event = isSupportedEventName(eventName) && eventPayload ? normalizeEvent({ eventName, payload: eventPayload }) : null;
@@ -68659,7 +68693,7 @@ async function main(overrides = {}) {
           record: withPolicy,
           logger,
           botLogin: resolveBotLogin(inputs.botLogin),
-          cwd: inputs.cwd ?? process.cwd(),
+          cwd,
           ...overrides.signal ? { signal: overrides.signal } : {},
           ...overrides.coordinator ? { dependencies: overrides.coordinator } : {}
         });
@@ -68678,7 +68712,6 @@ async function main(overrides = {}) {
           }
         }
       );
-      const cwd = inputs.cwd ?? process.cwd();
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
       const mcpServer = await startShuvbotMcpServer({
@@ -68791,7 +68824,7 @@ ${boundedLogTail(message)}`);
     }
     if (mode === "implement" && command && event && policy) {
       const implementation = await runImplement({
-        cwd: inputs.cwd ?? process.cwd(),
+        cwd,
         runId: withPolicy.runId,
         command,
         policy,
@@ -69033,6 +69066,13 @@ function processCancellation() {
 }
 function resolveBotLogin(configured) {
   return configured ?? "github-actions[bot]";
+}
+async function resolveActionConfig(explicitPath, cwd, logger) {
+  if (explicitPath !== void 0) return loadConfigFile(explicitPath);
+  const discovered = join9(cwd, DEFAULT_CONFIG_FILENAME);
+  if (!existsSync(discovered)) return normalizeConfig({});
+  logger.log("info", "config.discovered", { path: DEFAULT_CONFIG_FILENAME });
+  return loadConfigFile(discovered);
 }
 function boundedLogTail(message, max = 4e3) {
   return message.length <= max ? message : `\u2026[${message.length - max} chars omitted]\u2026

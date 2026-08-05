@@ -16,3 +16,13 @@ version = "2.0.0-alpha-9"
 # credential in the job environment (CLAUDE_CODE_OAUTH_TOKEN). Local runs keep
 # the "user" default and authenticate from your own shuvcode profile.
 auth = "environment"
+
+# Anthropic-only, because environment auth forwards exactly one credential.
+# The built-in defaults span three providers - the coordinator is Anthropic but
+# specialists are xAI and the light role is OpenAI - which works on a machine
+# whose shuvcode profile has all three, and fails every specialist here. The
+# first real Action run degraded to 0/6 coverage for exactly this reason.
+[review.models]
+coordinator = "subscription/claude-opus-5@medium"
+standard = "subscription/claude-fable-5@high"
+light = "subscription/claude-fable-5@low"

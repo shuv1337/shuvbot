@@ -38,6 +38,11 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # Prettier is part of the stated baseline but `lint` is ESLint only, so
+      # formatting drifted in four source files before anything noticed.
+      - name: Format
+        run: bun run format:check
+
       - name: Test
         run: bun test
 

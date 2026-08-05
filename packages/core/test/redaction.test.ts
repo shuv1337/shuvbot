@@ -37,9 +37,7 @@ describe("exact-value redaction", () => {
     expect(new DefaultRedactor().redactString("using opaque-credential-value now")).toContain(
       "opaque-credential-value"
     );
-    expect(redactor.redactString("using opaque-credential-value now")).toBe(
-      "using [REDACTED] now"
-    );
+    expect(redactor.redactString("using opaque-credential-value now")).toBe("using [REDACTED] now");
   });
 
   test("still applies the underlying pattern redaction", () => {

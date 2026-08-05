@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createLocalChangeIdentity,
-  createPullRequestChangeIdentity
-} from "../src/identity.ts";
+import { createLocalChangeIdentity, createPullRequestChangeIdentity } from "../src/identity.ts";
 
 describe("local change identity", () => {
   test("is independent of checkout path and ref alias spelling after canonical resolution", () => {
