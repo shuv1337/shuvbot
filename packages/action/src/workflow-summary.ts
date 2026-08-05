@@ -67,6 +67,45 @@ export async function writeWorkflowSummary(
       )
     ]);
   }
+  if (record.review) {
+    const review = record.review;
+    // Coverage is the point of this table: a degraded review looks exactly like
+    // a clean one unless the missing reviewers are stated outright.
+    summary.addHeading("Review", 2).addTable([
+      [
+        { data: "Field", header: true },
+        { data: "Value", header: true }
+      ],
+      ["Engine", review.engine],
+      ["Risk tier", review.tier],
+      ["Decision", review.decision],
+      ["Quorum met", String(review.quorumMet)],
+      ["Reviewers completed", review.successfulReviewers.join(", ") || "none"],
+      ["Reviewers missing", review.missingReviewers.join(", ") || "none"],
+      ["Retries", String(review.retries)]
+    ]);
+    if (review.findingAccounting) {
+      const counts = review.findingAccounting;
+      summary.addHeading("Findings", 3).addTable([
+        [
+          { data: "Active", header: true },
+          { data: "New", header: true },
+          { data: "Unresolved", header: true },
+          { data: "Fixed", header: true },
+          { data: "User-resolved", header: true },
+          { data: "Dismissed", header: true }
+        ],
+        [
+          String(counts.active),
+          String(counts.new),
+          String(counts.unresolved),
+          String(counts.fixed),
+          String(counts.userResolved),
+          String(counts.dismissed)
+        ]
+      ]);
+    }
+  }
   if (record.implementation) {
     summary.addHeading("Implementation", 2).addTable([
       [

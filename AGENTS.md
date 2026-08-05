@@ -27,7 +27,24 @@ otherwise without checking `main.ts` directly.
 - `packages/review/` contains deterministic preprocessing, plugin assembly,
   specialist/coordinator execution, quorum, incremental state, scheduling,
   observability, and the isolated shuvcode adapter. The local CLI routes to
-  this coordinator path, but the GitHub Action does not.
+  this coordinator path by default; the GitHub Action routes to it only when a
+  workflow opts in (see below). Both go through `runCoordinatorReview` in
+  `packages/review/src/run.ts`, so review judgement cannot drift between them.
+- **The Action can run the coordinator, but only when a workflow opts in.**
+  `packages/action/src/main.ts` routes review mode through
+  `runCoordinatorActionReview` when the `engine` input is `coordinator`; it
+  deliberately does **not** read `review.engine`, whose default is already
+  `coordinator`. Honouring the config default here would break every existing
+  workflow on its next run, because coordinator review additionally needs the
+  pinned shuvcode package installed in the job (the action bundle never runs a
+  package manager) and `review.shuvcode.auth = "environment"`. Two rules that
+  are easy to regress: writing finding-lifecycle state is a **write to the pull
+  request**, so it is gated on `policy.canReview` exactly like posting - without
+  that gate a fork run posts a visible state comment on a pull request it is
+  refusing to review, and records unseen findings as "already seen", silencing
+  them next run. And a finding whose line is not in the diff must fall back to
+  the review body: GitHub rejects an entire review if a single comment position
+  is unmappable.
 - **Local review runs the coordinator by default.** The code-approved shuvcode
   runtime pin is `2.0.0-alpha-9` (`APPROVED_SHUVCODE_RUNTIME_VERSION` in
   `packages/core/src/config.ts`), verified against the published release by
@@ -37,8 +54,8 @@ otherwise without checking `main.ts` directly.
   repository first and from shuvbot's own install second, so reviewing a
   repository that does not depend on shuvcode works. `legacy` still fails
   closed - it has no safe production driver and only tests inject fake agents.
-  None of this affects the live Claude-backed GitHub Action review path, which
-  calls `runReview` directly and never reads `review.engine`.
+  None of this affects the Claude-backed Action review path, which stays the
+  default, calls `runReview` directly, and never reads `review.engine`.
 - `dist/index.js` is the compiled GitHub Action output produced by
   `bun run build`. It is committed but only regenerated periodically via a
   dedicated `chore(build): regenerate dist/index.js`-style commit, not on
@@ -85,7 +102,7 @@ otherwise without checking `main.ts` directly.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
 - `review.engine` defaults to `"coordinator"` (approved 2026-08-04, after the release, the packed-runtime smoke, and a real subscription dogfood). `legacy` remains selectable but has no safe production driver and fails closed, so treat it as a historical path rather than a fallback.
-- The coordinator is the working local review path, but it is not finished: the GitHub Action still does not route to it, GitHub-native coordinator writes do not exist, and the documented dogfood matrix has not been recorded. Don't describe it as production-hardened.
+- The coordinator works locally and, opt-in, in the GitHub Action, with GitHub-native posting and finding-lifecycle state. It is still not production-hardened: no opt-in coordinator workflow has been run end to end against a real pull request, the documented dogfood matrix has not been recorded, and the Action default has deliberately not been flipped. Describe it as usable and observed, not proven.
 
 ## Repository automation
 
