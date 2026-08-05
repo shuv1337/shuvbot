@@ -125,6 +125,16 @@ bun run build
 bun run evals
 ```
 
+`.github/workflows/ci.yml` runs exactly this sequence on every pull request and
+on `master`, so it is now enforced rather than conventional. It ends with a
+`git diff --exit-code dist/` check, which is deliberately **stricter than
+`dist-bundle.test.ts`**: that test byte-compares `dist/index.js` only, so a
+comment-only source change leaves `index.js` identical while `index.js.map`
+drifts and the test still passes (verified by doing exactly that). Since
+shuvbot's own review workflow runs `uses: ./`, a stale bundle means a pull
+request is reviewed by code that is not the code under review - so regenerate
+with `bun run build` and commit `index.js` and `index.js.map` together.
+
 ## Notes for future agents
 
 - When implementing from a plan, keep edits aligned with `SPEC.md` and update both the plan checkboxes and this file if repository reality changes.
