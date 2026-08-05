@@ -7,7 +7,8 @@ import {
   type ShuvcodeEvent,
   type ShuvcodeProcess,
   type ShuvcodeRuntimeDependencies,
-  ShuvcodeSessionError
+  ShuvcodeSessionError,
+  type StartShuvcodeRuntimeOptions
 } from "../src/runtime/shuvcode.ts";
 
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -150,7 +151,8 @@ function fixture(
   const start = (
     signal?: AbortSignal,
     startupLine: string | null = '{"url":"http://127.0.0.1:4321"}\n',
-    environment?: NodeJS.ProcessEnv
+    environment?: NodeJS.ProcessEnv,
+    credential?: StartShuvcodeRuntimeOptions["credential"]
   ) => {
     const runtime = startShuvcodeRuntime({
       packageName: "shuvcode",
@@ -158,6 +160,7 @@ function fixture(
       cwd: "/work/repo",
       ...(signal === undefined ? {} : { signal }),
       ...(environment === undefined ? {} : { environment }),
+      ...(credential === undefined ? {} : { credential }),
       shutdownGraceMs: 1,
       dependencies
     });
@@ -240,6 +243,50 @@ describe("shuvcode isolated runtime", () => {
     expect(subject.calls.spawn[0]?.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(subject.calls.spawn[0]?.env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
     await runtime.close();
+  });
+
+  test("injects only an explicitly supplied credential, never an inherited one", async () => {
+    const subject = fixture();
+    const runtime = await subject.start(
+      undefined,
+      undefined,
+      {
+        PATH: "/bin",
+        HOME: "/home/test",
+        // Present in the parent environment but not the supplied credential:
+        // inheritance must stay impossible even for an accepted name.
+        ANTHROPIC_API_KEY: "inherited-key",
+        GITHUB_TOKEN: "github-secret"
+      },
+      { name: "CLAUDE_CODE_OAUTH_TOKEN", value: "supplied-token" }
+    );
+
+    expect(subject.calls.spawn[0]?.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("supplied-token");
+    expect(subject.calls.spawn[0]?.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(subject.calls.spawn[0]?.env.GITHUB_TOKEN).toBeUndefined();
+    await runtime.close();
+  });
+
+  test("refuses a credential name the runtime does not authenticate with", async () => {
+    const subject = fixture();
+    await expect(
+      subject.start(undefined, undefined, undefined, {
+        name: "GITHUB_TOKEN" as never,
+        value: "github-secret"
+      })
+    ).rejects.toThrow("Refusing to inject GITHUB_TOKEN");
+    expect(subject.calls.spawn).toHaveLength(0);
+  });
+
+  test("refuses an empty credential rather than starting unauthenticated", async () => {
+    const subject = fixture();
+    await expect(
+      subject.start(undefined, undefined, undefined, {
+        name: "ANTHROPIC_API_KEY",
+        value: "   "
+      })
+    ).rejects.toThrow("Refusing to inject an empty ANTHROPIC_API_KEY");
+    expect(subject.calls.spawn).toHaveLength(0);
   });
 
   test("installs and verifies deny-by-default policy for parent and narrower child sessions", async () => {

@@ -57,6 +57,7 @@ export interface ShuvbotConfig {
       package: string;
       version: string;
       useUserAuth: boolean;
+      auth: "user" | "environment";
     };
     models: {
       coordinator: string;
@@ -134,7 +135,8 @@ export const DEFAULT_CONFIG: ShuvbotConfig = {
     shuvcode: {
       package: PINNED_SHUVCODE_PACKAGE,
       version: APPROVED_SHUVCODE_RUNTIME_VERSION ?? SHUVCODE_SOURCE_BASELINE_VERSION,
-      useUserAuth: true
+      useUserAuth: true,
+      auth: "user"
     },
     models: {
       coordinator: "subscription/default-reasoning",
@@ -355,6 +357,12 @@ export function normalizeConfig(raw: Record<string, unknown>): ShuvbotConfig {
         shuvcode.useUserAuth ?? shuvcode.use_user_auth,
         "review.shuvcode.use_user_auth",
         config.review.shuvcode.useUserAuth
+      );
+      config.review.shuvcode.auth = enumValue(
+        shuvcode.auth,
+        ["user", "environment"] as const,
+        "review.shuvcode.auth",
+        config.review.shuvcode.auth
       );
     }
 

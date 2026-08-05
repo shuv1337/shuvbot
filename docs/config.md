@@ -15,12 +15,22 @@ shuvcode profile with an authenticated provider. The pinned package is a shuvbot
 is resolved from the reviewed repository first, then from shuvbot's own installation, so reviewing
 a repository that does not itself depend on shuvcode works.
 
+`review.shuvcode.auth` selects where the runtime's provider credential comes from:
+
+- `"user"` (default) - the runtime authenticates from your own shuvcode profile. Shuvbot injects
+  nothing; every credential in the environment is stripped before the runtime starts.
+- `"environment"` - the non-interactive path, for CI. Shuvbot passes exactly one credential, taken
+  from `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, and nothing else in the environment
+  reaches the runtime. A missing credential fails before any review work starts.
+
 `legacy` is still selectable but fails closed before Git because it has no safe production driver;
 only tests inject fake agents. Treat it as a historical path rather than a fallback.
 
-The coordinator is still not supported by the GitHub Action, and the documented dogfood matrix and
-manual acceptance criteria have not been recorded, so it is not yet a production replacement for the
-Action's review path.
+The GitHub Action can run the coordinator, but only when a workflow opts in with
+`engine: coordinator`; it never adopts the `review.engine` default on its own, because a workflow
+with no runtime installed and no `auth = "environment"` would break on its next run. See
+`docs/workflows.md`. The documented dogfood matrix and manual acceptance criteria have still not
+been recorded, so treat coordinator review as usable and observed rather than production-hardened.
 
 For a local review, resolution order is:
 
@@ -115,6 +125,8 @@ package = "shuvcode"
 # Must equal the code-approved executable pin.
 version = "2.0.0-alpha-9"
 use_user_auth = true
+# "user" (local shuvcode profile) or "environment" (one credential from the environment, for CI).
+auth = "user"
 
 [review.models]
 coordinator = "subscription/default-reasoning"

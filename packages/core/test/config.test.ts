@@ -144,6 +144,15 @@ model = "subscription/sonnet"
     expect(() => normalizeConfig({ review: { shuvcode: { package: "opencode" } } })).toThrow(
       ConfigError
     );
+    // Authentication defaults to the local profile, so no configuration change
+    // can make a run start injecting credentials by accident.
+    expect(normalizeConfig({}).review.shuvcode.auth).toBe("user");
+    expect(
+      normalizeConfig({ review: { shuvcode: { auth: "environment" } } }).review.shuvcode.auth
+    ).toBe("environment");
+    expect(() => normalizeConfig({ review: { shuvcode: { auth: "inherit" } } })).toThrow(
+      ConfigError
+    );
     expect(() => normalizeConfig({ review: { models: { standard: "openai/codex" } } })).toThrow(
       ConfigError
     );

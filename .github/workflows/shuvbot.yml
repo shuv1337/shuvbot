@@ -1,9 +1,16 @@
 name: shuvbot
+
+# Manual only. shuvbot reviews when it is explicitly asked to, by mentioning it
+# in a comment on a pull request - never automatically on push or on open.
+#
+# Two comment events, because "commenting on a pull request" is two different
+# GitHub events that look like one act from the UI: `issue_comment` is the
+# conversation tab, `pull_request_review_comment` is an inline comment on a
+# diff line. Subscribing to only one makes the other silently do nothing.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [master]
   issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
     types: [created, edited]
 
 permissions: {} # deny by default
@@ -17,24 +24,22 @@ concurrency:
 jobs:
   review:
     name: shuvbot review
-    # Two ways in, with different guards.
+    # Only the repository owner, only an explicit @shuvbot mention, and only on
+    # a pull request.
     #
-    # pull_request: same-repo, non-draft only. Fork pull requests cannot receive
-    # CLAUDE_CODE_OAUTH_TOKEN, so they are skipped rather than failing auth.
+    # `issue_comment` also fires for plain issues, which carry no diff and
+    # nothing shuvbot can act on; filtering them here means an unrelated issue
+    # comment starts no run at all, rather than starting one that can only fail.
     #
-    # issue_comment: only comments on pull requests, only when the bot is
-    # mentioned, and only from someone who already has write access. The last
-    # check keeps a drive-by comment from spending a run; the action re-checks
-    # permission itself and does not trust this.
+    # `comment.user.login` is set by GitHub and cannot be spoofed, so this is a
+    # real gate - but it is the *only* identity gate. The action independently
+    # re-checks write access and never checks who the actor is, so do not
+    # weaken this line expecting shuvbot to catch it.
     if: >-
-      (github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        !github.event.pull_request.draft)
-      ||
-      (github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request != null &&
-        contains(github.event.comment.body, '@shuvbot') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      github.event.comment.user.login == 'shuv1337' &&
+      contains(github.event.comment.body, '@shuvbot') &&
+      (github.event_name == 'pull_request_review_comment' ||
+        github.event.issue.pull_request != null)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,46 +47,35 @@ jobs:
       issues: write
       checks: read
     steps:
-      # An issue_comment run checks out the default branch, not the pull
-      # request, so the agent would read pre-change files while reviewing a
-      # post-change diff. Resolve the merge ref instead - but only for a
-      # same-repo head. Checking out a fork here would put untrusted code in a
-      # job that holds CLAUDE_CODE_OAUTH_TOKEN, which is the one thing this
-      # trigger must never do. Fork pull requests keep the default checkout.
-      - name: Resolve pull request ref
-        id: target
-        if: github.event_name == 'issue_comment'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          set -euo pipefail
-          cross=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json isCrossRepository --jq .isCrossRepository)
-          if [ "$cross" = "false" ]; then
-            echo "ref=refs/pull/$PR_NUMBER/merge" >> "$GITHUB_OUTPUT"
-          else
-            echo "Fork pull request: keeping the default checkout." >&2
-            echo "ref=" >> "$GITHUB_OUTPUT"
-          fi
-
+      # Execute only code from the trusted default branch. The Action fetches
+      # the pull request diff through GitHub's API; PR-controlled dist files,
+      # dependencies, and lifecycle scripts must never run with the provider
+      # credential in the environment.
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          # Empty is actions/checkout's default (the ref that triggered the run).
-          ref: ${{ steps.target.outputs.ref || '' }}
+          ref: ${{ github.event.repository.default_branch }}
 
-      - name: Install Claude Code
-        run: |
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
 
-      - name: Verify Claude Code
-        run: claude --version
+      # The coordinator spawns a pinned shuvcode runtime, which has to be
+      # installed already: the action bundle is self-contained and never runs a
+      # package manager. shuvcode is an exact devDependency of this repository,
+      # so the lockfile is the pin and no separate install pin can drift.
+      - name: Install the review runtime
+        run: bun install --frozen-lockfile
 
+      # The trusted default-branch action, not the pull request's action code.
+      # This remains local because `engine: coordinator` is not in v0 yet.
       - name: Run shuvbot
-        uses: shuv1337/shuvbot@v0
+        uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          engine: coordinator
+          # The action does not auto-discover shuvbot.toml the way the CLI does.
+          # Without this the coordinator falls back to local-profile auth and
+          # refuses to start on a runner.
+          config: .github/shuvbot.ci.toml
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 

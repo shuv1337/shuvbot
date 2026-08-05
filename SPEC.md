@@ -436,7 +436,7 @@ deterministic config + policy
   -> deterministic validation, posting, and state reconciliation
 ```
 
-The coordinator engine is implemented beside the legacy review path behind `review.engine` for the local CLI; GitHub Action routing is not implemented. As of 2026-08-03, `legacy` remains the config default but local production legacy review fails closed because no safe driver exists, while coordinator execution fails before Git because no shuvcode release is code-approved yet. See `PLAN-multi-agent-review.md` for release, dogfood, and Action integration status.
+The coordinator engine is implemented beside the legacy review path behind `review.engine` for the local CLI and behind the explicit `engine: coordinator` input for GitHub Actions. The coordinator is the local config default and uses the code-approved `shuvcode@2.0.0-alpha-9` runtime; the Action remains opt-in because workflows must install that runtime and configure non-interactive authentication. Legacy production review fails closed because no safe driver exists. See `PLAN-multi-agent-review.md` for dogfood and integration status.
 
 Review plugins may contribute reviewers, providers, prompt sections, model assignments, and narrower tool permissions through a controlled context API. They must not mutate final configuration directly or widen runtime policy.
 

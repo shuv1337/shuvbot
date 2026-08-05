@@ -61,10 +61,120 @@ jobs:
 
 Obtain `CLAUDE_CODE_OAUTH_TOKEN` locally with `shuvbot auth claude setup-token --repo <owner>/<repo>` (see `docs/claude-token.md`), or use `ANTHROPIC_API_KEY` instead. Public repositories should keep `pull_request` (not `pull_request_target`) and add `if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft` on the job when credentials are unavailable to fork PRs and draft PRs should wait for review; fork PRs will be skipped instead of failing the Claude auth check, and draft PRs will run when marked ready for review because `ready_for_review` is included in the trigger types.
 
+## Multi-Agent Coordinator Review (opt-in)
+
+The coordinator engine runs six specialist reviewers and a coordinator that judges
+and consolidates their findings, instead of the single-agent path above. It is the
+default for local `shuvbot review`, but in the Action it is **opt-in**: adopting it
+silently would break every existing workflow, because it needs two things the
+single-agent path does not.
+
+1. **The pinned shuvcode runtime installed in the job.** The action bundle is
+   self-contained and never runs a package manager, so the workflow installs the
+   runtime. The version must match `review.shuvcode.version`; a mismatch fails
+   before any review work starts rather than running an untested runtime.
+2. **Non-interactive authentication.** A runner has no shuvcode profile, so set
+   `review.shuvcode.auth = "environment"` and expose `CLAUDE_CODE_OAUTH_TOKEN`
+   (or `ANTHROPIC_API_KEY`) to the step. That one credential is the only variable
+   shuvbot passes into the runtime; nothing else in the job environment reaches it.
+
+The Claude Code CLI is _not_ needed for coordinator review - it replaces that driver.
+
+```yaml
+name: shuvbot
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+      # Must match review.shuvcode.version in your shuvbot.toml.
+      - name: Install the review runtime
+        run: bun add --no-save shuvcode@2.0.0-alpha-9
+      - uses: shuv1337/shuvbot@v0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          engine: coordinator
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Upload shuvbot artifacts
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: shuvbot
+          path: ${{ runner.temp }}/shuvbot
+          if-no-files-found: warn
+```
+
+with `shuvbot.toml`:
+
+```toml
+[review]
+engine = "coordinator"
+
+[review.shuvcode]
+version = "2.0.0-alpha-9"
+auth = "environment"
+```
+
+### What the coordinator run publishes
+
+- **Inline review comments** for findings whose line is in the diff, each carrying a
+  fingerprint marker so a re-review updates rather than duplicates them. A finding
+  on a line outside the diff is reported in the review body instead of being dropped.
+- **Finding lifecycle state**, in a hidden comment on the pull request. It exists so
+  a later run does not repost findings you have already seen, and resolving a
+  finding's thread marks it resolved so it stays gone. Deleting that comment makes
+  the next review start fresh. State is only written when shuvbot is allowed to post.
+- **Outputs** `review_engine`, `review_tier`, `review_coverage`, and `review_degraded`,
+  plus a Review section in the workflow summary naming any reviewer that did not
+  complete. Degraded coverage never claims a clean result and never requests changes.
+
+Fork pull requests are reviewed but never posted to, and never receive state.
+`APPROVE` is never submitted, in any configuration.
+
 ## Comment-Triggered Review
 
 Commenting `@shuvbot review` on a pull request reviews it on demand. This is the same review that
-the `pull_request` trigger runs; only the way it starts differs.
+the `pull_request` trigger runs; only the way it starts differs. Used on its own, without a
+`pull_request` trigger, it makes review entirely manual - shuvbot then does nothing until asked.
+
+**Subscribe to both comment events.** "Commenting on a pull request" is two distinct GitHub events,
+and they look like a single act from the UI:
+
+```yaml
+on:
+  issue_comment: # the conversation tab
+    types: [created, edited]
+  pull_request_review_comment: # an inline comment on a diff line
+    types: [created, edited]
+```
+
+The action handles both. Subscribing to only `issue_comment` - the easy mistake - leaves
+`@shuvbot review` typed on a diff line silently dead: no run, no error, no reply. Note that
+`github.event.issue.number` is undefined for `pull_request_review_comment`, so guards, concurrency
+groups, and any PR-number lookup need `github.event.issue.number || github.event.pull_request.number`.
+
+`issue_comment` also fires for **plain issues**, which carry no diff. Require
+`github.event.issue.pull_request != null` so a mention on an ordinary issue starts no run at all;
+without it, the run starts and then fails, because there is nothing to review.
+
+To restrict who can invoke shuvbot, match the login directly - `github.event.comment.user.login ==
+'<you>'`. GitHub sets that field, so it cannot be spoofed. Be aware this is then the _only_ identity
+gate: the action re-checks write access but has no actor allowlist, so it will not catch a mistake
+in that expression.
 
 The action resolves which pull request a comment refers to, then presents it to the review pipeline
 as a `pull_request` event. That indirection is not cosmetic: review skills trigger on

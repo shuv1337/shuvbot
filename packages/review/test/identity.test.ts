@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createLocalChangeIdentity } from "../src/identity.ts";
+import {
+  createLocalChangeIdentity,
+  createPullRequestChangeIdentity
+} from "../src/identity.ts";
 
 describe("local change identity", () => {
   test("is independent of checkout path and ref alias spelling after canonical resolution", () => {
@@ -39,5 +42,41 @@ describe("local change identity", () => {
         base: { kind: "commit", sha: "abc123" }
       })
     ).toThrow("full commit SHA");
+  });
+});
+
+describe("pull request change identity", () => {
+  test("is stable across pushes so the finding lifecycle survives a force-push", () => {
+    const first = createPullRequestChangeIdentity({
+      repositoryFullName: "shuv/shuvbot",
+      pullNumber: 22
+    });
+    const second = createPullRequestChangeIdentity({
+      repositoryFullName: "shuv/shuvbot",
+      pullNumber: 22
+    });
+
+    expect(first).toBe(second);
+    expect(first).toStartWith("pull-request:v1:");
+  });
+
+  test("distinguishes pull requests and repositories", () => {
+    const base = { repositoryFullName: "shuv/shuvbot", pullNumber: 22 };
+
+    expect(createPullRequestChangeIdentity(base)).not.toBe(
+      createPullRequestChangeIdentity({ ...base, pullNumber: 23 })
+    );
+    expect(createPullRequestChangeIdentity(base)).not.toBe(
+      createPullRequestChangeIdentity({ ...base, repositoryFullName: "other/shuvbot" })
+    );
+  });
+
+  test("rejects a pull request number that cannot identify a change", () => {
+    expect(() =>
+      createPullRequestChangeIdentity({ repositoryFullName: "shuv/shuvbot", pullNumber: 0 })
+    ).toThrow("positive integer");
+    expect(() =>
+      createPullRequestChangeIdentity({ repositoryFullName: "  ", pullNumber: 1 })
+    ).toThrow("repositoryFullName");
   });
 });

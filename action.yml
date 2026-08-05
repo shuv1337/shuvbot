@@ -35,6 +35,18 @@ inputs:
   token:
     description: GitHub token.
     required: false
+  bot_login:
+    description: >-
+      Login that owns review comments created by token. Defaults to
+      "github-actions[bot]"; set this when using a GitHub App or bot PAT.
+    required: false
+  engine:
+    description: >-
+      Review engine: "legacy" (default) or "coordinator". The multi-agent
+      coordinator is opt-in and additionally requires the pinned shuvcode
+      runtime installed in the job and review.shuvcode.auth = "environment".
+      See docs/workflows.md.
+    required: false
 outputs:
   result:
     description: Compact JSON status object for the run (runId, status, mode, and mode-specific fields).
@@ -42,6 +54,18 @@ outputs:
     description: JSON array of posted review findings. Only set in review mode.
   summary:
     description: Human-readable run summary text.
+  review_engine:
+    description: Review engine that ran ("legacy" or "coordinator"). Only set in review mode.
+  review_tier:
+    description: Deterministic risk tier for the change. Only set in coordinator review mode.
+  review_coverage:
+    description: >-
+      JSON object describing reviewer coverage (scheduled, completed, failed,
+      timedOut, required, quorumMet). Only set in coordinator review mode.
+  review_degraded:
+    description: >-
+      "true" when review coverage was incomplete, so a clean result cannot be
+      claimed. Only set in coordinator review mode.
 runs:
   using: node24
   main: dist/index.js

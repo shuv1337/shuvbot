@@ -1,0 +1,18 @@
+# shuvbot's configuration when it reviews this repository from GitHub Actions.
+#
+# Deliberately separate from any root shuvbot.toml. The local CLI discovers a
+# root config automatically, and the only setting that must differ between a
+# laptop and a runner is where the review runtime's credential comes from, so
+# one shared file would force local review to require a CI secret.
+
+[review]
+engine = "coordinator"
+
+[review.shuvcode]
+# Must match APPROVED_SHUVCODE_RUNTIME_VERSION and the exact devDependency in
+# package.json; a mismatch fails before any review work starts.
+version = "2.0.0-alpha-9"
+# A runner has no shuvcode profile, so the runtime authenticates from a single
+# credential in the job environment (CLAUDE_CODE_OAUTH_TOKEN). Local runs keep
+# the "user" default and authenticate from your own shuvcode profile.
+auth = "environment"

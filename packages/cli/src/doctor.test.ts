@@ -28,6 +28,11 @@ standard = "subscription/default-coding"
 light = "subscription/default-fast"
 `;
 
+const environmentAuthConfig = coordinatorConfig.replace(
+  "use_user_auth = true",
+  'use_user_auth = true\nauth = "environment"'
+);
+
 describe("doctor", () => {
   test("preserves legacy checks and clearly skips coordinator diagnostics", async () => {
     const { checks, output } = await runFixture({ legacy: true });
@@ -412,6 +417,66 @@ describe("doctor", () => {
     expect(output).not.toContain(secret);
     expect(output).not.toContain(privatePath);
   });
+
+  test("reports a present non-interactive credential without printing it", async () => {
+    const { checks, output } = await runFixture({
+      config: environmentAuthConfig,
+      diagnostics: diagnostics(),
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "secret-token-value" }
+    });
+
+    const auth = find(checks, "coordinator auth");
+    expect(auth).toMatchObject({ status: "pass" });
+    expect(auth.message).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(JSON.stringify(checks)).not.toContain("secret-token-value");
+    expect(output).not.toContain("secret-token-value");
+  });
+
+  test("fails environment auth when no credential is supplied", async () => {
+    const { checks } = await runFixture({
+      config: environmentAuthConfig,
+      diagnostics: diagnostics(),
+      env: {}
+    });
+
+    const auth = find(checks, "coordinator auth");
+    expect(auth).toMatchObject({ status: "fail" });
+    expect(auth.message).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+  });
+
+  test("launches the diagnostic runtime with the resolved credential", async () => {
+    const launched: Array<Record<string, unknown> | undefined> = [];
+    const operations = diagnostics();
+    const launch = operations.launch.bind(operations);
+    operations.launch = async (input) => {
+      launched.push(input.credential as Record<string, unknown> | undefined);
+      return launch(input);
+    };
+    await runFixture({
+      config: environmentAuthConfig,
+      diagnostics: operations,
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "secret-token-value" }
+    });
+
+    expect(launched).toEqual([{ name: "CLAUDE_CODE_OAUTH_TOKEN", value: "secret-token-value" }]);
+  });
+
+  test("user auth injects no credential into the diagnostic runtime", async () => {
+    const launched: Array<Record<string, unknown> | undefined> = [];
+    const operations = diagnostics();
+    const launch = operations.launch.bind(operations);
+    operations.launch = async (input) => {
+      launched.push(input.credential as Record<string, unknown> | undefined);
+      return launch(input);
+    };
+    await runFixture({
+      coordinator: true,
+      diagnostics: operations,
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "secret-token-value" }
+    });
+
+    expect(launched).toEqual([undefined]);
+  });
 });
 
 function diagnostics(
@@ -482,12 +547,14 @@ async function runFixture(
   options: {
     coordinator?: boolean;
     legacy?: boolean;
+    config?: string;
     diagnostics?: CoordinatorDiagnosticOperations;
     env?: Record<string, string | undefined>;
   } = {}
 ) {
   const cwd = await mkdtemp(join(tmpdir(), "shuvbot-doctor-"));
-  if (options.coordinator) await writeFile(join(cwd, "shuvbot.toml"), coordinatorConfig);
+  if (options.config !== undefined) await writeFile(join(cwd, "shuvbot.toml"), options.config);
+  else if (options.coordinator) await writeFile(join(cwd, "shuvbot.toml"), coordinatorConfig);
   if (options.legacy) await writeFile(join(cwd, "shuvbot.toml"), legacyConfig);
   let output = "";
   const checks = await runDoctor({

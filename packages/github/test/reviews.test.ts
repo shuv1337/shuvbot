@@ -15,7 +15,7 @@ describe("review posting", () => {
   test("dedupes existing marker comments before posting review", async () => {
     const client = new MockClient({
       "GET /repos/octo/shuvbot/pulls/1/comments": [
-        { id: 1, body: appendMarker("old", "finding:one") }
+        { id: 1, body: appendMarker("old", "finding:one"), user: { login: "bot" } }
       ],
       "POST /repos/octo/shuvbot/pulls/1/reviews": {
         id: 2,
@@ -32,13 +32,46 @@ describe("review posting", () => {
       comments: [
         { path: "a.ts", position: 1, body: "old", markerKey: "finding:one" },
         { path: "a.ts", position: 2, body: "new", markerKey: "finding:two" }
-      ]
+      ],
+      botLogin: "bot"
     });
 
     expect(result).toMatchObject({ id: 2, postedComments: 1, dedupedComments: 1 });
     expect(client.calls[1]?.body).toMatchObject({
       comments: [expect.objectContaining({ position: 2 })]
     });
+  });
+
+  test("updates an existing finding comment when its content changes", async () => {
+    const marker = "finding:one";
+    const client = new MockClient({
+      "GET /repos/octo/shuvbot/pulls/1/comments": [
+        { id: 7, body: appendMarker("old explanation", marker), user: { login: "bot" } }
+      ],
+      "PATCH /repos/octo/shuvbot/pulls/comments/7": {},
+      "POST /repos/octo/shuvbot/pulls/1/reviews": {
+        id: 2,
+        html_url: "https://github.test/review/2"
+      }
+    });
+
+    const result = await postReview({
+      client,
+      repo: { owner: "octo", name: "shuvbot" },
+      pullNumber: 1,
+      body: "summary",
+      event: "COMMENT",
+      comments: [{ path: "a.ts", position: 1, body: "new explanation", markerKey: marker }],
+      botLogin: "bot"
+    });
+
+    expect(client.calls.find((call) => call.key.includes("PATCH"))?.body).toEqual({
+      body: appendMarker("new explanation", marker)
+    });
+    expect(client.calls.findIndex((call) => call.key.includes("PATCH"))).toBeGreaterThan(
+      client.calls.findIndex((call) => call.key.includes("POST"))
+    );
+    expect(result).toMatchObject({ postedComments: 0, dedupedComments: 1 });
   });
 
   test("formats summary fallback and filters existing findings", () => {
@@ -58,6 +91,73 @@ describe("review posting", () => {
     expect(
       dedupePreviousFindings([{ body: appendMarker("old", "finding:one") }], [finding])
     ).toHaveLength(0);
+  });
+
+  test("dedupes markers found after the first page", async () => {
+    const marker = "finding:later";
+    const calls: number[] = [];
+    const client: GitHubClient = {
+      async request(route, options) {
+        if (route.includes("/comments")) {
+          const page = Number(options?.params?.page);
+          calls.push(page);
+          return {
+            status: 200,
+            data: (page === 1
+              ? Array.from({ length: 100 }, (_, id) => ({
+                  id,
+                  body: "ordinary",
+                  user: { login: "contributor" }
+                }))
+              : [{ id: 101, body: appendMarker("old", marker), user: { login: "bot" } }]) as never
+          };
+        }
+        return {
+          status: 200,
+          data: { id: 2, html_url: "https://github.test/review/2" } as never
+        };
+      }
+    };
+
+    const result = await postReview({
+      client,
+      repo: { owner: "octo", name: "shuvbot" },
+      pullNumber: 1,
+      body: "summary",
+      event: "COMMENT",
+      comments: [{ path: "a.ts", position: 1, body: "old", markerKey: marker }],
+      botLogin: "bot"
+    });
+
+    expect(calls).toEqual([1, 2]);
+    expect(result.dedupedComments).toBe(1);
+    expect(result.postedComments).toBe(0);
+  });
+
+  test("ignores a matching marker owned by another user", async () => {
+    const marker = "finding:spoofed";
+    const client = new MockClient({
+      "GET /repos/octo/shuvbot/pulls/1/comments": [
+        { id: 7, body: appendMarker("spoof", marker), user: { login: "contributor" } }
+      ],
+      "POST /repos/octo/shuvbot/pulls/1/reviews": {
+        id: 2,
+        html_url: "https://github.test/review/2"
+      }
+    });
+
+    const result = await postReview({
+      client,
+      repo: { owner: "octo", name: "shuvbot" },
+      pullNumber: 1,
+      body: "summary",
+      event: "COMMENT",
+      comments: [{ path: "a.ts", position: 1, body: "real", markerKey: marker }],
+      botLogin: "bot"
+    });
+
+    expect(result).toMatchObject({ postedComments: 1, dedupedComments: 0 });
+    expect(client.calls.some((call) => call.key.includes("PATCH"))).toBe(false);
   });
 });
 
