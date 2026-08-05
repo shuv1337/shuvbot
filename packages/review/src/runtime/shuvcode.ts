@@ -170,6 +170,14 @@ export interface StartShuvcodeRuntimeOptions {
    * shuvcode profile and shuvbot injects no credential at all.
    */
   readonly credential?: ShuvcodeRuntimeCredential;
+  /**
+   * Scrubs untrusted runtime text that the runtime retains for diagnosis.
+   * Failure detail is retained **only** when this is supplied, so a caller that
+   * cannot redact keeps the previous behaviour of retaining nothing at all.
+   * Any credential this runtime injected is additionally scrubbed by exact
+   * value, because pattern redaction alone can miss a token.
+   */
+  readonly redact?: (text: string) => string;
   readonly signal?: AbortSignal;
   readonly startupTimeoutMs?: number;
   readonly shutdownGraceMs?: number;
@@ -210,13 +218,22 @@ export interface ShuvcodeRuntime {
 export class ShuvcodeSessionError extends Error implements ClassifiedReviewError {
   readonly code: ClassifiedReviewError["code"];
   readonly retryable: boolean;
+  /**
+   * The failure text the runtime reported, bounded but **not** redacted, so a
+   * failure can be diagnosed beyond its category. `message` stays a fixed safe
+   * string because it is surfaced widely; this is untrusted provider output and
+   * every consumer must redact it before it reaches an artifact or a log.
+   */
+  readonly detail?: string;
 
   constructor(
     readonly category: ReviewErrorCategory,
-    message = safeFailureMessage(category)
+    message = safeFailureMessage(category),
+    detail?: string
   ) {
     super(message);
     this.name = "ShuvcodeSessionError";
+    if (detail !== undefined && detail.length > 0) this.detail = detail;
     const classified = classifyReviewError({ category, message });
     this.code = classified.code;
     this.retryable = classified.retryable;
@@ -259,6 +276,7 @@ export async function startShuvcodeRuntime(
     env
   });
   const eventController = new AbortController();
+  const scrubFailureText = failureTextScrubber(options);
   const activeSessions = new Set<string>();
   const sessionPolicies = new Map<string, ShuvcodeSessionPolicy>();
   const listeners = new Set<(event: ShuvcodeEvent) => void>();
@@ -356,7 +374,12 @@ export async function startShuvcodeRuntime(
       for (const listener of listeners) listener(event);
       const sessionID = event.data?.sessionID;
       if (sessionID === undefined) return;
-      const terminal = terminalResult(sourceEvent, structuredSessions.has(sessionID), event);
+      const terminal = terminalResult(
+        sourceEvent,
+        structuredSessions.has(sessionID),
+        event,
+        scrubFailureText
+      );
       if (terminal === undefined) return;
       activeSessions.delete(sessionID);
       structuredSessions.delete(sessionID);
@@ -876,7 +899,8 @@ async function pumpEvents(
 function terminalResult(
   event: ShuvcodeEvent,
   structured: boolean,
-  sanitized: ShuvcodeEvent = event
+  sanitized: ShuvcodeEvent = event,
+  scrub?: (text: string) => string
 ): ShuvcodeEvent | ShuvcodeSessionError | undefined {
   if (event.type === "session.structured.completed") return sanitized;
   if (event.type === "session.execution.interrupted") {
@@ -887,7 +911,11 @@ function terminalResult(
     event.type === "session.execution.failed" ||
     event.type === "session.error"
   ) {
-    return new ShuvcodeSessionError(classifyFailure(event));
+    return new ShuvcodeSessionError(
+      classifyFailure(event),
+      undefined,
+      scrub === undefined ? undefined : scrubbed(failureDetail(event), scrub)
+    );
   }
   if (event.type !== "session.idle" && event.type !== "session.execution.succeeded") {
     return undefined;
@@ -991,6 +1019,66 @@ function isFailureType(type: string): boolean {
     type === "session.execution.failed" ||
     type === "session.error"
   );
+}
+
+const MAX_FAILURE_DETAIL_CHARS = 2_000;
+
+/**
+ * A bounded one-line summary of why the runtime failed, read from the **source**
+ * event because `sanitizeEvent` has already reduced the sanitized copy to a
+ * category and a status. Without this a provider failure is only ever reported
+ * as `Provider request failed`, and the cause has to be guessed.
+ *
+ * The result is untrusted text and is deliberately not redacted here: the
+ * engine holds the redactor and scrubs it on the way into an artifact.
+ */
+function failureDetail(event: ShuvcodeEvent): string | undefined {
+  const error = isRecord(event.data?.error) ? event.data.error : undefined;
+  if (error === undefined) return undefined;
+  const data = isRecord(error.data) ? error.data : undefined;
+  const status = finiteNumber(error.status) ?? finiteNumber(data?.statusCode);
+  const labelled = [
+    typeof error.type === "string" ? `type=${error.type}` : undefined,
+    typeof error.name === "string" ? `name=${error.name}` : undefined,
+    status === undefined ? undefined : `status=${status}`
+  ].filter((value): value is string => value !== undefined);
+  // Both messages are reported often enough to matter and are frequently the
+  // same string; a Set keeps the detail short without dropping either source.
+  const messages = new Set(
+    [error.message, data?.message].filter(
+      (value): value is string => typeof value === "string" && value.trim().length > 0
+    )
+  );
+  const detail = [...labelled, ...messages].join(" ").replace(/\s+/gu, " ").trim();
+  if (detail.length === 0) return undefined;
+  return detail.length > MAX_FAILURE_DETAIL_CHARS
+    ? `${detail.slice(0, MAX_FAILURE_DETAIL_CHARS)}…truncated`
+    : detail;
+}
+
+function scrubbed(detail: string | undefined, scrub: (text: string) => string): string | undefined {
+  if (detail === undefined) return undefined;
+  const cleaned = scrub(detail);
+  return cleaned.length === 0 ? undefined : cleaned;
+}
+
+/**
+ * Builds the scrubber applied to retained failure text, or `undefined` when the
+ * caller supplied no redactor - in which case nothing is retained.
+ *
+ * Production callers already wrap their redactor with `withRedactedValues` over
+ * the same credential, so the exact-value pass here is deliberately redundant:
+ * this runtime is the component that is handed the credential, and retained
+ * provider text is the one place a missed pattern would be durable.
+ */
+function failureTextScrubber(
+  options: StartShuvcodeRuntimeOptions
+): ((text: string) => string) | undefined {
+  const { redact } = options;
+  if (redact === undefined) return undefined;
+  const credential = options.credential?.value;
+  if (credential === undefined || credential.length === 0) return redact;
+  return (text) => redact(text.split(credential).join("[redacted]"));
 }
 
 function sanitizeFailureStatus(value: unknown): { readonly status?: number } {
