@@ -27,7 +27,39 @@ still open.
 
 ## The one thing to know before continuing
 
-**A real coordinator review has now produced real findings in GitHub Actions.**
+**The full tier does not fit in the per-session timeout.** Dogfood #3, run
+[31054253953](https://github.com/shuv1337/shuvbot/actions/runs/31054253953) on
+PR #26 (~330 changed lines, `tier: full`), scheduled all six specialists and
+**four of them timed out at exactly 300s** - the `activity_timeout` default of
+`5m`. Only `performance` (99s) and `release` (89s) finished, and since
+`code-quality` and `security` are the full tier's required reviewers, quorum
+failed. Engine time 10m20s against the 15m overall cap; cost $3.23.
+
+Three things this settled:
+
+- **The `REVIEW_SCHEMA_INVALID` mystery did not reproduce.** `performance`
+  succeeded outright and `security` was cut off by the clock, not refused. That
+  known issue is unexplained rather than fixed - it has still never been seen in
+  the Action.
+- **Reviewer scope is not the variable.** Every specialist defaults to
+  `paths: ["**/*"]`, so all six read the same file set. The split is per-session
+  variance at `claude-fable-5@high`; the trivial tier's `@low` light role
+  answered in 48s total.
+- **The coordinator tried to claim `clean` below quorum and was refused.**
+  `shuvbot-rejected-results.json` caught it (`a result below quorum must be
+degraded`), the retry repaired it to `degraded`, and the posted review said
+  `DEGRADED - REVIEW INCOMPLETE`, 2/6 coverage, naming every timed-out reviewer.
+  The guard is doing real work in production, not just in tests.
+
+Remediation is a live decision, not a completed one: raise `activity_timeout`
+for the full tier, raise `max_concurrency` above 3 so six sessions are not three
+waves, or drop the specialist effort below `@high`. None has been chosen.
+
+Note that dogfood #3 did **not** exercise the provider-failure diagnostics in
+PR #26 - the workflow runs `uses: ./` from the default branch, so the artifact
+it wrote is master's, and its entries carry no `kind` field.
+
+**A real coordinator review has produced real findings in GitHub Actions.**
 Dogfood #2, run
 [31045879626](https://github.com/shuv1337/shuvbot/actions/runs/31045879626) on
 PR #25 (a throwaway pull request, closed unmerged): `status: success`,
@@ -64,12 +96,13 @@ What dogfood #2 proved, and what it did not:
 
 ## What is NOT done
 
-1. **M8's exit criterion is met at the `trivial` tier only.** Dogfood #2
-   produced real findings, but on a two-line diff that scheduled one reviewer.
-   A substantial pull request that reaches the full tier is the next run that
-   can say anything about multi-specialist behaviour.
-2. **M7's dogfood matrix is unrecorded.** Two runs exist (#1 fully degraded, #2
-   trivial-tier clean), so latency and quality are sampled, not measured.
+1. **The full tier cannot currently reach quorum in the Action.** Dogfood #3
+   lost both required reviewers to the 300s `activity_timeout`. Until the
+   timeout, concurrency, or effort is retuned and a full-tier run reaches
+   quorum, the coordinator is proven only at the `trivial` tier.
+2. **M7's dogfood matrix is unrecorded.** Three runs exist (#1 fully degraded on
+   auth, #2 trivial-tier clean, #3 full-tier degraded on timeouts), so latency
+   and quality are sampled, not measured.
 3. **The Action default has deliberately not been flipped** to the coordinator.
 4. **Two specialists fail their own validation.** In an earlier _local_
    full-tier run, `security` and `performance` completed their model calls but
@@ -144,15 +177,19 @@ all green and enforced by CI rather than convention.
 
 Read `AGENTS.md`, then the "one thing to know" section above.
 
-Dogfood #2 passed at the `trivial` tier, so the next step is a **full-tier**
-dogfood: open a pull request whose diff is large enough to schedule all six
-specialists, comment `@shuvbot review` on it, and read `$RUNNER_TEMP/shuvbot`
-from the run - `shuvbot-run.json` for coverage and per-session errors,
-`shuvbot-findings.json` for the canonical findings artifact, and
-`shuvbot-events.jsonl` for the session timeline. That is the run that should
-surface whatever is behind the two `REVIEW_SCHEMA_INVALID` reviewers (`security`
-and `performance`), exercise scheduling and quorum arithmetic under load, and
-give M7's matrix a latency and cost figure that is not a two-line diff.
+The full-tier dogfood has run and it degraded on timeouts, so the next step is
+to retune and repeat it. Pick one of `activity_timeout`, `max_concurrency`, or
+the specialist effort in `.github/shuvbot.ci.toml`, change only that, and
+re-run `@shuvbot review` on a full-tier pull request so the variable is
+identifiable. Each attempt costs roughly $3 and ten minutes. Success means
+`code-quality` and `security` both completing, because they are the full tier's
+required reviewers and nothing reaches quorum without them.
+
+Read `$RUNNER_TEMP/shuvbot` from the run - `shuvbot-run.json` for coverage and
+per-session errors, `shuvbot-findings.json` for the canonical findings
+artifact, `shuvbot-events.jsonl` for the session timeline (this is where the
+exact 300s wall was visible), and `shuvbot-rejected-results.json` for anything
+the review refused.
 
 Note that finding bodies are **not** in the artifacts; the evidence strings live
 in the posted review comments
