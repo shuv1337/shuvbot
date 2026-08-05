@@ -27,41 +27,49 @@ still open.
 
 ## The one thing to know before continuing
 
-**A real coordinator review has run in GitHub Actions once, and produced zero
-findings.** Run
+**A real coordinator review has now produced real findings in GitHub Actions.**
+Dogfood #2, run
+[31045879626](https://github.com/shuv1337/shuvbot/actions/runs/31045879626) on
+PR #25 (a throwaway pull request, closed unmerged): `status: success`,
+`decision: minor_issues`, quorum met, two findings posted as inline review
+comments, both correct. ~49s engine time, $0.18.
+
+The pull request planted two one-line flaws in `packages/review/src/workspace.ts`
+whose severity is only judgeable from **unchanged regions of the same file**
+(`limit <= 0` weakened to `limit < 0`; a content write moved from
+`flag: "wx", mode: 0o600` to `flag: "w", mode: 0o644`). The diff was two
+±3-line hunks, yet the reviewer's evidence cited lines 91, 125, 233 and 235 and
+the naming semantics of `encodeContentPath` - none of which appear in the patch.
+A specialist's filesystem root is the temporary workspace, not the checkout, so
+that context could only have come from the materialised post-change content.
+Both the content-materialisation fix and the single-provider environment-auth
+fix are therefore exercised by a real run.
+
+Dogfood #1 remains the reference for the degradation path. Run
 [31003444378](https://github.com/shuv1337/shuvbot/actions/runs/31003444378) on
-PR #24: the whole pipeline worked - auth, runtime startup, session creation,
-scheduling, quorum, posting, artifacts - but all six specialists failed about
-700ms in, twice each, and only the coordinator completed.
+PR #24 had all six specialists fail about 700ms in, twice each, because
+environment auth forwards exactly **one** credential while the default roster
+spanned **three providers**. The posted review said `DEGRADED - REVIEW
+INCOMPLETE`, reported 0/6 coverage, named every failed reviewer, and refused to
+claim clean - a totally broken review did not masquerade as a clean one.
 
-Cause: environment auth forwards exactly **one** credential, while the default
-model roster spans **three providers** (`default-reasoning` is Anthropic,
-`default-coding` is xAI, `default-fast` is OpenAI). Invisible locally, because a
-developer's shuvcode profile has all three authenticated.
+What dogfood #2 proved, and what it did not:
 
-Fixed in #24: environment auth now resolves every configured model and refuses
-up front when its provider is not the one the credential authenticates, and this
-repository's CI roster is pinned to Anthropic models with a test asserting the
-committed CI config stays reachable. **That fix has not yet been exercised by a
-real run.**
-
-What this proved, and what it did not:
-
-- **Proved:** the mechanism works end to end, and the degradation path is
-  trustworthy. The posted review said `DEGRADED - REVIEW INCOMPLETE`, reported
-  0/6 coverage, named every failed reviewer, and refused to claim clean or
-  request changes. A totally broken review did not masquerade as a clean one.
-- **Not proved:** anything about review quality. No specialist has ever produced
-  a finding through the Action.
+- **Proved:** specialists produce accurate, well-evidenced findings through the
+  Action, and they reason from the pull request's content rather than the
+  checked-out default branch.
+- **Not proved:** anything above the `trivial` tier. A two-line diff scheduled
+  exactly one reviewer (`code-quality`), so the six-specialist full tier, its
+  scheduling, and its quorum arithmetic are still unexercised in the Action.
 
 ## What is NOT done
 
-1. **M8's exit criterion is partially met.** The pipeline ran end to end, but no
-   specialist produced a finding, so the thing under test was not tested.
-   Re-running the dogfood on the next pull request is the first run that can say
-   anything about quality.
-2. **M7's dogfood matrix is unrecorded**, so latency, degradation, and quality
-   claims remain unmeasured.
+1. **M8's exit criterion is met at the `trivial` tier only.** Dogfood #2
+   produced real findings, but on a two-line diff that scheduled one reviewer.
+   A substantial pull request that reaches the full tier is the next run that
+   can say anything about multi-specialist behaviour.
+2. **M7's dogfood matrix is unrecorded.** Two runs exist (#1 fully degraded, #2
+   trivial-tier clean), so latency and quality are sampled, not measured.
 3. **The Action default has deliberately not been flipped** to the coordinator.
 4. **Two specialists fail their own validation.** In an earlier _local_
    full-tier run, `security` and `performance` completed their model calls but
@@ -87,7 +95,7 @@ What this proved, and what it did not:
   Unimplemented, awaiting a decision; it would also stop fork pull requests
   spending a full coordinator run on a review that cannot be posted.
 
-## Recently fixed, unexercised by a real run
+## Recently fixed
 
 - **Reviewers no longer read the base revision.** Specialists are scoped to the
   temporary review workspace, which held only patches, so any cross-file
@@ -101,8 +109,8 @@ What this proved, and what it did not:
   file from the API, 128 KB per file and 8 MB per workspace materialised), and
   a file whose content cannot be sourced is reviewed from its patch alone.
   Reviewer prompts now name the content files and forbid confirming a symbol
-  from anything outside the workspace. **No real run has exercised this** - it
-  becomes visible the first time specialists actually produce findings.
+  from anything outside the workspace. **Exercised by dogfood #2**, whose
+  findings cited same-file lines that never appear in the diff.
 
 ## Key context
 
@@ -131,13 +139,17 @@ all green and enforced by CI rather than convention.
 
 Read `AGENTS.md`, then the "one thing to know" section above.
 
-The base-revision file-read fix has landed, so the next step is the second
-dogfood: open a pull request, comment `@shuvbot review` on it, and read
-`$RUNNER_TEMP/shuvbot` from the run:
-`shuvbot-run.json` for coverage and per-session errors, `shuvbot-findings.json`
-for the canonical findings artifact, and `shuvbot-events.jsonl` for the session
-timeline. Success this time means specialists completing and producing findings;
-that closes M8's exit criterion, starts M7's matrix, and should surface whatever
-is behind the two `REVIEW_SCHEMA_INVALID` reviewers. It is also the first run
-that can show whether reviewers actually use the materialised file content -
-the findings artifact's evidence strings are where that shows up.
+Dogfood #2 passed at the `trivial` tier, so the next step is a **full-tier**
+dogfood: open a pull request whose diff is large enough to schedule all six
+specialists, comment `@shuvbot review` on it, and read `$RUNNER_TEMP/shuvbot`
+from the run - `shuvbot-run.json` for coverage and per-session errors,
+`shuvbot-findings.json` for the canonical findings artifact, and
+`shuvbot-events.jsonl` for the session timeline. That is the run that should
+surface whatever is behind the two `REVIEW_SCHEMA_INVALID` reviewers (`security`
+and `performance`), exercise scheduling and quorum arithmetic under load, and
+give M7's matrix a latency and cost figure that is not a two-line diff.
+
+Note that finding bodies are **not** in the artifacts; the evidence strings live
+in the posted review comments
+(`gh api repos/<owner>/<repo>/pulls/<n>/comments`). Reading only the artifacts
+will tell you a finding exists but nothing about its quality.
