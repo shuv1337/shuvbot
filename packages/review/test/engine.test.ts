@@ -542,6 +542,39 @@ describe("local coordinator engine", () => {
     }
   });
 
+  test("keeps a redacted sample explaining why a session failed outright", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-provider-failure-"));
+    await runEngine("trivial", new FakeRuntime({ providerFailureReviewer: "code-quality" }), {
+      artifactDirectory
+    });
+
+    const rejected = JSON.parse(
+      await readFile(join(artifactDirectory, "shuvbot-rejected-results.json"), "utf8")
+    ) as {
+      rejected: { kind: string; role: string; reviewer?: string; reason: string; sample: string }[];
+    };
+
+    // Without this the run reports only "Provider request failed" and the cause
+    // has to be guessed from the model roster.
+    const failure = rejected.rejected.find(({ kind }) => kind === "failure");
+    expect(failure).toMatchObject({
+      kind: "failure",
+      role: "specialist",
+      reviewer: "code-quality",
+      reason: "Provider request failed"
+    });
+    expect(failure?.sample).toContain("type=provider.request status=400");
+    expect(failure?.sample).not.toContain("sk-live-abcdefghijklmnopqrstuvwxyz012345");
+  });
+
+  test("does not retain a failure sample when the failure carries no detail", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-failure-bare-"));
+    await runEngine("trivial", new FakeRuntime({ failingReviewer: "code-quality" }), {
+      artifactDirectory
+    });
+    expect(existsSync(join(artifactDirectory, "shuvbot-rejected-results.json"))).toBe(false);
+  });
+
   test("does not write a rejected-result artifact when nothing was refused", async () => {
     const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-rejected-none-"));
     await runEngine("trivial", new FakeRuntime(), { artifactDirectory });
@@ -702,6 +735,7 @@ class FakeRuntime implements ShuvcodeRuntime {
       invalidSpecialistAlways?: BuiltInReviewerId;
       hangSpecialistRepair?: BuiltInReviewerId;
       failingReviewer?: BuiltInReviewerId;
+      providerFailureReviewer?: BuiltInReviewerId;
       hangReviewer?: BuiltInReviewerId;
       burnThenHangReviewer?: BuiltInReviewerId;
       eventFailureReviewer?: BuiltInReviewerId;
@@ -828,6 +862,18 @@ class FakeRuntime implements ShuvcodeRuntime {
         }
         if (this.behavior.failingReviewer === reviewer) {
           throw classifyReviewError({ category: "service", message: `${reviewer} unavailable` });
+        }
+        if (this.behavior.providerFailureReviewer === reviewer) {
+          // Shaped like a ShuvcodeSessionError: a fixed safe message plus the
+          // runtime's own bounded failure text.
+          throw Object.assign(
+            classifyReviewError({ category: "provider", message: "Provider request failed" }),
+            {
+              detail:
+                "type=provider.request status=400 model claude-fable-5 " +
+                "rejected for authorization: Bearer sk-live-abcdefghijklmnopqrstuvwxyz012345"
+            }
+          );
         }
         if (
           this.behavior.invalidSpecialistAlways === reviewer ||

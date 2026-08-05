@@ -87,6 +87,13 @@ export interface CoordinatorEngineFileSystem {
  * `REVIEW_SCHEMA_INVALID`, with the offending value already discarded.
  */
 export interface RejectedResultSample {
+  /**
+   * `result` is a structured value the review refused; `failure` is a session
+   * that never produced one because the runtime call itself failed. They land
+   * in one artifact because they answer the same operator question - why did
+   * this reviewer contribute nothing - but they are not the same event.
+   */
+  readonly kind: "result" | "failure";
   readonly role: "specialist" | "coordinator";
   readonly reviewer?: BuiltInReviewerId;
   readonly sessionId?: string;
@@ -103,7 +110,7 @@ const MAX_REJECTED_SAMPLE_BYTES = 8_000;
 function recordRejectedResult(
   samples: RejectedResultSample[],
   redactor: Redactor,
-  entry: Omit<RejectedResultSample, "reason" | "sample"> & {
+  entry: Omit<RejectedResultSample, "kind" | "reason" | "sample"> & {
     readonly error: unknown;
     readonly value: unknown;
   }
@@ -122,8 +129,50 @@ function recordRejectedResult(
       ? `${serialized.slice(0, MAX_REJECTED_SAMPLE_BYTES)}\n…truncated`
       : serialized;
   samples.push({
+    kind: "result",
     ...rest,
     reason: redactor.redactString(error instanceof Error ? error.message : String(error)),
+    sample: redactor.redactString(bounded)
+  });
+}
+
+/**
+ * The failure text a classified error carried, if any. Read structurally rather
+ * than with `instanceof` so an injected or forwarded error is treated the same
+ * as a `ShuvcodeSessionError`.
+ */
+function failureDetailOf(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const { detail } = error as { detail?: unknown };
+  return typeof detail === "string" && detail.length > 0 ? detail : undefined;
+}
+
+/**
+ * Records why a session failed, redacted and bounded, so a provider failure is
+ * diagnosable from the artifacts. Without it the run reports only a sanitised
+ * category - `Provider request failed` - and the cause has to be inferred.
+ */
+function recordFailedSession(
+  samples: RejectedResultSample[],
+  redactor: Redactor,
+  entry: Omit<RejectedResultSample, "kind" | "repair" | "reason" | "sample"> & {
+    readonly error: unknown;
+    readonly classified: ClassifiedReviewError;
+  }
+): void {
+  if (samples.length >= MAX_REJECTED_SAMPLES) return;
+  const { error, classified, ...rest } = entry;
+  const detail = failureDetailOf(error);
+  if (detail === undefined) return;
+  const bounded =
+    detail.length > MAX_REJECTED_SAMPLE_BYTES
+      ? `${detail.slice(0, MAX_REJECTED_SAMPLE_BYTES)}\n…truncated`
+      : detail;
+  samples.push({
+    kind: "failure",
+    ...rest,
+    repair: false,
+    reason: classified.message,
     sample: redactor.redactString(bounded)
   });
 }
@@ -660,6 +709,14 @@ function createSpecialistTask(options: {
         const usage = captureUsage(capture);
         const classified =
           captured ?? classifyAndRedact(error, "failed", context.signal, options.input.redactor);
+        recordFailedSession(options.rejectedSamples, options.input.redactor, {
+          role: "specialist",
+          reviewer: options.reviewer,
+          ...(activeSessionID === undefined ? {} : { sessionId: activeSessionID }),
+          attempt: context.attempt,
+          error,
+          classified
+        });
         if (capture !== undefined && captureOutcome(capture) !== "failed") {
           options.log.append({
             event: "session.failed",
@@ -796,6 +853,13 @@ async function runCoordinator(options: {
         controller.signal,
         options.input.redactor
       );
+    recordFailedSession(options.rejectedSamples, options.input.redactor, {
+      role: "coordinator",
+      sessionId: options.sessionID,
+      attempt,
+      error,
+      classified
+    });
     if (
       timedOut ||
       !["failed", "cancelled"].includes(captureOutcome(options.captures.get(options.sessionID)))
