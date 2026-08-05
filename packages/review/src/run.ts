@@ -8,6 +8,7 @@ import {
   type CoordinatorEngineResult
 } from "./engine.ts";
 import { createReviewExecutionPlanFromConfig, type ReviewPlanFile } from "./plan.ts";
+import { assertReviewModelsReachable } from "./runtime/auth.ts";
 import {
   createReviewerConfigPlugin,
   reviewerTierAssignments,
@@ -110,6 +111,11 @@ export async function runCoordinatorReview(
   input: RunCoordinatorReviewInput
 ): Promise<CoordinatorReviewRun> {
   const { config, deadline, redactor, dependencies } = input;
+  // Before any Git, workspace, or session work: a roster the supplied credential
+  // cannot reach fails every specialist half a second in, with no useful reason.
+  if (input.credential !== undefined) {
+    assertReviewModelsReachable({ credential: input.credential, models: config.review.models });
+  }
   const plan = createReviewExecutionPlanFromConfig({
     files: input.files,
     baseSha: input.baseSha,

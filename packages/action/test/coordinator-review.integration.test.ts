@@ -184,6 +184,13 @@ describe("main() coordinator review mode", () => {
         'package = "shuvcode"',
         `version = "${APPROVED_SHUVCODE_RUNTIME_VERSION}"`,
         'auth = "environment"',
+        "",
+        // Environment auth forwards one credential, so the roster must sit on
+        // one provider. The built-in defaults span three and are refused.
+        "[review.models]",
+        'coordinator = "subscription/claude-opus-5@medium"',
+        'standard = "subscription/claude-fable-5@high"',
+        'light = "subscription/claude-fable-5@low"',
         ""
       ].join("\n")
     );
