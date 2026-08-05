@@ -23,6 +23,17 @@ describe("specialist prompts", () => {
     expect(prompt).not.toContain("diff --git");
   });
 
+  test("directs cross-file reasoning at materialised content, not the checkout", () => {
+    const prompt = buildSpecialistPrompt("security", workspaceInput());
+    expect(prompt).toContain("/run/contents");
+    expect(prompt).toContain("contentPath");
+    // The checkout a session can otherwise see is the base revision in the
+    // Action; confirming a symbol from it is how a false "undefined function"
+    // finding gets reported.
+    expect(prompt).toContain("is not the revision under review");
+    expect(prompt).toContain("contentTruncated");
+  });
+
   test("appends mandatory rules after bounded repository additions", () => {
     const prompt = buildSpecialistPrompt("tests", {
       ...workspaceInput(),
@@ -44,6 +55,7 @@ function workspaceInput() {
   return {
     manifestPath: "/run/manifest.json",
     sharedContextPath: "/run/shared-review-context.txt",
-    patchesDirectory: "/run/patches"
+    patchesDirectory: "/run/patches",
+    contentsDirectory: "/run/contents"
   } as const;
 }

@@ -14,6 +14,7 @@ export interface ReviewerPromptInput {
   readonly manifestPath: string;
   readonly sharedContextPath: string;
   readonly patchesDirectory: string;
+  readonly contentsDirectory: string;
   readonly repositoryAdditions?: readonly string[];
 }
 
@@ -43,7 +44,10 @@ ${definition.purpose}
 - Read the workspace manifest at ${input.manifestPath}.
 - Read shared context at ${input.sharedContextPath}.
 - Read relevant per-file patches from ${input.patchesDirectory}.
-- Inspect repository files only when needed to understand a referenced patch. The prompt intentionally does not embed the diff.
+- For a manifest entry with a contentPath, that file under ${input.contentsDirectory} holds the file's full content *after* the change. Read it whenever a patch hunk alone does not settle a question.
+- A working directory outside this workspace, if you can see one at all, is not the revision under review and may predate the change. Never confirm or deny the existence of a symbol from it; use contentPath, and if the file you need has none, say the evidence was unavailable rather than assuming.
+- A content file marked contentTruncated is cut short; absence of something below the cut is not evidence.
+- The prompt intentionally does not embed the diff.
 
 ## What to flag
 ${formatItems(definition.whatToFlag)}

@@ -596,6 +596,7 @@ function createSpecialistTask(options: {
           manifestPath: options.scopedWorkspace.manifestPath,
           sharedContextPath: options.input.workspace.sharedContextPath,
           patchesDirectory: options.scopedWorkspace.patchesDir,
+          contentsDirectory: options.scopedWorkspace.contentsDir,
           repositoryAdditions: definition.promptSections.map(({ content }) => content)
         });
         const runPrompt = async (text: string): Promise<unknown> => {
