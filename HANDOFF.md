@@ -72,19 +72,6 @@ What this proved, and what it did not:
 
 ## Known issues
 
-- **Reviewers read the base revision, not the pull request.** The workflow
-  correctly checks out the trusted default branch - a same-repo pull request
-  must never execute code holding `CLAUDE_CODE_OAUTH_TOKEN`, and
-  `packages/action/test/workflow-security.test.ts` pins that. But the
-  reviewers' filesystem tools are scoped to that checkout, while their prompt
-  tells them to inspect repository files. Patches are API-sourced and correct;
-  **cross-file reasoning is not**. A reviewer opening `helpers.ts` to confirm a
-  function the pull request adds there reads the pre-change file and can report
-  a false "undefined function". Fix without touching the security posture:
-  materialise the changed files' post-change content into the read-only
-  workspace as data, never as executable code. This becomes live the moment
-  specialists actually run, so it is effectively a prerequisite for trusting the
-  next dogfood's findings.
 - **Issue #20**: intermittent `GitHub request failed (406)` about a second into
   a review, same pull request and secrets. Needs the failing endpoint named and
   one retry before an advisory check fails.
@@ -99,6 +86,23 @@ What this proved, and what it did not:
   execute in a fork context" and "may publish on a fork pull request".
   Unimplemented, awaiting a decision; it would also stop fork pull requests
   spending a full coordinator run on a review that cannot be posted.
+
+## Recently fixed, unexercised by a real run
+
+- **Reviewers no longer read the base revision.** Specialists are scoped to the
+  temporary review workspace, which held only patches, so any cross-file
+  question was answered from a checkout that is the trusted default branch, not
+  the pull request. The workspace now materialises each reviewed file's
+  post-change content as inert data (`contents/<sha256>.txt`, mode 0600, in the
+  temp workspace only), the Action sources it from the contents API at the head
+  commit, and the local CLI sources it from `git show <rev>:<path>`. The
+  security posture is unchanged: nothing is written into the checkout and
+  nothing is executed. Sourcing is best-effort and bounded (100 files, 1 MB per
+  file from the API, 128 KB per file and 8 MB per workspace materialised), and
+  a file whose content cannot be sourced is reviewed from its patch alone.
+  Reviewer prompts now name the content files and forbid confirming a symbol
+  from anything outside the workspace. **No real run has exercised this** - it
+  becomes visible the first time specialists actually produce findings.
 
 ## Key context
 
@@ -127,11 +131,13 @@ all green and enforced by CI rather than convention.
 
 Read `AGENTS.md`, then the "one thing to know" section above.
 
-The next step is the second dogfood, and it is worth doing the base-revision
-file-read fix first so its findings can be trusted. Then open a pull request,
-comment `@shuvbot review` on it, and read `$RUNNER_TEMP/shuvbot` from the run:
+The base-revision file-read fix has landed, so the next step is the second
+dogfood: open a pull request, comment `@shuvbot review` on it, and read
+`$RUNNER_TEMP/shuvbot` from the run:
 `shuvbot-run.json` for coverage and per-session errors, `shuvbot-findings.json`
 for the canonical findings artifact, and `shuvbot-events.jsonl` for the session
 timeline. Success this time means specialists completing and producing findings;
 that closes M8's exit criterion, starts M7's matrix, and should surface whatever
-is behind the two `REVIEW_SCHEMA_INVALID` reviewers.
+is behind the two `REVIEW_SCHEMA_INVALID` reviewers. It is also the first run
+that can show whether reviewers actually use the materialised file content -
+the findings artifact's evidence strings are where that shows up.

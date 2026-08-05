@@ -236,6 +236,28 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
      specialists finish, so specialists must be created with
      `createSession({ policy })`, not forked. `createSession` rejects any policy
      that widens `REVIEW_SESSION_POLICY` before the server enforces it.
+- **A specialist's filesystem is the review workspace, not the repository.**
+  Sessions are created with `location: { directory: workspace.root }`, so
+  everything a reviewer can read has to be put there deliberately. For a long
+  time that was patches only, which made every cross-file question - does the
+  function this patch calls exist? - resolve against whatever checkout the
+  session could otherwise see. In the Action that checkout is the trusted
+  default branch, so a reviewer confirming a symbol the pull request adds read
+  the pre-change file and could report a false "undefined function".
+  `createReviewWorkspace` now also materialises each reviewed file's
+  post-change content under `contents/` as `<sha256>.txt`, mode 0600 - a
+  neutral name on purpose, because it holds untrusted pull request source that
+  must never be importable, executable, or type-checkable. Content is sourced
+  through `RunCoordinatorReviewInput.sourceContent`, a callback rather than a
+  field, so it runs **after** filtering and never fetches a lockfile nobody
+  will read; the Action reads the contents API at the head commit and the CLI
+  runs `git show <rev>:<path>`. Two invariants to keep: sourcing is
+  best-effort (a 404 on one blob must degrade that file to its patch, not fail
+  the run), and it is bounded at every layer (100 files, 1 MB per API blob,
+  128 KB per file and 8 MB per workspace on disk). None of this weakens the
+  posture that `packages/action/test/workflow-security.test.ts` pins: the
+  workflow still checks out the trusted default branch, and pull request
+  content is only ever data in a temporary directory.
 - **Comment-triggered review has three couplings that are easy to break.**
   `@shuvbot review` on a pull request is live (verified end to end on PR #22).
   1. **Review skills trigger on `pull_request` actions**
