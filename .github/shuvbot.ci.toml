@@ -5,8 +5,21 @@
 # laptop and a runner is where the review runtime's credential comes from, so
 # one shared file would force local review to require a CI secret.
 
+# Dogfood #3 (run 31054253953) lost four of six specialists - including both
+# required reviewers - to the default 5m per-session cap, at exactly 300s each,
+# on a ~330-line full-tier diff. The two that finished took 89s and 99s, so the
+# cap is what bounds a full-tier review, not the models.
+activity_timeout = "10m"
+
 [review]
 engine = "coordinator"
+
+# Six specialists in one wave rather than two. This is not an independent
+# experiment: at concurrency 3 a 10m session cap makes the worst case two waves
+# of 600s, which overruns the 15m overall timeout and would be killed there
+# instead. One wave keeps the wall clock at roughly one session plus the
+# coordinator, inside the existing budget.
+max_concurrency = 6
 
 [review.shuvcode]
 # Must match APPROVED_SHUVCODE_RUNTIME_VERSION and the exact devDependency in
