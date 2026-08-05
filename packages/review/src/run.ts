@@ -1,6 +1,7 @@
 import { ConfigError } from "../../core/src/errors.ts";
 import type { ShuvbotConfig } from "../../core/src/config.ts";
 import type { Redactor } from "../../core/src/redaction.ts";
+import type { ReviewRunSummary } from "../../core/src/run-record.ts";
 import {
   executeCoordinatorEngine,
   type CoordinatorEngineProgressEvent,
@@ -66,8 +67,6 @@ export interface RunCoordinatorReviewInput {
   readonly contextHeader: string;
   readonly onPlan?: (plan: ReviewExecutionPlan) => void;
   readonly onProgress?: (event: CoordinatorEngineProgressEvent) => void | Promise<void>;
-  /** Milliseconds already spent collecting the diff, for the run timings. */
-  readonly preprocessingMs?: number;
 }
 
 export interface CoordinatorReviewReportOptions {
@@ -243,6 +242,74 @@ export async function runCoordinatorReview(
       );
     }
   }
+}
+
+/**
+ * Projects an engine execution onto the run record's review summary.
+ *
+ * Shared so a coordinator run is described identically in local artifacts and
+ * in the Action's artifacts; the two used to be one inline literal in the CLI.
+ */
+export function buildReviewRunSummary(input: {
+  readonly plan: ReviewExecutionPlan;
+  readonly execution: CoordinatorEngineResult;
+  readonly report: ReturnType<typeof buildCoordinatorReport>;
+}): ReviewRunSummary {
+  const usage = input.execution.sessions.reduce(
+    (total, session) => ({
+      inputTokens: total.inputTokens + (session.usage?.inputTokens ?? 0),
+      outputTokens: total.outputTokens + (session.usage?.outputTokens ?? 0),
+      cost: total.cost + (session.usage?.cost ?? 0)
+    }),
+    { inputTokens: 0, outputTokens: 0, cost: 0 }
+  );
+  return {
+    engine: "coordinator",
+    tier: input.plan.risk.tier,
+    decision: input.report.decision,
+    quorumMet: input.execution.coverage.quorumMet,
+    requiredReviewers: [...input.execution.coverage.required],
+    successfulReviewers: [...input.execution.coverage.completed],
+    missingReviewers: input.execution.coverage.required.filter(
+      (reviewer) => !input.execution.coverage.completed.includes(reviewer)
+    ),
+    sessions: input.execution.sessions.map((session) => ({
+      sessionId: session.sessionId,
+      role: session.role,
+      ...(session.reviewer === undefined ? {} : { reviewer: session.reviewer }),
+      model: session.model,
+      status: session.status,
+      retryCount: session.retryCount,
+      ...(session.usage === undefined
+        ? {}
+        : {
+            usage: {
+              inputTokens: session.usage.inputTokens,
+              outputTokens: session.usage.outputTokens,
+              ...(session.usage.cost === undefined ? {} : { cost: session.usage.cost })
+            }
+          }),
+      ...(session.error === undefined
+        ? {}
+        : {
+            error: {
+              code: session.error.code,
+              message: session.error.message,
+              retryable: session.error.retryable
+            }
+          })
+    })),
+    retries: input.execution.retries,
+    usage,
+    findingAccounting: {
+      active: input.report.counts.active,
+      new: input.report.counts.new,
+      unresolved: input.report.counts.unresolved,
+      fixed: input.report.counts.fixed,
+      userResolved: input.report.counts.userResolved,
+      dismissed: input.report.counts.dismissed
+    }
+  };
 }
 
 /** Maps engine execution onto the status a caller reports. */

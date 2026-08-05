@@ -76,6 +76,111 @@ export async function writeReviewArtifacts(input: ReviewArtifactsInput): Promise
     throw sanitizedError("Unable to prepare review artifacts", error, redactor);
   }
 
+  await commitArtifacts(dir, pending, redactor);
+
+  return {
+    dir,
+    runPath,
+    findingsPath,
+    contextManifestPath,
+    ...(reviewSessionsPath === undefined ? {} : { reviewSessionsPath }),
+    ...(eventsPath === undefined ? {} : { eventsPath })
+  };
+}
+
+export interface CoordinatorArtifactsInput {
+  /** Directory to write into; already the run's artifact directory. */
+  runnerTemp: string;
+  runRecord: RunRecord;
+  /** Coordinator report JSON, the coordinator equivalent of findings. */
+  report: unknown;
+  sessionLog?: readonly ReviewSessionLogEvent[];
+  redactor?: Redactor;
+}
+
+export interface CoordinatorArtifacts {
+  dir: string;
+  runPath: string;
+  findingsPath: string;
+  reviewSessionsPath?: string;
+  eventsPath?: string;
+}
+
+/**
+ * Persists coordinator review artifacts.
+ *
+ * Separate from `writeReviewArtifacts` because a coordinator run has no
+ * legacy-pipeline findings array and no context manifest: its reviewers read a
+ * workspace rather than an assembled prompt context, and its findings carry
+ * coverage and lifecycle that the legacy shape cannot express.
+ */
+export async function writeCoordinatorArtifacts(
+  input: CoordinatorArtifactsInput
+): Promise<CoordinatorArtifacts> {
+  const redactor = input.redactor ?? new DefaultRedactor();
+  const dir = input.runnerTemp;
+  const runPath = join(dir, "shuvbot-run.json");
+  const findingsPath = join(dir, "shuvbot-findings.json");
+  const reviewSessionsPath =
+    input.runRecord.review === undefined ? undefined : join(dir, "shuvbot-review-sessions.json");
+  const eventsPath = input.sessionLog === undefined ? undefined : join(dir, "shuvbot-events.jsonl");
+
+  assertCount(
+    "review sessions",
+    input.runRecord.review?.sessions.length ?? 0,
+    MAX_STRUCTURED_ITEMS
+  );
+  assertCount("session events", input.sessionLog?.length ?? 0, ACTION_ARTIFACT_MAX_EVENTS);
+
+  const pending: PendingArtifact[] = [];
+  try {
+    pending.push(
+      prepareJson(runPath, input.runRecord, redactor),
+      prepareJson(findingsPath, input.report ?? { findings: [] }, redactor)
+    );
+    if (reviewSessionsPath !== undefined && input.runRecord.review !== undefined) {
+      pending.push(prepareJson(reviewSessionsPath, input.runRecord.review.sessions, redactor));
+    }
+    if (eventsPath !== undefined && input.sessionLog !== undefined) {
+      pending.push(prepareJsonLines(eventsPath, input.sessionLog, redactor));
+    }
+  } catch (error) {
+    throw sanitizedError("Unable to prepare review artifacts", error, redactor);
+  }
+
+  await commitArtifacts(dir, pending, redactor);
+
+  return {
+    dir,
+    runPath,
+    findingsPath,
+    ...(reviewSessionsPath === undefined ? {} : { reviewSessionsPath }),
+    ...(eventsPath === undefined ? {} : { eventsPath })
+  };
+}
+
+/**
+ * Persist agent/review failure diagnostics so an opaque "Claude exited with 1"
+ * leaves an inspectable trace in the uploaded `$RUNNER_TEMP/shuvbot` artifacts
+ * (the review pipeline throws before the normal artifacts are written). The
+ * caller is responsible for redacting `message` before it reaches here.
+ */
+export async function writeFailureDiagnostics(input: {
+  runnerTemp?: string;
+  message: string;
+}): Promise<string> {
+  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "shuvbot");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "shuvbot-agent-error.txt");
+  await writeFile(path, `${input.message.trimEnd()}\n`);
+  return path;
+}
+
+async function commitArtifacts(
+  dir: string,
+  pending: PendingArtifact[],
+  redactor: Redactor
+): Promise<void> {
   try {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     for (const artifact of pending) {
@@ -102,32 +207,6 @@ export async function writeReviewArtifacts(input: ReviewArtifactsInput): Promise
       })
     );
   }
-
-  return {
-    dir,
-    runPath,
-    findingsPath,
-    contextManifestPath,
-    ...(reviewSessionsPath === undefined ? {} : { reviewSessionsPath }),
-    ...(eventsPath === undefined ? {} : { eventsPath })
-  };
-}
-
-/**
- * Persist agent/review failure diagnostics so an opaque "Claude exited with 1"
- * leaves an inspectable trace in the uploaded `$RUNNER_TEMP/shuvbot` artifacts
- * (the review pipeline throws before the normal artifacts are written). The
- * caller is responsible for redacting `message` before it reaches here.
- */
-export async function writeFailureDiagnostics(input: {
-  runnerTemp?: string;
-  message: string;
-}): Promise<string> {
-  const dir = join(input.runnerTemp ?? process.env.RUNNER_TEMP ?? process.cwd(), "shuvbot");
-  await mkdir(dir, { recursive: true });
-  const path = join(dir, "shuvbot-agent-error.txt");
-  await writeFile(path, `${input.message.trimEnd()}\n`);
-  return path;
 }
 
 function prepareJson(path: string, value: unknown, redactor: Redactor): PendingArtifact {

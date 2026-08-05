@@ -38,6 +38,7 @@ import {
 import { resolveShuvcodeCredential } from "../../review/src/runtime/auth.ts";
 import {
   boundedReviewCleanup,
+  buildReviewRunSummary,
   createReviewDeadline,
   parseReviewDurationMs as parseSharedReviewDurationMs,
   reviewTimeoutError,
@@ -457,61 +458,11 @@ async function persistLocalArtifacts(input: {
   fileSystem: LocalReviewFileSystem;
 }): Promise<{ status: "written" } | { status: "failed"; error: string }> {
   try {
-    const usage = input.execution.sessions.reduce(
-      (total, session) => ({
-        inputTokens: total.inputTokens + (session.usage?.inputTokens ?? 0),
-        outputTokens: total.outputTokens + (session.usage?.outputTokens ?? 0),
-        cost: total.cost + (session.usage?.cost ?? 0)
-      }),
-      { inputTokens: 0, outputTokens: 0, cost: 0 }
-    );
-    const review: ReviewRunSummary = {
-      engine: "coordinator",
-      tier: input.plan.risk.tier,
-      decision: input.report.decision,
-      quorumMet: input.execution.coverage.quorumMet,
-      requiredReviewers: [...input.execution.coverage.required],
-      successfulReviewers: [...input.execution.coverage.completed],
-      missingReviewers: input.execution.coverage.required.filter(
-        (reviewer) => !input.execution.coverage.completed.includes(reviewer)
-      ),
-      sessions: input.execution.sessions.map((session) => ({
-        sessionId: session.sessionId,
-        role: session.role,
-        ...(session.reviewer === undefined ? {} : { reviewer: session.reviewer }),
-        model: session.model,
-        status: session.status,
-        retryCount: session.retryCount,
-        ...(session.usage === undefined
-          ? {}
-          : {
-              usage: {
-                inputTokens: session.usage.inputTokens,
-                outputTokens: session.usage.outputTokens,
-                ...(session.usage.cost === undefined ? {} : { cost: session.usage.cost })
-              }
-            }),
-        ...(session.error === undefined
-          ? {}
-          : {
-              error: {
-                code: session.error.code,
-                message: session.error.message,
-                retryable: session.error.retryable
-              }
-            })
-      })),
-      retries: input.execution.retries,
-      usage,
-      findingAccounting: {
-        active: input.report.counts.active,
-        new: input.report.counts.new,
-        unresolved: input.report.counts.unresolved,
-        fixed: input.report.counts.fixed,
-        userResolved: input.report.counts.userResolved,
-        dismissed: input.report.counts.dismissed
-      }
-    };
+    const review: ReviewRunSummary = buildReviewRunSummary({
+      plan: input.plan,
+      execution: input.execution,
+      report: input.report
+    });
     let record = createRunRecord({
       repo: "local/repo",
       event: "local_review",

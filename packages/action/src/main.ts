@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import * as core from "@actions/core";
 import { readActionInputs } from "./inputs.ts";
 import { loadConfigFile, normalizeConfig } from "../../core/src/config.ts";
@@ -8,11 +10,16 @@ import {
   createRunRecord,
   recordError,
   recordPolicy,
+  recordReview,
   recordToolAudit
 } from "../../core/src/run-record.ts";
 import type { RunRecord } from "../../core/src/run-record.ts";
 import { writeWorkflowSummary } from "./workflow-summary.ts";
-import { writeFailureDiagnostics, writeReviewArtifacts } from "./artifacts.ts";
+import {
+  writeCoordinatorArtifacts,
+  writeFailureDiagnostics,
+  writeReviewArtifacts
+} from "./artifacts.ts";
 import { isSupportedEventName, normalizeEvent, type BotEvent } from "../../core/src/events.ts";
 import { findCommandInEvent } from "../../core/src/commands.ts";
 import { resolveMode } from "../../core/src/modes.ts";
@@ -36,12 +43,23 @@ import { createDriverReviewAgent } from "../../agents/src/review-agent.ts";
 import { startShuvbotMcpServer } from "../../mcp/src/server.ts";
 import { readContextTools } from "../../mcp/src/tools/index.ts";
 import { AuditLog } from "../../mcp/src/audit.ts";
+import {
+  runCoordinatorActionReview,
+  type CoordinatorActionReviewInput
+} from "./coordinator-review.ts";
+import type { GitHubClient } from "../../github/src/octokit.ts";
+import type { RuntimePolicy } from "../../core/src/policy.ts";
+import type { ShuvbotConfig } from "../../core/src/config.ts";
 
 export interface MainOverrides {
   /** Injected in tests to avoid spawning a real agent CLI subprocess. */
   driver?: AgentDriver;
   /** Injected in tests to point the GitHub client at a local stand-in server. */
   fetchImpl?: typeof fetch;
+  /** Injected in tests to cancel a run deterministically. */
+  signal?: AbortSignal;
+  /** Injected in tests to avoid spawning a real shuvcode review runtime. */
+  coordinator?: CoordinatorActionReviewInput["dependencies"];
 }
 
 export async function main(overrides: MainOverrides = {}): Promise<void> {
@@ -151,6 +169,32 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     if (mode === "review" && event && reviewTarget && reviewRequested && client && policy) {
       const repo = { owner: event.repo.owner, name: event.repo.name };
       const pullNumber = reviewTarget.pullNumber;
+
+      // Opt-in only: the config default is `coordinator`, but adopting it here
+      // silently would break every existing workflow, which has no runtime
+      // installed and no non-interactive credential configured.
+      if (inputs.engine === "coordinator") {
+        withPolicy = await runCoordinatorReviewMode({
+          client,
+          repo,
+          repoFullName: event.repo.fullName,
+          pullNumber,
+          reviewTarget,
+          config,
+          policy,
+          actor,
+          hasCommand: Boolean(command),
+          record: withPolicy,
+          logger,
+          cwd: inputs.cwd ?? process.cwd(),
+          ...(overrides.signal ? { signal: overrides.signal } : {}),
+          ...(overrides.coordinator ? { dependencies: overrides.coordinator } : {})
+        });
+        await writeWorkflowSummary(
+          completeRunRecord(withPolicy, withPolicy.errors?.length ? "failure" : "success")
+        );
+        return;
+      }
       const diff = await fetchPullRequestDiff(client, repo, pullNumber);
       const filesResponse = await client.request(
         "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
@@ -415,6 +459,185 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
     throw error;
   }
+}
+
+/**
+ * Runs review mode through the multi-agent coordinator engine.
+ *
+ * Publishing stays under the same runtime policy as the legacy path: a review
+ * runs regardless, but only `policy.canReview` decides whether it reaches the
+ * pull request, and the engine itself never holds a write-capable tool.
+ */
+async function runCoordinatorReviewMode(input: {
+  client: GitHubClient;
+  repo: { owner: string; name: string };
+  repoFullName: string;
+  pullNumber: number;
+  reviewTarget: NonNullable<Awaited<ReturnType<typeof resolveReviewTarget>>>;
+  config: ShuvbotConfig;
+  policy: RuntimePolicy;
+  actor: ActorContext;
+  hasCommand: boolean;
+  record: RunRecord;
+  logger: RunLogger;
+  cwd: string;
+  signal?: AbortSignal;
+  dependencies?: CoordinatorActionReviewInput["dependencies"];
+}): Promise<RunRecord> {
+  const artifactDirectory = join(process.env.RUNNER_TEMP ?? tmpdir(), "shuvbot");
+  // A cancelled workflow run is delivered as a signal to this process. Without
+  // forwarding it, the runner would kill the action while the spawned shuvcode
+  // runtime and its sessions kept going.
+  const cancellation = input.signal === undefined ? processCancellation() : undefined;
+  const signal = input.signal ?? cancellation?.signal;
+  try {
+    return await executeCoordinatorReviewMode({
+      ...input,
+      artifactDirectory,
+      ...(signal === undefined ? {} : { signal })
+    });
+  } finally {
+    cancellation?.dispose();
+  }
+}
+
+async function executeCoordinatorReviewMode(input: {
+  client: GitHubClient;
+  repo: { owner: string; name: string };
+  repoFullName: string;
+  pullNumber: number;
+  reviewTarget: NonNullable<Awaited<ReturnType<typeof resolveReviewTarget>>>;
+  config: ShuvbotConfig;
+  policy: RuntimePolicy;
+  actor: ActorContext;
+  hasCommand: boolean;
+  record: RunRecord;
+  logger: RunLogger;
+  cwd: string;
+  artifactDirectory: string;
+  signal?: AbortSignal;
+  dependencies?: CoordinatorActionReviewInput["dependencies"];
+}): Promise<RunRecord> {
+  let record = input.record;
+  const artifactDirectory = input.artifactDirectory;
+  const review = await runCoordinatorActionReview({
+    client: input.client,
+    repo: input.repo,
+    repoFullName: input.repoFullName,
+    pullNumber: input.pullNumber,
+    baseSha: input.reviewTarget.event.pullRequest.baseSha,
+    headSha: input.reviewTarget.event.pullRequest.headSha,
+    config: input.config,
+    policy: input.policy,
+    cwd: input.cwd,
+    artifactDirectory,
+    logger: input.logger,
+    botLogin: resolveBotLogin(),
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.dependencies ? { dependencies: input.dependencies } : {})
+  });
+
+  if (!review.posted && review.status !== "no_changes") {
+    // The review ran; policy refused to publish it. Say so - a silent skip here
+    // looks identical to a review that found nothing.
+    const why = input.actor.isFork
+      ? "the pull request head is a fork, and shuvbot does not post reviews on fork pull requests"
+      : `the triggering actor has no write access (permission: ${input.actor.actorPermission})`;
+    const notice = `Coordinator review completed but was not posted: ${why}.`;
+    input.logger.log("warn", "review.not_posted", {
+      isFork: input.actor.isFork,
+      permission: input.actor.actorPermission,
+      findings: review.findings.length
+    });
+    if (input.hasCommand) core.error(notice);
+    else core.warning(notice);
+  }
+
+  record = { ...record, postedComments: review.postedComments };
+  if (review.runSummary !== undefined) record = recordReview(record, review.runSummary);
+  if (review.timings !== undefined) {
+    record = {
+      ...record,
+      timings: {
+        ...record.timings,
+        preprocessingMs: review.timings.preprocessingMs,
+        engineMs: review.timings.engineMs,
+        totalMs: review.timings.preprocessingMs + review.timings.engineMs
+      }
+    };
+  }
+
+  // Artifacts are written even when posting was refused: a fork review that
+  // cannot be published is exactly the run whose output someone needs to read.
+  try {
+    await writeCoordinatorArtifacts({
+      runnerTemp: artifactDirectory,
+      runRecord: record,
+      report: review.report,
+      redactor: review.redactor,
+      ...(review.sessionLog === undefined ? {} : { sessionLog: review.sessionLog })
+    });
+  } catch (error) {
+    core.warning(
+      `shuvbot could not write review artifacts: ${review.redactor.redactString(
+        error instanceof Error ? error.message : String(error)
+      )}`
+    );
+  }
+
+  core.setOutput("review_engine", "coordinator");
+  core.setOutput("summary", review.summary);
+  if (review.tier !== undefined) core.setOutput("review_tier", review.tier);
+  if (review.coverage !== undefined) {
+    core.setOutput("review_coverage", JSON.stringify(review.coverage));
+  }
+  core.setOutput("review_degraded", String(review.degraded));
+  core.setOutput("review_findings", JSON.stringify(review.report ?? { findings: [] }));
+  core.setOutput(
+    "result",
+    JSON.stringify({
+      runId: record.runId,
+      status: review.failCheck ? "failed" : review.status,
+      mode: "review",
+      engine: "coordinator",
+      ...(review.tier === undefined ? {} : { tier: review.tier }),
+      degraded: review.degraded,
+      findings: review.findings.length
+    })
+  );
+
+  if (review.failCheck) {
+    core.setFailed(
+      `shuvbot review found findings at or above the configured fail_on threshold (${input.config.failOn}).`
+    );
+  }
+  return record;
+}
+
+/**
+ * Bridges job cancellation into the review's abort signal.
+ *
+ * Handlers are removed when the run finishes so a long-lived process (tests,
+ * or any future in-process caller) does not accumulate them.
+ */
+function processCancellation(): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const abort = () => controller.abort("cancelled");
+  process.on("SIGINT", abort);
+  process.on("SIGTERM", abort);
+  return {
+    signal: controller.signal,
+    dispose() {
+      process.off("SIGINT", abort);
+      process.off("SIGTERM", abort);
+    }
+  };
+}
+
+/** Login whose review comments own finding threads for lifecycle state. */
+function resolveBotLogin(): string {
+  const actor = process.env.GITHUB_ACTOR;
+  return actor !== undefined && actor.length > 0 ? actor : "github-actions[bot]";
 }
 
 /** Keep the step-log annotation from ballooning if the driver tail is large. */
