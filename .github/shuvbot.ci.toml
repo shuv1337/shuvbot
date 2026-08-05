@@ -5,21 +5,8 @@
 # laptop and a runner is where the review runtime's credential comes from, so
 # one shared file would force local review to require a CI secret.
 
-# Dogfood #3 (run 31054253953) lost four of six specialists - including both
-# required reviewers - to the default 5m per-session cap, at exactly 300s each,
-# on a ~330-line full-tier diff. The two that finished took 89s and 99s, so the
-# cap is what bounds a full-tier review, not the models.
-activity_timeout = "10m"
-
 [review]
 engine = "coordinator"
-
-# Six specialists in one wave rather than two. This is not an independent
-# experiment: at concurrency 3 a 10m session cap makes the worst case two waves
-# of 600s, which overruns the 15m overall timeout and would be killed there
-# instead. One wave keeps the wall clock at roughly one session plus the
-# coordinator, inside the existing budget.
-max_concurrency = 6
 
 [review.shuvcode]
 # Must match APPROVED_SHUVCODE_RUNTIME_VERSION and the exact devDependency in
@@ -37,5 +24,19 @@ auth = "environment"
 # first real Action run degraded to 0/6 coverage for exactly this reason.
 [review.models]
 coordinator = "subscription/claude-opus-5@medium"
-standard = "subscription/claude-fable-5@high"
+# Effort, not the clock, is what a full-tier review is bounded by.
+#
+# Dogfood #3 (concurrency 3, 5m cap) lost four of six specialists at exactly
+# 300s while performance and release finished in 99s and 89s. Dogfood #4 raised
+# the cap to 10m and ran all six in one wave, and then *nobody* finished: every
+# session burned its full 600s and the run died on the 15m overall timeout
+# having written no artifacts at all. Doubling the clock bought nothing, and six
+# concurrent sessions on one subscription credential appear to throttle each
+# other - even the two reviewers that had been fast.
+#
+# So the session length is set by how long the model thinks, and @high does not
+# converge on a workspace this size. @medium is the lever; if it still does not
+# reach quorum the next step is @low, or bounding how much materialised content
+# a single reviewer receives.
+standard = "subscription/claude-fable-5@medium"
 light = "subscription/claude-fable-5@low"
