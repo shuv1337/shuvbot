@@ -99,7 +99,7 @@ export async function createReviewWorkspace(
       // the reviewed repository: pull request content stays strictly data.
       const contentPath = join(contentsDir, encodeContentPath(file.path));
       assertInside(root, contentPath);
-      await writeFile(contentPath, bounded.text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      await writeFile(contentPath, bounded.text, { encoding: "utf8", flag: "w", mode: 0o644 });
       contentBudget -= Buffer.byteLength(bounded.text, "utf8");
       files.push({
         path: file.path,
@@ -228,7 +228,7 @@ function boundContent(
 ): { text: string; truncated: boolean } | undefined {
   if (content === undefined || content.includes("\0")) return undefined;
   const limit = Math.min(MAX_WORKSPACE_CONTENT_BYTES, remainingBudget);
-  if (limit <= 0) return undefined;
+  if (limit < 0) return undefined;
   const buffer = Buffer.from(content, "utf8");
   if (buffer.byteLength <= limit) return { text: content, truncated: false };
   return {
