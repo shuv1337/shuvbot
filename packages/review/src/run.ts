@@ -146,7 +146,11 @@ export async function runCoordinatorReview(
   const workspaceOperation = createReviewWorkspace({
     files: plan.diff.entries
       .filter((file) => file.included)
-      .map((file) => ({ path: file.path, patch: file.patch ?? "" })),
+      .map((file) => ({
+        path: file.path,
+        patch: file.patch ?? "",
+        ...(file.content === undefined ? {} : { content: file.content })
+      })),
     sharedContext: renderSharedReviewContext(plan, input.contextHeader),
     ...(previous === null ? {} : { previousFindings: previous.findings })
   });

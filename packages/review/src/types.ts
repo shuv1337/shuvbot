@@ -37,6 +37,8 @@ export interface FilteredDiffEntry {
   readonly included: boolean;
   readonly filterReason?: DiffFilterReason;
   readonly patch?: string;
+  /** Post-change file content, when the caller could source it. */
+  readonly content?: string;
 }
 
 export interface FilteredDiff {

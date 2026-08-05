@@ -162,6 +162,45 @@ describe("shared coordinator review run", () => {
     expect(await Bun.file(`${workspacePath}/manifest.json`).exists()).toBe(false);
   });
 
+  test("materialises post-change content so reviewers do not read the base revision", async () => {
+    let materialised: { path: string; content: string | undefined } | undefined;
+    const input = runInput({
+      files: [
+        changedFile({ path: "src/helpers.ts", content: "export function added(): void {}\n" }),
+        changedFile({ path: "src/index.ts" })
+      ],
+      dependencies: {
+        executeCoordinator: async ({ workspace }) => {
+          const entry = workspace.manifest.files.find(({ path }) => path === "src/helpers.ts")!;
+          const withoutContent = workspace.manifest.files.find(
+            ({ path }) => path === "src/index.ts"
+          )!;
+          materialised = {
+            path: entry.path,
+            content:
+              entry.contentPath === undefined
+                ? undefined
+                : await Bun.file(`${workspace.root}/${entry.contentPath}`).text()
+          };
+          expect(withoutContent.contentPath).toBeUndefined();
+          return execution();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        },
+        now: () => new Date()
+      }
+    });
+
+    await runCoordinatorReview(input);
+    input.deadline.dispose();
+
+    expect(materialised).toEqual({
+      path: "src/helpers.ts",
+      content: "export function added(): void {}\n"
+    });
+  });
+
   test("cleans up the workspace even when the engine fails", async () => {
     let workspacePath = "";
     const input = runInput({

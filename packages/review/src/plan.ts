@@ -137,7 +137,8 @@ function buildFilteredDiff(
       generatedRisk,
       included: decision?.accepted ?? false,
       ...(filterReason === undefined ? {} : { filterReason }),
-      ...(file.patch === undefined ? {} : { patch: file.patch })
+      ...(file.patch === undefined ? {} : { patch: file.patch }),
+      ...(file.content === undefined ? {} : { content: file.content })
     };
   });
 
