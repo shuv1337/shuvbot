@@ -847,6 +847,36 @@ describe("local review CLI", () => {
     });
   });
 
+  test("materialises content from the reviewed revision, not the working tree", async () => {
+    const cwd = await createRepository(1);
+    // A dirty working tree is the local equivalent of the Action's checkout
+    // being a different revision from the one under review.
+    await writeFile(join(cwd, "a.ts"), "const uncommitted = true;\n");
+    let materialised: string | undefined;
+
+    await runLocalReview({
+      cwd,
+      base: "main",
+      head: "HEAD",
+      config: coordinatorConfig(),
+      json: true,
+      stdout: writer(() => {}),
+      dependencies: {
+        approvedShuvcodeVersion: approvedRuntimeVersion,
+        executeCoordinator: async ({ workspace }) => {
+          const entry = workspace.manifest.files.find(({ path }) => path === "a.ts");
+          materialised =
+            entry?.contentPath === undefined
+              ? undefined
+              : await readFile(join(workspace.root, entry.contentPath), "utf8");
+          return completedExecution(["code-quality"]);
+        }
+      }
+    });
+
+    expect(materialised).toBe("const value0 = 0;\n");
+  });
+
   test("rejects malformed NUL-delimited Git metadata before execution", async () => {
     const cwd = await createRepository(1);
     let executions = 0;
