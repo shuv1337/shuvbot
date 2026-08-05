@@ -63903,10 +63903,11 @@ var SHUVCODE_CREDENTIAL_ENV_NAMES = [
   "ANTHROPIC_API_KEY"
 ];
 var ShuvcodeSessionError = class extends Error {
-  constructor(category, message = safeFailureMessage(category)) {
+  constructor(category, message = safeFailureMessage(category), detail) {
     super(message);
     this.category = category;
     this.name = "ShuvcodeSessionError";
+    if (detail !== void 0 && detail.length > 0) this.detail = detail;
     const classified = classifyReviewError({ category, message });
     this.code = classified.code;
     this.retryable = classified.retryable;
@@ -63914,6 +63915,13 @@ var ShuvcodeSessionError = class extends Error {
   category;
   code;
   retryable;
+  /**
+   * The failure text the runtime reported, bounded but **not** redacted, so a
+   * failure can be diagnosed beyond its category. `message` stays a fixed safe
+   * string because it is surfaced widely; this is untrusted provider output and
+   * every consumer must redact it before it reaches an artifact or a log.
+   */
+  detail;
 };
 var DEFAULT_STARTUP_TIMEOUT_MS = 15e3;
 var DEFAULT_SHUTDOWN_GRACE_MS = 3e3;
@@ -63945,6 +63953,7 @@ async function startShuvcodeRuntime(options) {
     env
   });
   const eventController = new AbortController();
+  const scrubFailureText = failureTextScrubber(options);
   const activeSessions = /* @__PURE__ */ new Set();
   const sessionPolicies = /* @__PURE__ */ new Map();
   const listeners = /* @__PURE__ */ new Set();
@@ -64036,7 +64045,12 @@ async function startShuvcodeRuntime(options) {
       for (const listener of listeners) listener(event);
       const sessionID = event.data?.sessionID;
       if (sessionID === void 0) return;
-      const terminal = terminalResult(sourceEvent, structuredSessions.has(sessionID), event);
+      const terminal = terminalResult(
+        sourceEvent,
+        structuredSessions.has(sessionID),
+        event,
+        scrubFailureText
+      );
       if (terminal === void 0) return;
       activeSessions.delete(sessionID);
       structuredSessions.delete(sessionID);
@@ -64436,13 +64450,17 @@ function parseStartupLine(line) {
 async function pumpEvents(client, signal, receive) {
   for await (const event of client.event.subscribe({ signal })) receive(event);
 }
-function terminalResult(event, structured, sanitized = event) {
+function terminalResult(event, structured, sanitized = event, scrub) {
   if (event.type === "session.structured.completed") return sanitized;
   if (event.type === "session.execution.interrupted") {
     return new ShuvcodeSessionError("cancellation");
   }
   if (event.type === "session.structured.failed" || event.type === "session.execution.failed" || event.type === "session.error") {
-    return new ShuvcodeSessionError(classifyFailure(event));
+    return new ShuvcodeSessionError(
+      classifyFailure(event),
+      void 0,
+      scrub === void 0 ? void 0 : scrubbed(failureDetail(event), scrub)
+    );
   }
   if (event.type !== "session.idle" && event.type !== "session.execution.succeeded") {
     return void 0;
@@ -64516,6 +64534,38 @@ function safeClientError(error52) {
 }
 function isFailureType(type) {
   return type === "session.structured.failed" || type === "session.execution.failed" || type === "session.error";
+}
+var MAX_FAILURE_DETAIL_CHARS = 2e3;
+function failureDetail(event) {
+  const error52 = isRecord(event.data?.error) ? event.data.error : void 0;
+  if (error52 === void 0) return void 0;
+  const data = isRecord(error52.data) ? error52.data : void 0;
+  const status = finiteNumber(error52.status) ?? finiteNumber(data?.statusCode);
+  const labelled = [
+    typeof error52.type === "string" ? `type=${error52.type}` : void 0,
+    typeof error52.name === "string" ? `name=${error52.name}` : void 0,
+    status === void 0 ? void 0 : `status=${status}`
+  ].filter((value) => value !== void 0);
+  const messages = new Set(
+    [error52.message, data?.message].filter(
+      (value) => typeof value === "string" && value.trim().length > 0
+    )
+  );
+  const detail = [...labelled, ...messages].join(" ").replace(/\s+/gu, " ").trim();
+  if (detail.length === 0) return void 0;
+  return detail.length > MAX_FAILURE_DETAIL_CHARS ? `${detail.slice(0, MAX_FAILURE_DETAIL_CHARS)}\u2026truncated` : detail;
+}
+function scrubbed(detail, scrub) {
+  if (detail === void 0) return void 0;
+  const cleaned = scrub(detail);
+  return cleaned.length === 0 ? void 0 : cleaned;
+}
+function failureTextScrubber(options) {
+  const { redact } = options;
+  if (redact === void 0) return void 0;
+  const credential = options.credential?.value;
+  if (credential === void 0 || credential.length === 0) return redact;
+  return (text) => redact(text.split(credential).join("[redacted]"));
 }
 function sanitizeFailureStatus(value) {
   const error52 = isRecord(value) ? value : void 0;
@@ -65640,6 +65690,7 @@ async function runCoordinatorReview(input) {
           version: config2.review.shuvcode.version,
           cwd: input.cwd,
           ...input.credential === void 0 ? {} : { credential: input.credential },
+          redact: (text) => redactor.redactString(text),
           signal
         }),
         redactor,
@@ -66879,8 +66930,29 @@ function recordRejectedResult(samples, redactor, entry) {
   const bounded = serialized.length > MAX_REJECTED_SAMPLE_BYTES ? `${serialized.slice(0, MAX_REJECTED_SAMPLE_BYTES)}
 \u2026truncated` : serialized;
   samples.push({
+    kind: "result",
     ...rest,
     reason: redactor.redactString(error52 instanceof Error ? error52.message : String(error52)),
+    sample: redactor.redactString(bounded)
+  });
+}
+function failureDetailOf(error52) {
+  if (typeof error52 !== "object" || error52 === null) return void 0;
+  const { detail } = error52;
+  return typeof detail === "string" && detail.length > 0 ? detail : void 0;
+}
+function recordFailedSession(samples, redactor, entry) {
+  if (samples.length >= MAX_REJECTED_SAMPLES) return;
+  const { error: error52, classified, ...rest } = entry;
+  const detail = failureDetailOf(error52);
+  if (detail === void 0) return;
+  const bounded = detail.length > MAX_REJECTED_SAMPLE_BYTES ? `${detail.slice(0, MAX_REJECTED_SAMPLE_BYTES)}
+\u2026truncated` : detail;
+  samples.push({
+    kind: "failure",
+    ...rest,
+    repair: false,
+    reason: classified.message,
     sample: redactor.redactString(bounded)
   });
 }
@@ -67281,6 +67353,14 @@ Return one corrected JSON value only.`
         const captured = captureError(capture);
         const usage = captureUsage(capture);
         const classified = captured ?? classifyAndRedact(error52, "failed", context.signal, options.input.redactor);
+        recordFailedSession(options.rejectedSamples, options.input.redactor, {
+          role: "specialist",
+          reviewer: options.reviewer,
+          ...activeSessionID === void 0 ? {} : { sessionId: activeSessionID },
+          attempt: context.attempt,
+          error: error52,
+          classified
+        });
         if (capture !== void 0 && captureOutcome(capture) !== "failed") {
           options.log.append({
             event: "session.failed",
@@ -67403,6 +67483,13 @@ Return one corrected JSON value only.`
       controller.signal,
       options.input.redactor
     );
+    recordFailedSession(options.rejectedSamples, options.input.redactor, {
+      role: "coordinator",
+      sessionId: options.sessionID,
+      attempt,
+      error: error52,
+      classified
+    });
     if (timedOut || !["failed", "cancelled"].includes(captureOutcome(options.captures.get(options.sessionID)))) {
       options.log.append({
         event: timedOut ? "session.timed_out" : options.signal.aborted ? "session.cancelled" : "session.failed",
