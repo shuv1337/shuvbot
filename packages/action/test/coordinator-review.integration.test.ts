@@ -52,6 +52,7 @@ const PR_FILES = [
 interface RecordedCall {
   method: string;
   path: string;
+  query: string;
   body?: unknown;
 }
 
@@ -121,7 +122,7 @@ function fakeGitHubServer(routes: Record<string, { status: number; body: unknown
     const key = `${method} ${url.pathname}`;
     const body =
       typeof init?.body === "string" && init.body.length > 0 ? JSON.parse(init.body) : undefined;
-    calls.push({ method, path: url.pathname, body });
+    calls.push({ method, path: url.pathname, query: url.search, body });
     const accept = new Headers(init?.headers ?? {}).get("accept") ?? "";
     const route = (accept.includes("diff") ? routes[`${key} [diff]`] : undefined) ?? routes[key];
     if (!route) {
@@ -528,6 +529,78 @@ describe("main() coordinator review mode", () => {
 
     expect(recoveredPatch).toContain("TODO: sanitize");
     expect(recoveredPatch).toContain("console.log(name)");
+  });
+
+  test("materialises the pull request's own file content, not the checked-out revision", async () => {
+    // The job checks out the trusted default branch, so the filesystem holds
+    // the base revision. Without this, a reviewer confirming a symbol the pull
+    // request adds reads the pre-change file and reports it as undefined.
+    const headContent = 'export function greet(name: string) {\n  return "hi " + name;\n}\n';
+    const server = fakeGitHubServer(
+      routes({
+        "GET /repos/octo/repo/contents/src/app.ts": {
+          status: 200,
+          body: {
+            type: "file",
+            encoding: "base64",
+            size: Buffer.byteLength(headContent),
+            content: Buffer.from(headContent, "utf8").toString("base64")
+          }
+        }
+      })
+    );
+    let materialised: string | undefined;
+
+    await main({
+      fetchImpl: server.fetchImpl,
+      coordinator: {
+        executeCoordinator: async ({ workspace }) => {
+          const entry = workspace.manifest.files.find(({ path }) => path === "src/app.ts");
+          materialised =
+            entry?.contentPath === undefined
+              ? undefined
+              : await readFile(join(workspace.root, entry.contentPath), "utf8");
+          return engineResult();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        }
+      }
+    });
+
+    expect(materialised).toBe(headContent);
+    const contentsCall = server.calls.find(
+      (call) => call.path === "/repos/octo/repo/contents/src/app.ts"
+    );
+    // The pull request's head commit, from the event fixture - not the SHA the
+    // job happens to have checked out.
+    expect(contentsCall?.query).toBe("?ref=headsha2");
+  });
+
+  test("reviews from the patch alone when the pull request's content is unavailable", async () => {
+    // No contents route is mocked, so the fetch 404s exactly as it would for a
+    // fork head commit the base repository cannot resolve.
+    const server = fakeGitHubServer(routes());
+    let contentPath: string | undefined = "unset";
+
+    await main({
+      fetchImpl: server.fetchImpl,
+      coordinator: {
+        executeCoordinator: async ({ workspace }) => {
+          contentPath = workspace.manifest.files.find(
+            ({ path }) => path === "src/app.ts"
+          )?.contentPath;
+          return engineResult();
+        },
+        startRuntime: async () => {
+          throw new Error("unused");
+        }
+      }
+    });
+
+    expect(contentPath).toBeUndefined();
+    const outputs = await readOutputs(outputPath);
+    expect(JSON.parse(outputs.result!)).toMatchObject({ status: "completed", mode: "review" });
   });
 
   test("refuses to run without a non-interactive credential", async () => {
