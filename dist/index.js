@@ -32384,6 +32384,7 @@ var core5 = __toESM(require_core(), 1);
 // packages/action/src/main.ts
 var core4 = __toESM(require_core(), 1);
 import { readFile as readFile5 } from "fs/promises";
+import { existsSync } from "fs";
 import { join as join9 } from "path";
 import { tmpdir as tmpdir2 } from "os";
 
@@ -63772,6 +63773,9 @@ function renderCoordinatorReport(value, options = {}) {
   }
   return lines.join("\n");
 }
+function buildCoordinatorFindingsArtifact(input) {
+  return { ...input.report, baseSha: input.baseSha, headSha: input.headSha };
+}
 function count(values, expected) {
   return values.filter((value) => value === expected).length;
 }
@@ -68397,7 +68401,11 @@ async function runCoordinatorActionReview(input) {
       degraded: posting.degraded,
       summary: summary2,
       findings: run.reportedResult.findings,
-      report: run.report,
+      report: buildCoordinatorFindingsArtifact({
+        report: run.report,
+        baseSha: input.baseSha,
+        headSha: input.headSha
+      }),
       postedComments,
       posted,
       failCheck: posting.failCheck,
@@ -68564,10 +68572,12 @@ function toChangedFileStatus(value) {
 }
 
 // packages/action/src/main.ts
+var DEFAULT_CONFIG_FILENAME = "shuvbot.toml";
 async function main(overrides = {}) {
   const logger = new RunLogger();
   const inputs = readActionInputs();
-  const fileConfig = inputs.config ? await loadConfigFile(inputs.config) : normalizeConfig({});
+  const cwd = inputs.cwd ?? process.cwd();
+  const fileConfig = await resolveActionConfig(inputs.config, cwd, logger);
   const eventName = process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const eventPayload = await readEventPayload();
   const event = isSupportedEventName(eventName) && eventPayload ? normalizeEvent({ eventName, payload: eventPayload }) : null;
@@ -68659,7 +68669,7 @@ async function main(overrides = {}) {
           record: withPolicy,
           logger,
           botLogin: resolveBotLogin(inputs.botLogin),
-          cwd: inputs.cwd ?? process.cwd(),
+          cwd,
           ...overrides.signal ? { signal: overrides.signal } : {},
           ...overrides.coordinator ? { dependencies: overrides.coordinator } : {}
         });
@@ -68678,7 +68688,6 @@ async function main(overrides = {}) {
           }
         }
       );
-      const cwd = inputs.cwd ?? process.cwd();
       const redactor = new DefaultRedactor();
       const audit = new AuditLog(redactor);
       const mcpServer = await startShuvbotMcpServer({
@@ -68791,7 +68800,7 @@ ${boundedLogTail(message)}`);
     }
     if (mode === "implement" && command && event && policy) {
       const implementation = await runImplement({
-        cwd: inputs.cwd ?? process.cwd(),
+        cwd,
         runId: withPolicy.runId,
         command,
         policy,
@@ -69033,6 +69042,13 @@ function processCancellation() {
 }
 function resolveBotLogin(configured) {
   return configured ?? "github-actions[bot]";
+}
+async function resolveActionConfig(explicitPath, cwd, logger) {
+  if (explicitPath !== void 0) return loadConfigFile(explicitPath);
+  const discovered = join9(cwd, DEFAULT_CONFIG_FILENAME);
+  if (!existsSync(discovered)) return normalizeConfig({});
+  logger.log("info", "config.discovered", { path: DEFAULT_CONFIG_FILENAME });
+  return loadConfigFile(discovered);
 }
 function boundedLogTail(message, max = 4e3) {
   return message.length <= max ? message : `\u2026[${message.length - max} chars omitted]\u2026
