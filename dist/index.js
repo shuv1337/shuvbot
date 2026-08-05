@@ -63791,6 +63791,103 @@ function sanitize(value, redact) {
   return redact ? redact(withoutCommonSecrets) : withoutCommonSecrets;
 }
 
+// packages/review/src/runtime/model-catalog.ts
+var SUBSCRIPTION_PREFIX = "subscription/";
+var VARIANT_SEPARATOR = "@";
+var CURATED_REVIEW_MODELS = Object.freeze({
+  "gpt-5.6-luna": {
+    providerID: "openai",
+    id: "gpt-5.6-luna",
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
+  },
+  "gpt-5.6-sol": {
+    providerID: "openai",
+    id: "gpt-5.6-sol",
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
+  },
+  "claude-opus-5": {
+    providerID: "anthropic",
+    id: "claude-opus-5",
+    efforts: ["low", "medium", "high", "xhigh", "max"]
+  },
+  "claude-fable-5": {
+    providerID: "anthropic",
+    id: "claude-fable-5",
+    efforts: ["low", "medium", "high", "xhigh", "max"]
+  },
+  "grok-4.5": { providerID: "xai", id: "grok-4.5", efforts: ["low", "medium", "high"] }
+});
+var REVIEW_MODEL_ALIASES = Object.freeze({
+  "default-reasoning": "claude-opus-5@medium",
+  "default-coding": "grok-4.5@high",
+  "default-fast": "gpt-5.6-luna@max"
+});
+function curatedModelNames() {
+  return [...Object.keys(REVIEW_MODEL_ALIASES), ...Object.keys(CURATED_REVIEW_MODELS)];
+}
+function resolveReviewModels(refs) {
+  const resolved = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    if (!resolved.has(ref)) resolved.set(ref, resolveReviewModel(ref));
+  }
+  return resolved;
+}
+function resolveReviewModel(ref) {
+  if (!ref.startsWith(SUBSCRIPTION_PREFIX)) {
+    throw modelConfigError(`Review model must use the subscription provider: ${ref}`);
+  }
+  const name = ref.slice(SUBSCRIPTION_PREFIX.length);
+  if (name.length === 0) throw modelConfigError(`Review model is missing a name: ${ref}`);
+  return resolveName(name, ref);
+}
+function resolveName(name, ref) {
+  const { base, variant } = splitVariant(name, ref);
+  const provider = base.indexOf(":");
+  if (provider !== -1) {
+    const providerID = base.slice(0, provider);
+    const id = base.slice(provider + 1);
+    if (providerID.length === 0 || id.length === 0) {
+      throw modelConfigError(
+        `Review model must name both a provider and a model as subscription/<provider>:<model>: ${ref}`
+      );
+    }
+    return variant === void 0 ? { providerID, id } : { providerID, id, variant };
+  }
+  const alias = REVIEW_MODEL_ALIASES[base];
+  if (alias !== void 0) {
+    const resolved = resolveName(alias, ref);
+    return variant === void 0 ? resolved : { ...resolved, variant };
+  }
+  const curated = CURATED_REVIEW_MODELS[base];
+  if (curated === void 0) {
+    throw modelConfigError(
+      `Unknown review model ${base}. Curated models: ${curatedModelNames().join(", ")}. Use subscription/<provider>:${base} to select an uncurated model.`
+    );
+  }
+  if (variant !== void 0 && !curated.efforts.includes(variant)) {
+    throw modelConfigError(
+      `Unknown reasoning effort ${variant} for ${base}. Accepted efforts: ${curated.efforts.join(", ")}.`
+    );
+  }
+  return variant === void 0 ? { providerID: curated.providerID, id: curated.id } : { providerID: curated.providerID, id: curated.id, variant };
+}
+function splitVariant(name, ref) {
+  const separator = name.indexOf(VARIANT_SEPARATOR);
+  if (separator === -1) return { base: name };
+  const base = name.slice(0, separator);
+  const variant = name.slice(separator + 1);
+  if (base.length === 0 || variant.length === 0) {
+    throw modelConfigError(
+      `Review model must name both a model and an effort as <model>@<effort>: ${ref}`
+    );
+  }
+  return { base, variant };
+}
+function modelConfigError(message) {
+  const classified = classifyReviewError({ category: "config", message });
+  return Object.assign(new Error(message), classified);
+}
+
 // packages/review/src/runtime/shuvcode.ts
 import { randomBytes } from "crypto";
 import { spawn as spawn2 } from "child_process";
@@ -64526,6 +64623,27 @@ async function settlesWithin(operation, timeoutMs) {
 }
 
 // packages/review/src/runtime/auth.ts
+var CREDENTIAL_PROVIDERS = Object.freeze({
+  CLAUDE_CODE_OAUTH_TOKEN: "anthropic",
+  ANTHROPIC_API_KEY: "anthropic"
+});
+function assertReviewModelsReachable(input) {
+  const available = CREDENTIAL_PROVIDERS[input.credential.name];
+  const unreachable = [];
+  for (const [role, ref] of Object.entries(input.models)) {
+    let providerID;
+    try {
+      providerID = resolveReviewModel(ref).providerID;
+    } catch {
+      continue;
+    }
+    if (providerID !== available) unreachable.push(`${role} (${ref} needs ${providerID})`);
+  }
+  if (unreachable.length === 0) return;
+  throw new ConfigError(
+    `review.shuvcode.auth = "environment" supplies a ${available} credential via ${input.credential.name}, but these review models need another provider: ${unreachable.join(", ")}. Configure [review.models] with ${available} models, or authenticate the review runtime with a profile that has those providers.`
+  );
+}
 function resolveShuvcodeCredential(input) {
   if (input.mode === "user") return void 0;
   for (const name of SHUVCODE_CREDENTIAL_ENV_NAMES) {
@@ -65410,6 +65528,9 @@ var REVIEW_CLEANUP_TIMEOUT_MS = 5e3;
 var MAX_TIMER_MS = 2147483647;
 async function runCoordinatorReview(input) {
   const { config: config2, deadline, redactor, dependencies } = input;
+  if (input.credential !== void 0) {
+    assertReviewModelsReachable({ credential: input.credential, models: config2.review.models });
+  }
   const plan = createReviewExecutionPlanFromConfig({
     files: input.files,
     baseSha: input.baseSha,
@@ -66379,103 +66500,6 @@ function validateEvent(event) {
   if (event.error !== void 0 && !["session.failed", "session.timed_out", "session.cancelled"].includes(event.event)) {
     throw new TypeError("errors are only valid on terminal failure events");
   }
-}
-
-// packages/review/src/runtime/model-catalog.ts
-var SUBSCRIPTION_PREFIX = "subscription/";
-var VARIANT_SEPARATOR = "@";
-var CURATED_REVIEW_MODELS = Object.freeze({
-  "gpt-5.6-luna": {
-    providerID: "openai",
-    id: "gpt-5.6-luna",
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
-  },
-  "gpt-5.6-sol": {
-    providerID: "openai",
-    id: "gpt-5.6-sol",
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"]
-  },
-  "claude-opus-5": {
-    providerID: "anthropic",
-    id: "claude-opus-5",
-    efforts: ["low", "medium", "high", "xhigh", "max"]
-  },
-  "claude-fable-5": {
-    providerID: "anthropic",
-    id: "claude-fable-5",
-    efforts: ["low", "medium", "high", "xhigh", "max"]
-  },
-  "grok-4.5": { providerID: "xai", id: "grok-4.5", efforts: ["low", "medium", "high"] }
-});
-var REVIEW_MODEL_ALIASES = Object.freeze({
-  "default-reasoning": "claude-opus-5@medium",
-  "default-coding": "grok-4.5@high",
-  "default-fast": "gpt-5.6-luna@max"
-});
-function curatedModelNames() {
-  return [...Object.keys(REVIEW_MODEL_ALIASES), ...Object.keys(CURATED_REVIEW_MODELS)];
-}
-function resolveReviewModels(refs) {
-  const resolved = /* @__PURE__ */ new Map();
-  for (const ref of refs) {
-    if (!resolved.has(ref)) resolved.set(ref, resolveReviewModel(ref));
-  }
-  return resolved;
-}
-function resolveReviewModel(ref) {
-  if (!ref.startsWith(SUBSCRIPTION_PREFIX)) {
-    throw modelConfigError(`Review model must use the subscription provider: ${ref}`);
-  }
-  const name = ref.slice(SUBSCRIPTION_PREFIX.length);
-  if (name.length === 0) throw modelConfigError(`Review model is missing a name: ${ref}`);
-  return resolveName(name, ref);
-}
-function resolveName(name, ref) {
-  const { base, variant } = splitVariant(name, ref);
-  const provider = base.indexOf(":");
-  if (provider !== -1) {
-    const providerID = base.slice(0, provider);
-    const id = base.slice(provider + 1);
-    if (providerID.length === 0 || id.length === 0) {
-      throw modelConfigError(
-        `Review model must name both a provider and a model as subscription/<provider>:<model>: ${ref}`
-      );
-    }
-    return variant === void 0 ? { providerID, id } : { providerID, id, variant };
-  }
-  const alias = REVIEW_MODEL_ALIASES[base];
-  if (alias !== void 0) {
-    const resolved = resolveName(alias, ref);
-    return variant === void 0 ? resolved : { ...resolved, variant };
-  }
-  const curated = CURATED_REVIEW_MODELS[base];
-  if (curated === void 0) {
-    throw modelConfigError(
-      `Unknown review model ${base}. Curated models: ${curatedModelNames().join(", ")}. Use subscription/<provider>:${base} to select an uncurated model.`
-    );
-  }
-  if (variant !== void 0 && !curated.efforts.includes(variant)) {
-    throw modelConfigError(
-      `Unknown reasoning effort ${variant} for ${base}. Accepted efforts: ${curated.efforts.join(", ")}.`
-    );
-  }
-  return variant === void 0 ? { providerID: curated.providerID, id: curated.id } : { providerID: curated.providerID, id: curated.id, variant };
-}
-function splitVariant(name, ref) {
-  const separator = name.indexOf(VARIANT_SEPARATOR);
-  if (separator === -1) return { base: name };
-  const base = name.slice(0, separator);
-  const variant = name.slice(separator + 1);
-  if (base.length === 0 || variant.length === 0) {
-    throw modelConfigError(
-      `Review model must name both a model and an effort as <model>@<effort>: ${ref}`
-    );
-  }
-  return { base, variant };
-}
-function modelConfigError(message) {
-  const classified = classifyReviewError({ category: "config", message });
-  return Object.assign(new Error(message), classified);
 }
 
 // packages/review/src/runtime/events.ts
