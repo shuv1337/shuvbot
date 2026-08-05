@@ -259,10 +259,7 @@ export async function postReview(input: PostReviewInput): Promise<PostReviewResu
         )
         .map((comment) => asMarkerComment(comment))
     );
-    if (
-      page === DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages &&
-      batch.length === 100
-    ) {
+    if (page === DEFAULT_REVIEW_FINDING_INGESTION_LIMITS.maxPages && batch.length === 100) {
       throw ingestionError(
         "page_limit_exceeded",
         "Review comment lookup exceeded limits.maxPages; narrow the review history."
