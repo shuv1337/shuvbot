@@ -10,7 +10,11 @@ import { defaultRuntimePolicy } from "../../core/src/policy.ts";
 import { startShuvbotMcpServer } from "../../mcp/src/server.ts";
 import { AuditLog } from "../../mcp/src/audit.ts";
 import { resolveClaudeAuth } from "../../agents/src/auth.ts";
-import { startShuvcodeRuntime } from "../../review/src/runtime/shuvcode.ts";
+import { resolveShuvcodeCredential } from "../../review/src/runtime/auth.ts";
+import {
+  startShuvcodeRuntime,
+  type ShuvcodeRuntimeCredential
+} from "../../review/src/runtime/shuvcode.ts";
 import { spawnSyncLike, type SpawnSyncLike } from "./auth/claude-import.ts";
 
 export interface CoordinatorDiagnosticRuntime {
@@ -51,6 +55,7 @@ export interface CoordinatorDiagnosticOperations {
     version: string;
     cwd: string;
     env: Record<string, string | undefined>;
+    credential?: ShuvcodeRuntimeCredential;
   }): Promise<CoordinatorDiagnosticRuntime>;
 }
 
@@ -206,11 +211,29 @@ async function coordinatorChecks(
 
   let authSupported = false;
   let modelCatalogSupported = false;
-  if (!expected.useUserAuth) {
+  const profileAuthUsable = expected.auth === "environment" || expected.useUserAuth;
+  let diagnosticCredential: ShuvcodeRuntimeCredential | undefined;
+  if (expected.auth === "environment") {
+    // Report whether the configured non-interactive credential is actually
+    // present, without ever printing the value.
+    try {
+      diagnosticCredential = resolveShuvcodeCredential({ mode: "environment", env });
+      checks.push(
+        pass(
+          "coordinator auth",
+          `Non-interactive credential supplied via ${diagnosticCredential?.name}`
+        )
+      );
+    } catch (error) {
+      checks.push(fail("coordinator auth", safeError(error, redactor, env, cwd)));
+    }
+  }
+  if (!profileAuthUsable) {
     checks.push(
       fail(
         "coordinator auth",
-        "Local subscription auth is disabled; set review.shuvcode.use_user_auth = true"
+        "Local subscription auth is disabled; set review.shuvcode.use_user_auth = true " +
+          'or review.shuvcode.auth = "environment"'
       )
     );
   } else {
@@ -243,7 +266,9 @@ async function coordinatorChecks(
     const reason = !packageMatches
       ? "the exact package pin is unavailable"
       : "the packed public client lacks the required auth.status() capability";
-    if (expected.useUserAuth) checks.push(warn("coordinator auth", `Skipped because ${reason}`));
+    if (profileAuthUsable && expected.auth === "user") {
+      checks.push(warn("coordinator auth", `Skipped because ${reason}`));
+    }
     checks.push(warn("coordinator runtime", `Skipped because ${reason}`));
     for (const role of ["coordinator", "standard", "light"] as const) {
       checks.push(warn(`coordinator model ${role}`, `Skipped because ${reason}`));
@@ -257,7 +282,10 @@ async function coordinatorChecks(
       packageName: expected.package,
       version: expected.version,
       cwd,
-      env
+      env,
+      // Diagnose the runtime the way a real run would authenticate it, so an
+      // environment-auth check cannot pass here and fail during a review.
+      ...(diagnosticCredential === undefined ? {} : { credential: diagnosticCredential })
     });
     if (!runtime.healthy || runtime.version !== expected.version) {
       checks.push(
@@ -414,7 +442,7 @@ export function createDefaultCoordinatorDiagnostics(
           typeof client.provider?.list === "function" && typeof client.model?.list === "function"
       };
     },
-    async launch({ packageName, version, cwd, env }) {
+    async launch({ packageName, version, cwd, env, credential }) {
       const installed = await resolveDiagnosticPackage(packageName, cwd);
       const password = resolvedDependencies.password();
       const runtime = await resolvedDependencies.startRuntime({
@@ -422,6 +450,7 @@ export function createDefaultCoordinatorDiagnostics(
         version,
         cwd,
         environment: env,
+        ...(credential === undefined ? {} : { credential }),
         dependencies: { password: () => password }
       });
       try {

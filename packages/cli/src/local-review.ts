@@ -11,7 +11,8 @@ import {
 import { ConfigError } from "../../core/src/errors.ts";
 import type { PullRequestEvent } from "../../core/src/events.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
-import { DefaultRedactor } from "../../core/src/redaction.ts";
+import { DefaultRedactor, withRedactedValues } from "../../core/src/redaction.ts";
+import type { Redactor } from "../../core/src/redaction.ts";
 import {
   completeRunRecord,
   createRunRecord,
@@ -42,6 +43,7 @@ import {
   type ShuvcodeRuntime,
   type StartShuvcodeRuntimeOptions
 } from "../../review/src/runtime/shuvcode.ts";
+import { resolveShuvcodeCredential } from "../../review/src/runtime/auth.ts";
 import { FileReviewStateStore, type ReviewStateStore } from "../../review/src/state.ts";
 import {
   defaultRevisions,
@@ -77,7 +79,7 @@ export interface LocalReviewDependencies {
   createLegacyAgent(): ReviewAgent;
   executeCoordinator: typeof executeCoordinatorEngine;
   startRuntime(options: StartShuvcodeRuntimeOptions): Promise<ShuvcodeRuntime>;
-  stateStore(cwd: string, redactor: DefaultRedactor): ReviewStateStore;
+  stateStore(cwd: string, redactor: Redactor): ReviewStateStore;
   now(): Date;
   approvedShuvcodeVersion: string | null;
   fileSystem: LocalReviewFileSystem;
@@ -135,9 +137,11 @@ export async function runLocalReview(options: LocalReviewOptions): Promise<Local
   const config = options.config ?? normalizeConfig({});
   const engine = options.engine ?? config.review.engine;
   if (engine === "legacy") return runLegacyLocalReview(options, config);
-  if (!config.review.shuvcode.useUserAuth) {
+  if (config.review.shuvcode.auth === "user" && !config.review.shuvcode.useUserAuth) {
     throw new ConfigError(
-      "Local coordinator reviews require review.shuvcode.use_user_auth = true; non-interactive coordinator authentication is not implemented."
+      "Local coordinator reviews authenticate from your shuvcode profile, which requires " +
+        'review.shuvcode.use_user_auth = true. Set review.shuvcode.auth = "environment" to ' +
+        "authenticate from a credential in the environment instead."
     );
   }
   const dependencies = resolveDependencies(options.dependencies);
@@ -232,7 +236,16 @@ async function runCoordinatorLocalReview(
       return result;
     }
 
-    const redactor = new DefaultRedactor();
+    const credential = resolveShuvcodeCredential({
+      mode: config.review.shuvcode.auth,
+      env: process.env
+    });
+    // The pattern redactor cannot recognise an arbitrary credential value, so
+    // scrub the resolved one exactly wherever it might otherwise surface.
+    const redactor = withRedactedValues(
+      new DefaultRedactor(),
+      credential === undefined ? [] : [credential.value]
+    );
     const plan = createReviewExecutionPlanFromConfig({ files, baseSha, headSha, config });
     if (!plan.diff.entries.some((file) => file.included)) {
       deadline.assertRemaining("final output");
@@ -303,6 +316,7 @@ async function runCoordinatorLocalReview(
             packageName: config.review.shuvcode.package,
             version: config.review.shuvcode.version,
             cwd: options.cwd,
+            ...(credential === undefined ? {} : { credential }),
             signal
           }),
         redactor,
@@ -576,7 +590,7 @@ function deadlineError(signal: AbortSignal, stage: string, cause?: unknown): Con
 
 async function persistLocalArtifacts(input: {
   directory: string;
-  redactor: DefaultRedactor;
+  redactor: Redactor;
   config: ShuvbotConfig;
   plan: ReturnType<typeof createReviewExecutionPlanFromConfig>;
   execution: CoordinatorEngineResult;
@@ -988,7 +1002,7 @@ async function resolveLocalRepositoryIdentity(
 async function prepareIncrementalReview(
   cwd: string,
   baseSha: string,
-  redactor: DefaultRedactor,
+  redactor: Redactor,
   dependencies: LocalReviewDependencies,
   signal?: AbortSignal
 ): Promise<{ changeId: string; store: ReviewStateStore }> {

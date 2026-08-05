@@ -13,6 +13,46 @@ const DEFAULT_SECRET_PATTERNS = [
 
 const SECRET_KEY_PATTERN = /(?:token|secret|password|api[_-]?key|oauth)/i;
 
+/**
+ * Wraps a redactor with an exact-value pass over known secret literals.
+ *
+ * The pattern-based redactor cannot recognise a credential whose shape it does
+ * not know, and it misses a value that arrives split across stream chunks or
+ * embedded without its `NAME=` prefix. Any path that holds a resolved secret
+ * value should redact through this rather than trusting the patterns alone.
+ * Empty and whitespace-only values are ignored so a blank credential cannot
+ * turn every string into `[REDACTED]`.
+ */
+export function withRedactedValues(
+  base: Redactor,
+  values: readonly string[],
+  replacement = "[REDACTED]"
+): Redactor {
+  const secrets = [...new Set(values.filter((value) => value.trim().length > 0))].sort(
+    (left, right) => right.length - left.length
+  );
+  if (secrets.length === 0) return base;
+
+  const scrub = (value: string): string =>
+    secrets.reduce((current, secret) => current.split(secret).join(replacement), value);
+
+  return {
+    redactString: (value) => scrub(base.redactString(value)),
+    redact: <T>(value: T): T => scrubDeep(base.redact(value), scrub) as T
+  };
+}
+
+function scrubDeep(value: unknown, scrub: (value: string) => string): unknown {
+  if (typeof value === "string") return scrub(value);
+  if (Array.isArray(value)) return value.map((item) => scrubDeep(item, scrub));
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, scrubDeep(entry, scrub)])
+    );
+  }
+  return value;
+}
+
 export class DefaultRedactor implements Redactor {
   constructor(private readonly replacement = "[REDACTED]") {}
 

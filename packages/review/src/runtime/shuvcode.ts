@@ -142,10 +142,34 @@ export interface ShuvcodeRuntimeDependencies {
   password(): string;
 }
 
+/**
+ * The credential names the runtime derives an `env` connection from. Only these
+ * are ever injected: the allowlist below strips every other variable, and a
+ * caller must not be able to smuggle arbitrary environment into the runtime by
+ * naming it a credential.
+ */
+export const SHUVCODE_CREDENTIAL_ENV_NAMES = [
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_API_KEY"
+] as const;
+
+export type ShuvcodeCredentialName = (typeof SHUVCODE_CREDENTIAL_ENV_NAMES)[number];
+
+export interface ShuvcodeRuntimeCredential {
+  readonly name: ShuvcodeCredentialName;
+  readonly value: string;
+}
+
 export interface StartShuvcodeRuntimeOptions {
   readonly packageName: string;
   readonly version: string;
   readonly cwd: string;
+  /**
+   * A credential to hand the runtime for non-interactive (CI) authentication.
+   * Omitted for local runs, where the runtime authenticates from the user's own
+   * shuvcode profile and shuvbot injects no credential at all.
+   */
+  readonly credential?: ShuvcodeRuntimeCredential;
   readonly signal?: AbortSignal;
   readonly startupTimeoutMs?: number;
   readonly shutdownGraceMs?: number;
@@ -227,6 +251,7 @@ export async function startShuvcodeRuntime(
   const password = dependencies.password();
   const env: NodeJS.ProcessEnv = {
     ...runtimeEnvironment(options.environment ?? process.env),
+    ...credentialEnvironment(options.credential),
     OPENCODE_PASSWORD: password
   };
   const child = dependencies.spawn(installed.bin, ["serve", "--stdio", "--port", "0"], {
@@ -1039,6 +1064,27 @@ function runtimeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
         RUNTIME_ENV_ALLOWLIST.has(entry[0]) && entry[1] !== undefined
     )
   );
+}
+
+/**
+ * Builds the credential half of the runtime environment. The allowlist above
+ * deliberately drops every credential, so a non-interactive run has to pass one
+ * explicitly; nothing is inferred from the ambient environment here.
+ */
+function credentialEnvironment(
+  credential: ShuvcodeRuntimeCredential | undefined
+): NodeJS.ProcessEnv {
+  if (credential === undefined) return {};
+  if (!(SHUVCODE_CREDENTIAL_ENV_NAMES as readonly string[]).includes(credential.name)) {
+    throw new Error(
+      `Refusing to inject ${credential.name} into the review runtime: ` +
+        `only ${SHUVCODE_CREDENTIAL_ENV_NAMES.join(" and ")} are accepted credentials.`
+    );
+  }
+  if (credential.value.trim().length === 0) {
+    throw new Error(`Refusing to inject an empty ${credential.name} into the review runtime.`);
+  }
+  return { [credential.name]: credential.value };
 }
 
 async function exitsWithin(exited: Promise<unknown>, graceMs: number): Promise<boolean> {
