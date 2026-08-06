@@ -34,6 +34,13 @@ PR #27: `tier: lite`, **quorum met**, `minor_issues`, no reviewer missing,
 3m32s, and a reported cost of **$8.13** that is now the real number rather than
 a fraction of it.
 
+Read that with one caveat: `selectReviewers` schedules **exactly three**
+reviewers at `lite` - `code-quality`, `tests`, and one content reviewer chosen
+by path - and `minimumSuccessfulSpecialists` is also three. Lite therefore has
+no slack at all, and `full` (6 scheduled, 5 required) tolerates exactly one
+runaway. Against an observed runaway rate of about two sessions in six, quorum
+at the top tier is not something a retune can rescue.
+
 Getting there took three failed full-tier dogfoods and one local reproduction.
 
 - **#3** (`@high`, 5m cap, concurrency 3): 4/6 cut off at exactly 300s.
