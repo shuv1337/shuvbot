@@ -27,37 +27,44 @@ still open.
 
 ## The one thing to know before continuing
 
-**The full tier does not fit in the per-session timeout.** Dogfood #3, run
-[31054253953](https://github.com/shuv1337/shuvbot/actions/runs/31054253953) on
-PR #26 (~330 changed lines, `tier: full`), scheduled all six specialists and
-**four of them timed out at exactly 300s** - the `activity_timeout` default of
-`5m`. Only `performance` (99s) and `release` (89s) finished, and since
-`code-quality` and `security` are the full tier's required reviewers, quorum
-failed. Engine time 10m20s against the 15m overall cap; cost $3.23.
+**A full-tier review was spending its whole budget on a build artifact, and the
+run record hid what that cost.** Three Action dogfoods failed at the full tier
+before the cause was found; all four fixes are on master.
 
-Three things this settled:
+- **Dogfood #3** (`@high`, 5m cap, concurrency 3): 4/6 specialists cut off at
+  exactly 300s. Reported cost $3.23.
+- **Dogfood #4** (10m cap, concurrency 6): _nobody_ finished, the run died on
+  the 15m overall timeout and wrote **no artifacts at all**. Raising the clock
+  bought nothing.
+- **Dogfood #5** (`@medium`, back to 5m/3): 5/6 cut off. Reported cost $0.36.
 
-- **The `REVIEW_SCHEMA_INVALID` mystery did not reproduce.** `performance`
-  succeeded outright and `security` was cut off by the clock, not refused. That
-  known issue is unexplained rather than fixed - it has still never been seen in
-  the Action.
-- **Reviewer scope is not the variable.** Every specialist defaults to
-  `paths: ["**/*"]`, so all six read the same file set. The split is per-session
-  variance at `claude-fable-5@high`; the trivial tier's `@low` light role
-  answered in 48s total.
-- **The coordinator tried to claim `clean` below quorum and was refused.**
-  `shuvbot-rejected-results.json` caught it (`a result below quorum must be
-degraded`), the retry repaired it to `degraded`, and the posted review said
-  `DEGRADED - REVIEW INCOMPLETE`, 2/6 coverage, naming every timed-out reviewer.
-  The guard is doing real work in production, not just in tests.
+The reported costs were wrong. Every timed-out session reported no usage
+because the scheduler races a task against its deadline and discards the losing
+side, and those are the expensive sessions. Totalled from the event log,
+dogfood #3 actually cost **$48.02** and dogfood #5 **$52.29** - roughly 15x what
+the run record claimed.
 
-Remediation is a live decision, not a completed one: raise `activity_timeout`
-for the full tier, raise `max_concurrency` above 3 so six sessions are not three
-waves, or drop the specialist effort below `@high`. None has been chosen.
+The same diff reviewed **locally** reached quorum: 5/6 completed, 4 real
+findings. The difference was not auth, effort, or concurrency. Every timed-out
+reviewer had run away to 12-14k output tokens, and `dist/index.js` - 2.6MB,
+69k lines - passed every filter, so it was reviewed as source and 128KB of it
+was materialised into every reviewer's workspace.
 
-Note that dogfood #3 did **not** exercise the provider-failure diagnostics in
-PR #26 - the workflow runs `uses: ./` from the default branch, so the artifact
-it wrote is master's, and its entries carry no `kind` field.
+Fixed on master, in this order of importance:
+
+1. **Timed-out sessions now report their usage**, so a run cannot understate
+   what it spent.
+2. **Committed build output is no longer reviewed** (`dist/`, `.next/`,
+   `.nuxt/`, `.output/`, `.svelte-kit/`). `build/` and `out/` are deliberately
+   excluded - repositories keep hand-written scripts there and filtering means
+   not reviewing.
+3. **Minified content is never materialised**, catching a bundle committed
+   outside those directories.
+4. **Three findings from shuvbot's own review of PR #26** were real and are
+   fixed; the fourth is documented instead.
+
+**None of this is verified in the Action yet.** The next full-tier dogfood is
+what shows whether removing the build artifact lets the reviewers converge.
 
 **A real coordinator review has produced real findings in GitHub Actions.**
 Dogfood #2, run

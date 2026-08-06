@@ -258,6 +258,24 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
   posture that `packages/action/test/workflow-security.test.ts` pins: the
   workflow still checks out the trusted default branch, and pull request
   content is only ever data in a temporary directory.
+- **Committed build output is not reviewable, and a run must report what a
+  cut-off session spent.** Both were found by full-tier Action dogfoods that
+  degraded three times. `dist/index.js` (2.6MB, 69k lines) passed every filter
+  in `diff-filter.ts`, so it was reviewed as source and 128KB of it was
+  materialised into every reviewer's workspace; reviewers ran away to 12-14k
+  output tokens and were cut off at the session timeout. `isBuildOutput` now
+  rejects `dist/`, `.next/`, `.nuxt/`, `.output/` and `.svelte-kit/` - and
+  deliberately **not** `build/` or `out/`, where repositories keep hand-written
+  scripts, because filtering means not reviewing at all. `boundContent`
+  separately refuses minified text, for a bundle committed elsewhere. Independently,
+  the scheduler races a task against its deadline and discards the losing side,
+  so a timed-out attempt carried no usage and the run record understated real
+  spend by ~15x ($3.23 reported against $48.02 actually consumed);
+  `sessionSummaries` falls back to the capture, which had accumulated it all
+  along. Raising `activity_timeout` or `max_concurrency` fixes neither and made
+  things worse: at a 10m cap with six concurrent sessions nothing finished at
+  all and the run died on the overall timeout **without writing any artifacts**,
+  which is the one outcome that teaches you nothing.
 - **Retained failure text is fail-closed, and deliberately redacted twice.**
   `sanitizeEvent` reduces a runtime failure to a category and a status, which
   is right for the event stream but leaves `Provider request failed` as the only
