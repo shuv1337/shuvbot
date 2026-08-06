@@ -506,6 +506,21 @@ describe("local coordinator engine", () => {
     });
   });
 
+  test("accounts for what a timed-out session spent", async () => {
+    const runtime = new FakeRuntime({ burnThenHangReviewer: "code-quality" });
+    const { result } = await runEngine("trivial", runtime, {
+      specialistTimeoutMs: 60,
+      overallTimeoutMs: 5_000
+    });
+
+    const timedOut = result.sessions.find(
+      (session) => session.reviewer === "code-quality" && session.status === "timed_out"
+    );
+    // The scheduler abandons the losing side of the race, so the attempt itself
+    // reports nothing. Reporting that as zero understated a real run by 15x.
+    expect(timedOut?.usage).toMatchObject({ inputTokens: 900, outputTokens: 12_000, cost: 9.5 });
+  });
+
   test("keeps a redacted sample of every refused result", async () => {
     const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-rejected-"));
     await runEngine("trivial", new FakeRuntime({ invalidSpecialistAlways: "code-quality" }), {
@@ -688,6 +703,7 @@ class FakeRuntime implements ShuvcodeRuntime {
       hangSpecialistRepair?: BuiltInReviewerId;
       failingReviewer?: BuiltInReviewerId;
       hangReviewer?: BuiltInReviewerId;
+      burnThenHangReviewer?: BuiltInReviewerId;
       eventFailureReviewer?: BuiltInReviewerId;
       idleReviewer?: BuiltInReviewerId;
       emitSensitiveEvents?: boolean;
@@ -763,6 +779,15 @@ class FakeRuntime implements ShuvcodeRuntime {
       this.active += 1;
       this.maximumActive = Math.max(this.maximumActive, this.active);
       try {
+        if (this.behavior.burnThenHangReviewer === reviewer) {
+          // Spends real tokens, then never finishes - what a timed-out
+          // specialist actually does.
+          this.emit({
+            type: "session.usage.updated",
+            data: { sessionID, tokens: { input: 900, output: 12_000 }, cost: 9.5 }
+          });
+          await untilAbort(options.signal);
+        }
         if (this.behavior.hangReviewer === reviewer) await untilAbort(options.signal);
         if (this.behavior.delayMs) await sleep(this.behavior.delayMs);
         this.emit({

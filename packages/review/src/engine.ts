@@ -993,6 +993,13 @@ function sessionSummaries(
       const repairAttempted = captures.some(
         (capture) => capture.id === sessionId && capture.repairAttempted
       );
+      // A timed-out or cancelled attempt never reports usage: the scheduler
+      // abandons the losing side of the race, so whatever the task consumed
+      // before it was cut off is discarded. The capture accumulated it anyway,
+      // and those sessions are the expensive ones - trusting the attempt alone
+      // understated a real run's cost by more than an order of magnitude.
+      const usage =
+        attempt.usage ?? captureUsage(captures.find((capture) => capture.id === sessionId));
       return {
         sessionId,
         role: "specialist",
@@ -1002,7 +1009,7 @@ function sessionSummaries(
         retryCount: repairAttempted ? 1 : 0,
         attempt: attempt.attempt,
         ...(repairAttempted ? { repairAttempted: true } : {}),
-        ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
+        ...(usage === undefined ? {} : { usage }),
         ...(attempt.error === undefined ? {} : { error: attempt.error })
       };
     });
