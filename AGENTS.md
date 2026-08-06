@@ -275,7 +275,10 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
   along. Raising `activity_timeout` or `max_concurrency` fixes neither and made
   things worse: at a 10m cap with six concurrent sessions nothing finished at
   all and the run died on the overall timeout **without writing any artifacts**,
-  which is the one outcome that teaches you nothing.
+  which is the one outcome that teaches you nothing. A reviewer that runs away
+  to ~12k output tokens and is cut off is the remaining unfixed failure: it is
+  not tied to a particular reviewer, it moves between runs, and it is why the
+  `full` tier has still never reached quorum.
 - **Retained failure text is fail-closed, and deliberately redacted twice.**
   `sanitizeEvent` reduces a runtime failure to a category and a status, which
   is right for the event stream but leaves `Provider request failed` as the only

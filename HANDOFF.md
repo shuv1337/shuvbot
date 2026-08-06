@@ -27,44 +27,44 @@ still open.
 
 ## The one thing to know before continuing
 
-**A full-tier review was spending its whole budget on a build artifact, and the
-run record hid what that cost.** Three Action dogfoods failed at the full tier
-before the cause was found; all four fixes are on master.
+**Multi-specialist review now reaches quorum in the Action, and the run record
+finally reports what it spent.** Dogfood #6, run
+[31068925734](https://github.com/shuv1337/shuvbot/actions/runs/31068925734) on
+PR #27: `tier: lite`, **quorum met**, `minor_issues`, no reviewer missing,
+3m32s, and a reported cost of **$8.13** that is now the real number rather than
+a fraction of it.
 
-- **Dogfood #3** (`@high`, 5m cap, concurrency 3): 4/6 specialists cut off at
-  exactly 300s. Reported cost $3.23.
-- **Dogfood #4** (10m cap, concurrency 6): _nobody_ finished, the run died on
-  the 15m overall timeout and wrote **no artifacts at all**. Raising the clock
-  bought nothing.
-- **Dogfood #5** (`@medium`, back to 5m/3): 5/6 cut off. Reported cost $0.36.
+Getting there took three failed full-tier dogfoods and one local reproduction.
 
-The reported costs were wrong. Every timed-out session reported no usage
-because the scheduler races a task against its deadline and discards the losing
-side, and those are the expensive sessions. Totalled from the event log,
-dogfood #3 actually cost **$48.02** and dogfood #5 **$52.29** - roughly 15x what
-the run record claimed.
+- **#3** (`@high`, 5m cap, concurrency 3): 4/6 cut off at exactly 300s.
+- **#4** (10m cap, concurrency 6): _nobody_ finished, the run died on the 15m
+  overall timeout and wrote **no artifacts at all**. Raising the clock and the
+  concurrency made it strictly worse and destroyed the evidence.
+- **#5** (`@medium`, back to 5m/3): 5/6 cut off.
 
-The same diff reviewed **locally** reached quorum: 5/6 completed, 4 real
-findings. The difference was not auth, effort, or concurrency. Every timed-out
-reviewer had run away to 12-14k output tokens, and `dist/index.js` - 2.6MB,
-69k lines - passed every filter, so it was reviewed as source and 128KB of it
-was materialised into every reviewer's workspace.
+Two root causes, neither of which is a timeout:
 
-Fixed on master, in this order of importance:
+1. **`dist/index.js` was reviewed as source.** 2.6MB and 69k lines, it passed
+   every filter, and 128KB of it was materialised into every reviewer's
+   workspace. Reviewers ran away to 12-14k output tokens reading a derived
+   file. Now filtered, along with `.next/`, `.nuxt/`, `.output/` and
+   `.svelte-kit/`; `build/` and `out/` are deliberately **not** filtered.
+2. **Timed-out sessions reported no usage**, because the scheduler races a task
+   against its deadline and discards the losing side - and those are the
+   expensive sessions. Totalled from the event log, #3 really cost **$48.02**
+   against $3.23 reported, and #5 **$52.29** against $0.36. Roughly 15x.
 
-1. **Timed-out sessions now report their usage**, so a run cannot understate
-   what it spent.
-2. **Committed build output is no longer reviewed** (`dist/`, `.next/`,
-   `.nuxt/`, `.output/`, `.svelte-kit/`). `build/` and `out/` are deliberately
-   excluded - repositories keep hand-written scripts there and filtering means
-   not reviewing.
-3. **Minified content is never materialised**, catching a bundle committed
-   outside those directories.
-4. **Three findings from shuvbot's own review of PR #26** were real and are
-   fixed; the fourth is documented instead.
+**shuvbot reviewing shuvbot found five real defects in these very changes**,
+including a security one: failure detail was truncated _before_ being scrubbed,
+so a credential straddling the boundary was cut in half and no longer matched
+the exact-value scrub, leaving a fragment of a real secret in retained text. It
+also twice caught tests that passed for the wrong reason. All are fixed.
 
-**None of this is verified in the Action yet.** The next full-tier dogfood is
-what shows whether removing the build artifact lets the reviewers converge.
+**What is still not right:** at the `full` tier a local run reached only 4/6,
+with `performance` and `release` running away to ~11.6k output tokens and
+timing out. The runaway is not tied to a particular reviewer - it moves between
+runs - and quorum at the full tier needs 5. Full tier has therefore still never
+reached quorum, in the Action or locally.
 
 **A real coordinator review has produced real findings in GitHub Actions.**
 Dogfood #2, run
@@ -103,13 +103,14 @@ What dogfood #2 proved, and what it did not:
 
 ## What is NOT done
 
-1. **The full tier cannot currently reach quorum in the Action.** Dogfood #3
-   lost both required reviewers to the 300s `activity_timeout`. Until the
-   timeout, concurrency, or effort is retuned and a full-tier run reaches
-   quorum, the coordinator is proven only at the `trivial` tier.
-2. **M7's dogfood matrix is unrecorded.** Three runs exist (#1 fully degraded on
-   auth, #2 trivial-tier clean, #3 full-tier degraded on timeouts), so latency
-   and quality are sampled, not measured.
+1. **The full tier has still never reached quorum.** After the build-output
+   fix a local full-tier run reached 4/6, needing 5; `performance` and
+   `release` ran away to ~11.6k output tokens and were cut off. The `lite`
+   tier now works end to end in the Action, so the coordinator is proven up to
+   `lite` and no further.
+2. **M7's dogfood matrix is unrecorded.** Six runs exist (#1 degraded on auth,
+   #2 trivial clean, #3/#4/#5 full-tier degraded, #6 lite-tier clean), so
+   latency, cost and quality are sampled rather than measured.
 3. **The Action default has deliberately not been flipped** to the coordinator.
 4. **Two specialists fail their own validation.** In an earlier _local_
    full-tier run, `security` and `performance` completed their model calls but
