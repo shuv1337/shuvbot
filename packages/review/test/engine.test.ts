@@ -564,7 +564,40 @@ describe("local coordinator engine", () => {
       reason: "Provider request failed"
     });
     expect(failure?.sample).toContain("type=provider.request status=400");
-    expect(failure?.sample).not.toContain("sk-live-abcdefghijklmnopqrstuvwxyz012345");
+    // Pinned as an exact string. Asserting only "the token is absent" passed
+    // for the wrong reason: DEFAULT_SECRET_PATTERNS happened to match the
+    // planted value, so a sample that was never redacted at all would still
+    // have satisfied it as long as the fixture used a recognisable shape.
+    expect(failure?.sample).toBe(
+      "type=provider.request status=400 model claude-fable-5 " +
+        "rejected for authorization: Bearer [REDACTED]"
+    );
+  });
+
+  test("keeps a failure sample when the coordinator itself fails", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-coordinator-failure-"));
+    await runEngine("trivial", new FakeRuntime({ providerFailureCoordinator: true }), {
+      artifactDirectory
+    });
+
+    const rejected = JSON.parse(
+      await readFile(join(artifactDirectory, "shuvbot-rejected-results.json"), "utf8")
+    ) as { rejected: { kind: string; role: string; sample: string }[] };
+
+    const failure = rejected.rejected.find(({ kind }) => kind === "failure");
+    expect(failure).toMatchObject({ kind: "failure", role: "coordinator" });
+    expect(failure?.sample).toContain("coordinator upstream refused");
+  });
+
+  test("does not spend the sample budget on sessions it cancelled itself", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-cancelled-"));
+    await runEngine("trivial", new FakeRuntime({ cancelledDetailReviewer: "code-quality" }), {
+      artifactDirectory
+    });
+
+    // A timed-out full-tier run would otherwise fill the bounded artifact with
+    // shuvbot's own interruptions and crowd out real refusals.
+    expect(existsSync(join(artifactDirectory, "shuvbot-rejected-results.json"))).toBe(false);
   });
 
   test("does not retain a failure sample when the failure carries no detail", async () => {
@@ -738,10 +771,12 @@ class FakeRuntime implements ShuvcodeRuntime {
       providerFailureReviewer?: BuiltInReviewerId;
       hangReviewer?: BuiltInReviewerId;
       burnThenHangReviewer?: BuiltInReviewerId;
+      cancelledDetailReviewer?: BuiltInReviewerId;
       eventFailureReviewer?: BuiltInReviewerId;
       idleReviewer?: BuiltInReviewerId;
       emitSensitiveEvents?: boolean;
       hangCoordinator?: boolean;
+      providerFailureCoordinator?: boolean;
       hangClose?: boolean;
       onClose?: () => void;
     } = {}
@@ -821,6 +856,15 @@ class FakeRuntime implements ShuvcodeRuntime {
             data: { sessionID, tokens: { input: 900, output: 12_000 }, cost: 9.5 }
           });
           await untilAbort(options.signal);
+        }
+        if (this.behavior.cancelledDetailReviewer === reviewer) {
+          // Cancellation reported inline rather than through the scheduler's
+          // race, so the engine actually reaches recordFailedSession with a
+          // detail in hand and the guard is what excludes it.
+          throw Object.assign(
+            classifyReviewError({ category: "cancellation", message: "Review session cancelled" }),
+            { detail: "type=session.interrupted reason=shutdown" }
+          );
         }
         if (this.behavior.hangReviewer === reviewer) await untilAbort(options.signal);
         if (this.behavior.delayMs) await sleep(this.behavior.delayMs);
@@ -911,6 +955,12 @@ class FakeRuntime implements ShuvcodeRuntime {
       await untilAbort(options.signal);
     }
     if (this.behavior.hangCoordinator) await untilAbort(options.signal);
+    if (this.behavior.providerFailureCoordinator) {
+      throw Object.assign(
+        classifyReviewError({ category: "provider", message: "Provider request failed" }),
+        { detail: "type=provider.request status=503 coordinator upstream refused" }
+      );
+    }
     if (this.behavior.provenanceInvalidCoordinatorOnce) {
       const finding =
         this.coordinatorPrompts === 1

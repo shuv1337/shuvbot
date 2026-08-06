@@ -162,6 +162,11 @@ function recordFailedSession(
 ): void {
   if (samples.length >= MAX_REJECTED_SAMPLES) return;
   const { error, classified, ...rest } = entry;
+  // A cancelled session explains nothing: shuvbot stopped it, so its detail
+  // describes shuvbot's own interruption rather than a fault. Recording those
+  // would let a timed-out full-tier run consume the whole bounded artifact and
+  // crowd out the refusals an operator actually needs to read.
+  if (classified.category === "cancellation") return;
   const detail = failureDetailOf(error);
   if (detail === undefined) return;
   const bounded =
