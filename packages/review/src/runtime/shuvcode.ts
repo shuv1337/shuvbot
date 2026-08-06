@@ -1051,15 +1051,22 @@ function failureDetail(event: ShuvcodeEvent): string | undefined {
   );
   const detail = [...labelled, ...messages].join(" ").replace(/\s+/gu, " ").trim();
   if (detail.length === 0) return undefined;
-  return detail.length > MAX_FAILURE_DETAIL_CHARS
-    ? `${detail.slice(0, MAX_FAILURE_DETAIL_CHARS)}…truncated`
-    : detail;
+  return detail;
 }
 
+/**
+ * Scrubs first and bounds second, never the other way round. Truncating first
+ * can cut a credential in half, and a half token no longer matches the
+ * exact-value scrub, so a fragment of a real secret would survive into the
+ * retained text.
+ */
 function scrubbed(detail: string | undefined, scrub: (text: string) => string): string | undefined {
   if (detail === undefined) return undefined;
   const cleaned = scrub(detail);
-  return cleaned.length === 0 ? undefined : cleaned;
+  if (cleaned.length === 0) return undefined;
+  return cleaned.length > MAX_FAILURE_DETAIL_CHARS
+    ? `${cleaned.slice(0, MAX_FAILURE_DETAIL_CHARS)}…truncated`
+    : cleaned;
 }
 
 /**
