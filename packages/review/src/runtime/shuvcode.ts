@@ -178,6 +178,17 @@ export interface StartShuvcodeRuntimeOptions {
    * value, because pattern redaction alone can miss a token.
    */
   readonly redact?: (text: string) => string;
+  /**
+   * Receives every runtime event **before** `sanitizeEvent` reduces it, so a
+   * runaway session can actually be diagnosed. The payload is raw: untrusted
+   * model output, file content the session read, and anything the provider
+   * echoed back, none of it redacted.
+   *
+   * There is deliberately no default. A caller must opt in and must decide
+   * where the output can safely go - which is a local disk, not a GitHub
+   * Actions artifact that is world-readable on a public repository.
+   */
+  readonly trace?: (event: ShuvcodeEvent) => void;
   readonly signal?: AbortSignal;
   readonly startupTimeoutMs?: number;
   readonly shutdownGraceMs?: number;
@@ -370,6 +381,14 @@ export async function startShuvcodeRuntime(
     }
 
     void pumpEvents(client, eventController.signal, (sourceEvent) => {
+      if (options.trace !== undefined) {
+        // Never let a diagnostic sink take the review down with it.
+        try {
+          options.trace(sourceEvent);
+        } catch {
+          /* ignore */
+        }
+      }
       const event = sanitizeEvent(sourceEvent);
       for (const listener of listeners) listener(event);
       const sessionID = event.data?.sessionID;

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, matchesGlob, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -265,6 +266,7 @@ async function runCoordinatorLocalReview(
     const startedAtMs = dependencies.now().getTime();
     const preprocessingMs = Date.now() - preprocessingStartedAt;
     const artifactDirectory = resolve(options.cwd, ".shuvbot", "runs", randomUUID());
+    const trace = await openSessionTrace(artifactDirectory, process.env);
 
     const run = await runCoordinatorReview({
       config,
@@ -284,6 +286,7 @@ async function runCoordinatorLocalReview(
       sourceContent: (file) =>
         readFileAtRevision(headSha, file.path, options.cwd, dependencies.git, deadline.signal),
       plugins: [createLocalReviewPlugin()],
+      ...(trace === undefined ? {} : { trace: trace.record }),
       dependencies: {
         executeCoordinator: dependencies.executeCoordinator,
         startRuntime: dependencies.startRuntime,
@@ -394,6 +397,43 @@ async function runCoordinatorLocalReview(
     // The shared run owns the review workspace and cleans it up itself.
     deadline.dispose();
   }
+}
+
+/** Env var that turns on raw session tracing for a local review. */
+export const SESSION_TRACE_ENV = "SHUVBOT_TRACE";
+
+/**
+ * Opens a raw session trace when the operator asks for one.
+ *
+ * Every runtime event is written verbatim: untrusted model output, file content
+ * a session read, provider errors. That is the point - a session that never
+ * converges cannot be diagnosed from lifecycle events alone - but it is also
+ * why this exists **only** in the local CLI. It writes under `.shuvbot/runs/`
+ * on the operator's own disk, and is never wired into the GitHub Action, whose
+ * artifacts are world-readable on a public repository and whose job holds a
+ * live credential.
+ */
+async function openSessionTrace(
+  artifactDirectory: string,
+  env: NodeJS.ProcessEnv
+): Promise<{ readonly path: string; record(event: unknown): void } | undefined> {
+  if (env[SESSION_TRACE_ENV] !== "1") return undefined;
+  await mkdir(artifactDirectory, { recursive: true, mode: 0o700 });
+  const path = join(artifactDirectory, "shuvbot-session-trace.jsonl");
+  process.stderr.write(
+    `${SESSION_TRACE_ENV}=1: writing UNREDACTED session events to ${path}\n` +
+      "This file can contain secrets and untrusted content. Do not attach it to an issue.\n"
+  );
+  let sequence = 0;
+  return {
+    path,
+    record(event) {
+      sequence += 1;
+      appendFileSync(path, `${JSON.stringify({ sequence, at: Date.now(), event })}\n`, {
+        mode: 0o600
+      });
+    }
+  };
 }
 
 function renderLiveProgress(

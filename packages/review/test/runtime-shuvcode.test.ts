@@ -153,7 +153,8 @@ function fixture(
     startupLine: string | null = '{"url":"http://127.0.0.1:4321"}\n',
     environment?: NodeJS.ProcessEnv,
     credential?: StartShuvcodeRuntimeOptions["credential"],
-    redact?: StartShuvcodeRuntimeOptions["redact"]
+    redact?: StartShuvcodeRuntimeOptions["redact"],
+    trace?: StartShuvcodeRuntimeOptions["trace"]
   ) => {
     const runtime = startShuvcodeRuntime({
       packageName: "shuvcode",
@@ -163,6 +164,7 @@ function fixture(
       ...(environment === undefined ? {} : { environment }),
       ...(credential === undefined ? {} : { credential }),
       ...(redact === undefined ? {} : { redact }),
+      ...(trace === undefined ? {} : { trace }),
       shutdownGraceMs: 1,
       dependencies
     });
@@ -609,6 +611,36 @@ describe("shuvcode isolated runtime", () => {
     const error = (await waiting.catch((value: unknown) => value)) as { detail?: string };
     expect(error.detail).toHaveLength(2_000 + "…truncated".length);
     expect(error.detail?.endsWith("…truncated")).toBe(true);
+    await runtime.close();
+  });
+
+  test("traces raw source events and never lets a failing sink break the review", async () => {
+    const seen: unknown[] = [];
+    const subject = fixture();
+    const runtime = await subject.start(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (event) => {
+        seen.push(event);
+        if (seen.length === 1) throw new Error("sink exploded");
+      }
+    );
+    await runtime.createSession({ id: "traced" });
+    const waiting = runtime.wait("traced");
+    subject.events.push({
+      type: "session.tool.called",
+      data: { sessionID: "traced", input: { path: "/w/contents/a.txt", offset: 80, limit: 120 } }
+    });
+    subject.events.push({ type: "session.structured.completed", data: { sessionID: "traced" } });
+
+    await waiting;
+    // The raw event keeps the tool arguments sanitizeEvent would have dropped;
+    // that detail is what diagnoses a session that never converges.
+    expect(JSON.stringify(seen)).toContain("offset");
+    expect(seen.length).toBeGreaterThan(1);
     await runtime.close();
   });
 

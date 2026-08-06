@@ -17,3 +17,4 @@ bin/shuvbot
 # agent scratch state otherwise lands in the working-copy commit and fails
 # `bun run format:check`.
 .opencode/
+.shuvbot/

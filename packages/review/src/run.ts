@@ -72,6 +72,12 @@ export interface RunCoordinatorReviewInput {
   readonly artifactDirectory: string;
   readonly dependencies: CoordinatorReviewDependencies;
   readonly credential?: StartShuvcodeRuntimeOptions["credential"];
+  /**
+   * Raw, unredacted runtime events, for diagnosing a session that misbehaves.
+   * Only the local CLI supplies this; see the warning on
+   * `StartShuvcodeRuntimeOptions.trace`.
+   */
+  readonly trace?: StartShuvcodeRuntimeOptions["trace"];
   readonly incremental?: CoordinatorReviewIncremental;
   /** Extra platform plugins, appended after the repository-config plugin. */
   readonly plugins?: readonly ReviewPlugin[];
@@ -221,6 +227,7 @@ export async function runCoordinatorReview(
             version: config.review.shuvcode.version,
             cwd: input.cwd,
             ...(input.credential === undefined ? {} : { credential: input.credential }),
+            ...(input.trace === undefined ? {} : { trace: input.trace }),
             redact: (text) => redactor.redactString(text),
             signal
           }),
