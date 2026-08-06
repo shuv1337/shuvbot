@@ -173,12 +173,27 @@ function recordFailedSession(
     detail.length > MAX_REJECTED_SAMPLE_BYTES
       ? `${detail.slice(0, MAX_REJECTED_SAMPLE_BYTES)}\n…truncated`
       : detail;
+  const sample = redactor.redactString(bounded);
+  // A retried specialist fails the same way on every attempt, so recording each
+  // one fills the shared bounded artifact with copies of a single fault and
+  // crowds out the other reviewers' failures.
+  if (
+    samples.some(
+      (existing) =>
+        existing.kind === "failure" &&
+        existing.role === rest.role &&
+        existing.reviewer === rest.reviewer &&
+        existing.sample === sample
+    )
+  ) {
+    return;
+  }
   samples.push({
     kind: "failure",
     ...rest,
     repair: false,
     reason: classified.message,
-    sample: redactor.redactString(bounded)
+    sample
   });
 }
 
