@@ -64793,7 +64793,12 @@ function mustReview(path, name) {
   return /(^|\/)(?:api|apis|schema|schemas|proto|generated-api|generated-schema)(\/|$)/.test(path) || /(^|\/)generated\/(?:[^/]+\/)*(?:api|client|schema)[^/]*\.[^/]+$/.test(path) || /(?:^|[._-])(?:openapi|swagger|graphql|schema)(?:[._-]|$)/.test(name) || /\.(?:proto|avsc)$/.test(name);
 }
 function isBundledAsset(path) {
-  return /(?:\.min|\.bundle)+(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs|cjs)$/.test(path) || /(?:^|\/)(?:assets|static)\/[^/]+\.[a-f0-9]{8,}\.(?:css|js|mjs)$/.test(path) || /(?:^|[.-])chunk(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs)$/.test(path);
+  return /(?:\.min|\.bundle)+(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs|cjs)$/.test(path) || /(?:^|\/)(?:assets|static)\/[^/]+\.[a-f0-9]{8,}\.(?:css|js|mjs)$/.test(path) || /(?:^|[.-])chunk(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs)$/.test(path) || isBuildOutput(path);
+}
+function isBuildOutput(path) {
+  return /(?:^|\/)(?:dist|\.next|\.nuxt|\.output|\.svelte-kit)\/.*\.(?:css|js|mjs|cjs|map)$/.test(
+    path
+  );
 }
 
 // packages/review/src/plan.ts
@@ -65576,7 +65581,7 @@ function encodeContentPath(path) {
   return `${createHash5("sha256").update(path, "utf8").digest("hex")}.txt`;
 }
 function boundContent(content, remainingBudget) {
-  if (content === void 0 || content.includes("\0")) return void 0;
+  if (content === void 0 || content.includes("\0") || isMinified(content)) return void 0;
   const limit = Math.min(MAX_WORKSPACE_CONTENT_BYTES, remainingBudget);
   if (limit <= 0) return void 0;
   const buffer = Buffer.from(content, "utf8");
@@ -65586,6 +65591,10 @@ function boundContent(content, remainingBudget) {
 [shuvbot:truncated maxBytes=${limit}]`,
     truncated: true
   };
+}
+var MAX_REASONABLE_LINE_LENGTH = 5e3;
+function isMinified(content) {
+  return content.split("\n").some((line) => line.length > MAX_REASONABLE_LINE_LENGTH);
 }
 function validateChangedFiles(files) {
   const paths = /* @__PURE__ */ new Set();
@@ -66944,6 +66953,7 @@ function failureDetailOf(error52) {
 function recordFailedSession(samples, redactor, entry) {
   if (samples.length >= MAX_REJECTED_SAMPLES) return;
   const { error: error52, classified, ...rest } = entry;
+  if (classified.category === "cancellation") return;
   const detail = failureDetailOf(error52);
   if (detail === void 0) return;
   const bounded = detail.length > MAX_REJECTED_SAMPLE_BYTES ? `${detail.slice(0, MAX_REJECTED_SAMPLE_BYTES)}
@@ -67630,6 +67640,7 @@ function sessionSummaries(input, records, specialistSessionIds, captures, coordi
       const repairAttempted = captures.some(
         (capture) => capture.id === sessionId2 && capture.repairAttempted
       );
+      const usage = attempt.usage ?? captureUsage(captures.find((capture) => capture.id === sessionId2));
       return {
         sessionId: sessionId2,
         role: "specialist",
@@ -67639,7 +67650,7 @@ function sessionSummaries(input, records, specialistSessionIds, captures, coordi
         retryCount: repairAttempted ? 1 : 0,
         attempt: attempt.attempt,
         ...repairAttempted ? { repairAttempted: true } : {},
-        ...attempt.usage === void 0 ? {} : { usage: attempt.usage },
+        ...usage === void 0 ? {} : { usage },
         ...attempt.error === void 0 ? {} : { error: attempt.error }
       };
     });
