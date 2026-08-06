@@ -67,6 +67,31 @@ so a credential straddling the boundary was cut in half and no longer matched
 the exact-value scrub, leaving a fragment of a real secret in retained text. It
 also twice caught tests that passed for the wrong reason. All are fixed.
 
+**The runaway is now diagnosed, and one fix for it has already been disproved.**
+`SHUVBOT_TRACE=1` on a local review records every raw runtime event. It shows
+immediately what lifecycle events never could: reviewers **page through the
+materialised content**, roughly 110-140 lines per `read` call, with `offset`
+and `limit`. One scope held ~6,500 lines across 8 files - about 50 tool calls
+to see it once - and the largest file (1,788 lines) was read ten times.
+Tool-call volume tracks timeouts closely.
+
+Measured, same range (`d89f4c4..master`), same models:
+
+| variant                                                              | tool calls | timed out  |
+| -------------------------------------------------------------------- | ---------- | ---------- |
+| whole-file content (baseline)                                        | 160        | 3 of 6     |
+| large files reduced to changed hunks + "read the patch first" prompt | **284**    | **5 of 6** |
+
+So the obvious fix is wrong: fragmentary context made reviewers hunt _more_,
+not less. That change is reverted; only the tracing is on master. Note the
+experiment also changed two things at once and so cannot attribute between
+them - repeat it one variable at a time.
+
+Next single-variable experiments, in order: (1) prompt-only, forbidding paging
+and requiring one read per file; (2) fewer files per reviewer rather than less
+of each file; (3) partial results on timeout, which makes the runaway survivable
+regardless of cause.
+
 **What is still not right:** at the `full` tier a local run reached only 4/6,
 with `performance` and `release` running away to ~11.6k output tokens and
 timing out. The runaway is not tied to a particular reviewer - it moves between
