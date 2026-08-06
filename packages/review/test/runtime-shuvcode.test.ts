@@ -152,7 +152,8 @@ function fixture(
     signal?: AbortSignal,
     startupLine: string | null = '{"url":"http://127.0.0.1:4321"}\n',
     environment?: NodeJS.ProcessEnv,
-    credential?: StartShuvcodeRuntimeOptions["credential"]
+    credential?: StartShuvcodeRuntimeOptions["credential"],
+    redact?: StartShuvcodeRuntimeOptions["redact"]
   ) => {
     const runtime = startShuvcodeRuntime({
       packageName: "shuvcode",
@@ -161,6 +162,7 @@ function fixture(
       ...(signal === undefined ? {} : { signal }),
       ...(environment === undefined ? {} : { environment }),
       ...(credential === undefined ? {} : { credential }),
+      ...(redact === undefined ? {} : { redact }),
       shutdownGraceMs: 1,
       dependencies
     });
@@ -468,6 +470,108 @@ describe("shuvcode isolated runtime", () => {
       }
     ]);
     expect(JSON.stringify({ error, received })).not.toContain("terminal-secret");
+    await runtime.close();
+  });
+
+  test("retains a scrubbed failure detail when a redactor is supplied", async () => {
+    const subject = fixture();
+    const runtime = await subject.start(undefined, undefined, undefined, undefined, (text) =>
+      text.replace(/sk-[a-z0-9]+/gu, "[redacted]")
+    );
+    await runtime.createSession({ id: "detailed" });
+    await runtime.prompt({
+      sessionID: "detailed",
+      text: "review",
+      output: { schema: { type: "object" } }
+    });
+    const waiting = runtime.wait("detailed");
+
+    subject.events.push({
+      type: "session.execution.failed",
+      data: {
+        sessionID: "detailed",
+        error: {
+          type: "provider.request",
+          name: "ProviderRequestError",
+          status: 502,
+          message: "upstream rejected key sk-livetoken",
+          data: { message: "bad gateway from anthropic" }
+        }
+      }
+    });
+
+    const error = (await waiting.catch((value: unknown) => value)) as {
+      category: string;
+      detail?: string;
+    };
+    expect(error.category).toBe("service");
+    expect(error.detail).toBe(
+      "type=provider.request name=ProviderRequestError status=502 " +
+        "upstream rejected key [redacted] bad gateway from anthropic"
+    );
+    await runtime.close();
+  });
+
+  test("retains no failure detail when no redactor is supplied", async () => {
+    const subject = fixture();
+    const runtime = await subject.start();
+    await runtime.createSession({ id: "bare" });
+    const waiting = runtime.wait("bare");
+
+    subject.events.push({
+      type: "session.execution.failed",
+      data: {
+        sessionID: "bare",
+        error: { name: "ProviderRequestError", data: { message: "upstream exploded" } }
+      }
+    });
+
+    const error = (await waiting.catch((value: unknown) => value)) as { detail?: string };
+    expect(error.detail).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain("upstream exploded");
+    await runtime.close();
+  });
+
+  test("scrubs an injected credential from failure detail by exact value", async () => {
+    const subject = fixture();
+    const runtime = await subject.start(
+      undefined,
+      undefined,
+      undefined,
+      { name: "CLAUDE_CODE_OAUTH_TOKEN", value: "opaque-credential-value" },
+      (text) => text
+    );
+    await runtime.createSession({ id: "credentialed" });
+    const waiting = runtime.wait("credentialed");
+
+    subject.events.push({
+      type: "session.execution.failed",
+      data: {
+        sessionID: "credentialed",
+        error: { message: "rejected opaque-credential-value upstream" }
+      }
+    });
+
+    const error = (await waiting.catch((value: unknown) => value)) as { detail?: string };
+    expect(error.detail).toBe("rejected [redacted] upstream");
+    expect(JSON.stringify(error)).not.toContain("opaque-credential-value");
+    await runtime.close();
+  });
+
+  test("bounds a failure detail that would otherwise be unbounded", async () => {
+    const subject = fixture();
+    const runtime = await subject.start(undefined, undefined, undefined, undefined, (text) => text);
+    await runtime.createSession({ id: "verbose" });
+    const waiting = runtime.wait("verbose");
+
+    subject.events.push({
+      type: "session.execution.failed",
+      data: { sessionID: "verbose", error: { message: "x".repeat(9_000) } }
+    });
+
+    const error = (await waiting.catch((value: unknown) => value)) as { detail?: string };
+    expect(error.detail).toHaveLength(2_000 + "…truncated".length);
+    expect(error.detail?.endsWith("…truncated")).toBe(true);
     await runtime.close();
   });
 

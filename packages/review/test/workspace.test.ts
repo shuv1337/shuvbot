@@ -101,8 +101,15 @@ describe("shared review workspace", () => {
   test("truncates oversized content with a visible marker and skips binary content", async () => {
     const workspace = await createReviewWorkspace({
       files: [
-        { path: "src/big.ts", patch: "diff", content: "a".repeat(MAX_WORKSPACE_CONTENT_BYTES + 1) },
-        { path: "src/binary.bin", patch: "diff", content: "text\0more" }
+        {
+          path: "src/big.ts",
+          patch: "diff",
+          // Realistic source shape: long overall, but no single absurd line, so the
+          // bundle guard does not claim it before the size bound does.
+          content: `${"a".repeat(80)}\n`.repeat(Math.ceil(MAX_WORKSPACE_CONTENT_BYTES / 81) + 1)
+        },
+        { path: "src/binary.bin", patch: "diff", content: "text\0more" },
+        { path: "vendor/app.js", patch: "diff", content: `var a=1;${"x".repeat(6_000)}` }
       ],
       sharedContext: "context"
     });
@@ -116,13 +123,16 @@ describe("shared review workspace", () => {
       );
       // Content carrying NUL is not text; the patch already says it is binary.
       expect(byPath.get("src/binary.bin")?.contentPath).toBeUndefined();
+      // A bundle committed outside a build directory would otherwise hand a
+      // reviewer 128KB of one-line JavaScript to read.
+      expect(byPath.get("vendor/app.js")?.contentPath).toBeUndefined();
     } finally {
       await workspace.cleanup();
     }
   });
 
   test("stops materialising content once the whole-workspace budget is spent", async () => {
-    const perFile = "a".repeat(MAX_WORKSPACE_CONTENT_BYTES);
+    const perFile = `${"a".repeat(80)}\n`.repeat(Math.ceil(MAX_WORKSPACE_CONTENT_BYTES / 81));
     const fileCount = Math.ceil(MAX_WORKSPACE_CONTENT_TOTAL_BYTES / MAX_WORKSPACE_CONTENT_BYTES);
     const workspace = await createReviewWorkspace({
       files: [

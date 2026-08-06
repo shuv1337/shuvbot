@@ -221,6 +221,7 @@ export async function runCoordinatorReview(
             version: config.review.shuvcode.version,
             cwd: input.cwd,
             ...(input.credential === undefined ? {} : { credential: input.credential }),
+            redact: (text) => redactor.redactString(text),
             signal
           }),
         redactor,

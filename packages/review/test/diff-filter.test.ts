@@ -8,9 +8,21 @@ describe("deterministic diff filtering", () => {
     ["web/app.min.js", "minified_or_bundled_asset"],
     ["web/app.bundle.min.js", "minified_or_bundled_asset"],
     ["static/app.0123456789abcdef.js", "minified_or_bundled_asset"],
+    ["dist/index.js", "minified_or_bundled_asset"],
+    ["packages/action/dist/entry.mjs", "minified_or_bundled_asset"],
+    [".next/static/page.js", "minified_or_bundled_asset"],
     ["web/app.js.map", "source_map"]
   ] as const)("filters %s", (path, reason) => {
     expect(classifyDiffFile({ path })).toMatchObject({ accepted: false, reason });
+  });
+
+  test.each([
+    "build/deploy.js",
+    "out/generate-docs.mjs",
+    "scripts/dist-check.js",
+    "src/distance.ts"
+  ])("keeps hand-written %s, since filtering means not reviewing", (path) => {
+    expect(classifyDiffFile({ path })).toMatchObject({ accepted: true });
   });
 
   test("filters files carrying reliable generated markers", () => {

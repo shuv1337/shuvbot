@@ -221,12 +221,18 @@ export function encodeContentPath(path: string): string {
  *
  * Content carrying NUL is not text; materialising it would put binary noise in
  * front of a reviewer that the patch already describes as binary.
+ *
+ * Minified text is refused for the same reason. Path-based filtering catches
+ * build output in the usual directories, but a bundle committed somewhere else
+ * would otherwise hand a reviewer 128KB of one-line JavaScript to read. The
+ * patch still describes the change, exactly as for a file whose content could
+ * not be sourced.
  */
 function boundContent(
   content: string | undefined,
   remainingBudget: number
 ): { text: string; truncated: boolean } | undefined {
-  if (content === undefined || content.includes("\0")) return undefined;
+  if (content === undefined || content.includes("\0") || isMinified(content)) return undefined;
   const limit = Math.min(MAX_WORKSPACE_CONTENT_BYTES, remainingBudget);
   if (limit <= 0) return undefined;
   const buffer = Buffer.from(content, "utf8");
@@ -235,6 +241,13 @@ function boundContent(
     text: `${buffer.subarray(0, limit).toString("utf8")}\n[shuvbot:truncated maxBytes=${limit}]`,
     truncated: true
   };
+}
+
+/** A line no human wrote, which is the cheapest reliable signal of a bundle. */
+const MAX_REASONABLE_LINE_LENGTH = 5_000;
+
+function isMinified(content: string): boolean {
+  return content.split("\n").some((line) => line.length > MAX_REASONABLE_LINE_LENGTH);
 }
 
 function validateChangedFiles(files: readonly WorkspaceChangedFile[]): void {

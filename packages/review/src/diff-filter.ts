@@ -148,6 +148,23 @@ function isBundledAsset(path: string): boolean {
   return (
     /(?:\.min|\.bundle)+(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs|cjs)$/.test(path) ||
     /(?:^|\/)(?:assets|static)\/[^/]+\.[a-f0-9]{8,}\.(?:css|js|mjs)$/.test(path) ||
-    /(?:^|[.-])chunk(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs)$/.test(path)
+    /(?:^|[.-])chunk(?:\.[a-f0-9]{8,})?\.(?:css|js|mjs)$/.test(path) ||
+    isBuildOutput(path)
+  );
+}
+
+/**
+ * Compiled output committed to the repository. Reviewing it spends a reviewer's
+ * entire budget on a derived file whose real change lives in the source that
+ * produced it - shuvbot's own 2.6MB `dist/index.js` was being reviewed as if a
+ * human had written it, and materialised into every reviewer's workspace.
+ *
+ * Only directories where build output is unambiguous are listed. `build/` and
+ * `out/` are deliberately absent: plenty of repositories keep hand-written
+ * scripts there, and filtering means not reviewing at all.
+ */
+function isBuildOutput(path: string): boolean {
+  return /(?:^|\/)(?:dist|\.next|\.nuxt|\.output|\.svelte-kit)\/.*\.(?:css|js|mjs|cjs|map)$/.test(
+    path
   );
 }
