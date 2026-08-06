@@ -64041,6 +64041,12 @@ async function startShuvcodeRuntime(options) {
       );
     }
     void pumpEvents(client, eventController.signal, (sourceEvent) => {
+      if (options.trace !== void 0) {
+        try {
+          options.trace(sourceEvent);
+        } catch {
+        }
+      }
       const event = sanitizeEvent(sourceEvent);
       for (const listener of listeners) listener(event);
       const sessionID = event.data?.sessionID;
@@ -65700,6 +65706,7 @@ async function runCoordinatorReview(input) {
           version: config2.review.shuvcode.version,
           cwd: input.cwd,
           ...input.credential === void 0 ? {} : { credential: input.credential },
+          ...input.trace === void 0 ? {} : { trace: input.trace },
           redact: (text) => redactor.redactString(text),
           signal
         }),
