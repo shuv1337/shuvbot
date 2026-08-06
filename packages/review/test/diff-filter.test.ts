@@ -9,6 +9,8 @@ describe("deterministic diff filtering", () => {
     ["web/app.bundle.min.js", "minified_or_bundled_asset"],
     ["static/app.0123456789abcdef.js", "minified_or_bundled_asset"],
     ["dist/index.js", "minified_or_bundled_asset"],
+    // The motivating pair: shuvbot's own committed bundle and its map.
+    ["dist/index.js.map", "source_map"],
     ["packages/action/dist/entry.mjs", "minified_or_bundled_asset"],
     [".next/static/page.js", "minified_or_bundled_asset"],
     ["web/app.js.map", "source_map"]

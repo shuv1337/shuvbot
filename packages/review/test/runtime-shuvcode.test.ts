@@ -558,6 +558,43 @@ describe("shuvcode isolated runtime", () => {
     await runtime.close();
   });
 
+  test("scrubs a credential that straddles the truncation boundary", async () => {
+    const subject = fixture();
+    const credential = "opaque-credential-value";
+    const runtime = await subject.start(
+      undefined,
+      undefined,
+      undefined,
+      { name: "CLAUDE_CODE_OAUTH_TOKEN", value: credential },
+      (text) => text
+    );
+    await runtime.createSession({ id: "straddle" });
+    const waiting = runtime.wait("straddle");
+
+    // Lands the credential across the 2000-character bound. Truncating before
+    // scrubbing would cut it in half, and half a token no longer matches the
+    // exact-value pass, so a fragment of a real secret would survive.
+    subject.events.push({
+      type: "session.execution.failed",
+      data: {
+        sessionID: "straddle",
+        error: { message: `${"x".repeat(1_990)}${credential} trailing` }
+      }
+    });
+
+    const error = (await waiting.catch((value: unknown) => value)) as { detail?: string };
+    // Truncating first leaves exactly the first ten characters of the
+    // credential, which the exact-value pass then cannot recognise.
+    expect(error.detail).not.toContain(credential.slice(0, 10));
+    // Asserting only the absence would also hold if detail were dropped
+    // altogether or left unbounded, so pin that it is still retained, still
+    // bounded, and still marked.
+    expect(error.detail).toHaveLength(2_000 + "…truncated".length);
+    expect(error.detail?.endsWith("…truncated")).toBe(true);
+    expect(error.detail?.startsWith("xxx")).toBe(true);
+    await runtime.close();
+  });
+
   test("bounds a failure detail that would otherwise be unbounded", async () => {
     const subject = fixture();
     const runtime = await subject.start(undefined, undefined, undefined, undefined, (text) => text);

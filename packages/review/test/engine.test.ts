@@ -574,6 +574,29 @@ describe("local coordinator engine", () => {
     );
   });
 
+  test("records one sample for a specialist that fails the same way on every attempt", async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-repeated-failure-"));
+    await runEngine("trivial", new FakeRuntime({ repeatedFailureReviewer: "code-quality" }), {
+      artifactDirectory,
+      // A retry needs MINIMUM_RETRY_BUDGET_MS of headroom, or the second
+      // attempt never happens and the test proves nothing.
+      specialistTimeoutMs: 120_000,
+      overallTimeoutMs: 240_000
+    });
+
+    const rejected = JSON.parse(
+      await readFile(join(artifactDirectory, "shuvbot-rejected-results.json"), "utf8")
+    ) as { rejected: { kind: string; reviewer?: string }[] };
+
+    // The artifact is shared and bounded; copies of one fault crowd out the
+    // other reviewers' failures.
+    expect(
+      rejected.rejected.filter(
+        ({ kind, reviewer }) => kind === "failure" && reviewer === "code-quality"
+      )
+    ).toHaveLength(1);
+  });
+
   test("keeps a failure sample when the coordinator itself fails", async () => {
     const artifactDirectory = await mkdtemp(join(tmpdir(), "shuvbot-coordinator-failure-"));
     await runEngine("trivial", new FakeRuntime({ providerFailureCoordinator: true }), {
@@ -769,6 +792,7 @@ class FakeRuntime implements ShuvcodeRuntime {
       hangSpecialistRepair?: BuiltInReviewerId;
       failingReviewer?: BuiltInReviewerId;
       providerFailureReviewer?: BuiltInReviewerId;
+      repeatedFailureReviewer?: BuiltInReviewerId;
       hangReviewer?: BuiltInReviewerId;
       burnThenHangReviewer?: BuiltInReviewerId;
       cancelledDetailReviewer?: BuiltInReviewerId;
@@ -906,6 +930,13 @@ class FakeRuntime implements ShuvcodeRuntime {
         }
         if (this.behavior.failingReviewer === reviewer) {
           throw classifyReviewError({ category: "service", message: `${reviewer} unavailable` });
+        }
+        if (this.behavior.repeatedFailureReviewer === reviewer) {
+          // Retryable, and fails identically on every attempt.
+          throw Object.assign(
+            classifyReviewError({ category: "service", message: "Provider service unavailable" }),
+            { detail: "type=provider.request status=503 upstream unavailable" }
+          );
         }
         if (this.behavior.providerFailureReviewer === reviewer) {
           // Shaped like a ShuvcodeSessionError: a fixed safe message plus the
