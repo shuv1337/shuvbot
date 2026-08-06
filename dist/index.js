@@ -64553,12 +64553,13 @@ function failureDetail(event) {
   );
   const detail = [...labelled, ...messages].join(" ").replace(/\s+/gu, " ").trim();
   if (detail.length === 0) return void 0;
-  return detail.length > MAX_FAILURE_DETAIL_CHARS ? `${detail.slice(0, MAX_FAILURE_DETAIL_CHARS)}\u2026truncated` : detail;
+  return detail;
 }
 function scrubbed(detail, scrub) {
   if (detail === void 0) return void 0;
   const cleaned = scrub(detail);
-  return cleaned.length === 0 ? void 0 : cleaned;
+  if (cleaned.length === 0) return void 0;
+  return cleaned.length > MAX_FAILURE_DETAIL_CHARS ? `${cleaned.slice(0, MAX_FAILURE_DETAIL_CHARS)}\u2026truncated` : cleaned;
 }
 function failureTextScrubber(options) {
   const { redact } = options;
@@ -66958,12 +66959,18 @@ function recordFailedSession(samples, redactor, entry) {
   if (detail === void 0) return;
   const bounded = detail.length > MAX_REJECTED_SAMPLE_BYTES ? `${detail.slice(0, MAX_REJECTED_SAMPLE_BYTES)}
 \u2026truncated` : detail;
+  const sample = redactor.redactString(bounded);
+  if (samples.some(
+    (existing) => existing.kind === "failure" && existing.role === rest.role && existing.reviewer === rest.reviewer && existing.sample === sample
+  )) {
+    return;
+  }
   samples.push({
     kind: "failure",
     ...rest,
     repair: false,
     reason: classified.message,
-    sample: redactor.redactString(bounded)
+    sample
   });
 }
 var CoordinatorExecutionError = class extends Error {

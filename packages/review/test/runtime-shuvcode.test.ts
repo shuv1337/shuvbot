@@ -586,6 +586,12 @@ describe("shuvcode isolated runtime", () => {
     // Truncating first leaves exactly the first ten characters of the
     // credential, which the exact-value pass then cannot recognise.
     expect(error.detail).not.toContain(credential.slice(0, 10));
+    // Asserting only the absence would also hold if detail were dropped
+    // altogether or left unbounded, so pin that it is still retained, still
+    // bounded, and still marked.
+    expect(error.detail).toHaveLength(2_000 + "…truncated".length);
+    expect(error.detail?.endsWith("…truncated")).toBe(true);
+    expect(error.detail?.startsWith("xxx")).toBe(true);
     await runtime.close();
   });
 
