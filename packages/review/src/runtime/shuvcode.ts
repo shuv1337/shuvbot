@@ -199,7 +199,10 @@ export interface StartShuvcodeRuntimeOptions {
 
 export interface ShuvcodeRuntime {
   readonly url: string;
-  createSession(input?: ShuvcodeSessionCreateInput): Promise<ShuvcodeSession>;
+  createSession(
+    input?: ShuvcodeSessionCreateInput,
+    options?: { readonly signal?: AbortSignal }
+  ): Promise<ShuvcodeSession>;
   /**
    * Forks an existing review session. The runtime resolves the fork boundary from
    * the parent's persisted messages, so the parent must already have been prompted;
@@ -217,9 +220,10 @@ export interface ShuvcodeRuntime {
         readonly providerID: string;
         readonly variant?: string;
       };
-    }
+    },
+    options?: { readonly signal?: AbortSignal }
   ): Promise<void>;
-  prompt(input: ShuvcodePromptInput): Promise<unknown>;
+  prompt(input: ShuvcodePromptInput, options?: { readonly signal?: AbortSignal }): Promise<unknown>;
   wait(sessionID: string, options?: { readonly signal?: AbortSignal }): Promise<ShuvcodeEvent>;
   interrupt(sessionID: string): Promise<void>;
   subscribe(listener: (event: ShuvcodeEvent) => void): () => void;
@@ -429,16 +433,14 @@ export async function startShuvcodeRuntime(
     const runtimeClient = client;
     return {
       url,
-      async createSession(input) {
+      async createSession(input, requestOptions = {}) {
         ensureOpen(closePromise);
         const { policy: requested, ...rest } = input ?? {};
         const policy = requested ?? REVIEW_SESSION_POLICY;
         assertReviewPolicy(policy, REVIEW_SESSION_POLICY);
         const session = await runtimeClient.session.create(
           { ...rest, policy },
-          {
-            signal: eventController.signal
-          }
+          { signal: combinedSignal(eventController.signal, requestOptions.signal) }
         );
         activeSessions.add(session.id);
         assertInstalledPolicy(session, policy, options.packageName, options.version);
@@ -467,7 +469,7 @@ export async function startShuvcodeRuntime(
         sessionPolicies.set(session.id, policy);
         return session;
       },
-      async configureSession(sessionID, input) {
+      async configureSession(sessionID, input, requestOptions = {}) {
         ensureOpen(closePromise);
         ensureProtectedSession(sessionPolicies, sessionID);
         if (input.agent !== undefined) {
@@ -476,7 +478,7 @@ export async function startShuvcodeRuntime(
           }
           await runtimeClient.session.switchAgent(
             { sessionID, agent: input.agent },
-            { signal: eventController.signal }
+            { signal: combinedSignal(eventController.signal, requestOptions.signal) }
           );
           ensureOpen(closePromise);
         }
@@ -486,26 +488,29 @@ export async function startShuvcodeRuntime(
           }
           await runtimeClient.session.switchModel(
             { sessionID, model: input.model },
-            { signal: eventController.signal }
+            { signal: combinedSignal(eventController.signal, requestOptions.signal) }
           );
           ensureOpen(closePromise);
         }
       },
-      async prompt(input) {
+      async prompt(input, promptOptions = {}) {
         ensureOpen(closePromise);
         ensureProtectedSession(sessionPolicies, input.sessionID);
         activeSessions.add(input.sessionID);
         if (input.output !== undefined) structuredSessions.add(input.sessionID);
         try {
-          const result = await runtimeClient.session.prompt(input, {
-            signal: eventController.signal
-          });
+          const signal = combinedSignal(eventController.signal, promptOptions.signal);
+          const result = await runtimeClient.session.prompt(input, { signal });
           ensureOpen(closePromise);
           return result;
         } catch (error) {
           activeSessions.delete(input.sessionID);
           structuredSessions.delete(input.sessionID);
-          if (closePromise !== undefined || eventController.signal.aborted) {
+          if (
+            closePromise !== undefined ||
+            eventController.signal.aborted ||
+            promptOptions.signal?.aborted === true
+          ) {
             throw new ShuvcodeSessionError("cancellation");
           }
           throw safeClientError(error);
@@ -624,6 +629,12 @@ function ensureProtectedSession(
   if (!policies.has(sessionID)) {
     throw new Error(`Refusing to use unprotected or unknown review session: ${sessionID}`);
   }
+}
+
+function combinedSignal(runtimeSignal: AbortSignal, requestSignal?: AbortSignal): AbortSignal {
+  return requestSignal === undefined
+    ? runtimeSignal
+    : AbortSignal.any([runtimeSignal, requestSignal]);
 }
 
 function policyCompatibilityError(packageName: string, version: string): Error {

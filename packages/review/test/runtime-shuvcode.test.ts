@@ -64,6 +64,7 @@ function fixture(
     eventAborted: false,
     loadClient: 0,
     health: 0,
+    prompts: [] as unknown[],
     createdPolicies: [] as unknown[],
     forkedPolicies: [] as unknown[]
   };
@@ -110,7 +111,10 @@ function fixture(
           ...(overrides.omitReturnedPolicy ? {} : { policy: input.policy })
         };
       },
-      prompt: async () => ({ id: "input" }),
+      prompt: async (input) => {
+        calls.prompts.push(input);
+        return { id: "input" };
+      },
       interrupt: async ({ sessionID }) => {
         calls.interrupts.push(sessionID);
         if (overrides.interruptHangs) await new Promise(() => {});
@@ -224,6 +228,29 @@ describe("shuvcode isolated runtime", () => {
       invalid.start(undefined, '{"url":"http://127.0.0.1:4321","password":"leak"}\n')
     ).rejects.toThrow('expected exactly {"url":"..."}');
     expect(invalid.calls.kills).toEqual(["SIGTERM"]);
+  });
+
+  test("forwards steer delivery and resume when prompting an active session", async () => {
+    const subject = fixture();
+    const runtime = await subject.start();
+    const session = await runtime.createSession({ id: "parent" });
+
+    await runtime.prompt({
+      sessionID: session.id,
+      text: "Return what you have.",
+      delivery: "steer",
+      resume: true
+    });
+
+    expect(subject.calls.prompts).toEqual([
+      {
+        sessionID: "parent",
+        text: "Return what you have.",
+        delivery: "steer",
+        resume: true
+      }
+    ]);
+    await runtime.close();
   });
 
   test("does not inherit unrelated parent credentials", async () => {

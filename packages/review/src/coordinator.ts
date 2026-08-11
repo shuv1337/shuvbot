@@ -120,7 +120,10 @@ export function prepareCoordinator(input: PrepareCoordinatorInput): PreparedCoor
       reviewer,
       status: entry.result.status,
       resultPath: entry.resultPath,
-      findingCount: entry.result.status === "completed" ? entry.result.findings.length : 0
+      findingCount:
+        entry.result.status === "completed" || entry.result.status === "timed_out"
+          ? entry.result.findings.length
+          : 0
     });
     resultReferences.push(`- ${reviewer}: ${entry.resultPath}`);
   }
@@ -135,7 +138,7 @@ export function prepareCoordinator(input: PrepareCoordinatorInput): PreparedCoor
     `Previous findings: ${previousFindingsPath}`,
     "Validated specialist result files:",
     ...(resultReferences.length > 0 ? resultReferences : ["- none"]),
-    "Only emit findings supported by completed specialist results. Preserve each direct finding's reviewer and id.",
+    "Only emit findings supported by completed or timed-out specialist results. Timed-out results have partial coverage but their established findings remain usable. Preserve each direct finding's reviewer and id.",
     "A genuinely consolidated finding may use a new id only when tagged synthesized and its evidence cites each source as source:<reviewer>:<finding-id>.",
     "Return JSON only. Include decision, findings, dropped, coverage, and summary; deterministic code will verify coverage and quorum."
   ].join("\n");
@@ -202,40 +205,40 @@ function validateCoordinatorProvenance(
   result: CoordinatorResult,
   specialistResults: readonly ReviewerResult[]
 ): void {
-  const successfulFindings = new Map<string, BuiltInReviewerId>();
-  const successfulReviewers = new Set<BuiltInReviewerId>();
+  const supportedFindings = new Map<string, BuiltInReviewerId>();
+  const supportedReviewers = new Set<BuiltInReviewerId>();
   for (const specialist of specialistResults) {
-    if (specialist.status !== "completed") continue;
-    successfulReviewers.add(specialist.reviewer);
+    if (specialist.status !== "completed" && specialist.status !== "timed_out") continue;
+    supportedReviewers.add(specialist.reviewer);
     for (const finding of specialist.findings) {
-      successfulFindings.set(sourceReference(finding.reviewer, finding.id), finding.reviewer);
+      supportedFindings.set(sourceReference(finding.reviewer, finding.id), finding.reviewer);
     }
   }
 
   for (const finding of result.findings) {
-    if (!successfulReviewers.has(finding.reviewer)) {
+    if (!supportedReviewers.has(finding.reviewer)) {
       throw new TypeError(
-        `coordinator finding ${finding.id} names unsuccessful reviewer: ${finding.reviewer}`
+        `coordinator finding ${finding.id} names unsupported reviewer: ${finding.reviewer}`
       );
     }
     const directReference = sourceReference(finding.reviewer, finding.id);
-    if (successfulFindings.has(directReference)) continue;
+    if (supportedFindings.has(directReference)) continue;
 
     if (!finding.tags?.includes("synthesized")) {
       throw new TypeError(`coordinator finding is unsupported by specialist output: ${finding.id}`);
     }
-    const citedSources = [...successfulFindings.keys()].filter((source) =>
+    const citedSources = [...supportedFindings.keys()].filter((source) =>
       finding.evidence.includes(source)
     );
     if (citedSources.length === 0) {
       throw new TypeError(
-        `synthesized coordinator finding lacks successful source evidence: ${finding.id}`
+        `synthesized coordinator finding lacks supported source evidence: ${finding.id}`
       );
     }
   }
 
   for (const dropped of result.dropped) {
-    if (!successfulFindings.has(sourceReference(dropped.reviewer, dropped.id))) {
+    if (!supportedFindings.has(sourceReference(dropped.reviewer, dropped.id))) {
       throw new TypeError(`dropped finding is unsupported by specialist output: ${dropped.id}`);
     }
   }

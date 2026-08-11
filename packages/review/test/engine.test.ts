@@ -270,6 +270,72 @@ describe("local coordinator engine", () => {
     });
   });
 
+  test("retains findings finalized at timeout without counting the reviewer toward quorum", async () => {
+    const runtime = new FakeRuntime({ finalizeTimedOutReviewer: "code-quality" });
+    const { result } = await runEngine("trivial", runtime, {
+      specialistTimeoutMs: 80,
+      specialistFinalizationTimeoutMs: 40
+    });
+
+    expect(
+      runtime.prompts.filter(({ metadata }) => metadata?.reviewer === "code-quality")
+    ).toHaveLength(2);
+    expect(runtime.prompts.at(1)).toMatchObject({
+      sessionID: "child-1",
+      delivery: "steer",
+      resume: true,
+      metadata: { reviewer: "code-quality", timeoutFinalization: true },
+      output: { name: "ReviewerResult" }
+    });
+    expect(runtime.interrupted).toContain("child-1");
+    expect(result.specialistResults[0]).toMatchObject({
+      reviewer: "code-quality",
+      status: "timed_out",
+      findings: [{ id: "quality-1" }],
+      error: { category: "service" }
+    });
+    expect(result.result.findings).toMatchObject([{ id: "quality-1" }]);
+    expect(result.coverage).toMatchObject({
+      completed: [],
+      timedOut: ["code-quality"],
+      quorumMet: false
+    });
+    expect(result.quorum.status).toBe("degraded");
+    expect(result.result.decision).toBe("degraded");
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event: "session.timed_out",
+        sessionId: "child-1",
+        reviewer: "code-quality"
+      })
+    );
+  });
+
+  test("a full review reaches quorum while retaining an optional timed-out reviewer's findings", async () => {
+    const runtime = new FakeRuntime({ finalizeTimedOutReviewer: "performance" });
+    const { result } = await runEngine("full", runtime, {
+      specialistTimeoutMs: 80,
+      specialistFinalizationTimeoutMs: 40
+    });
+
+    expect(
+      result.specialistResults.find(({ reviewer }) => reviewer === "performance")
+    ).toMatchObject({
+      status: "timed_out",
+      findings: [{ id: "performance-1" }]
+    });
+    expect(result.coverage).toMatchObject({
+      completed: ["code-quality", "security", "tests", "documentation", "release"],
+      timedOut: ["performance"],
+      quorumMet: true
+    });
+    expect(result.quorum.status).toBe("complete");
+    expect(result.result.decision).toBe("comments");
+    expect(result.result.findings).toMatchObject([
+      { id: "performance-1", reviewer: "performance" }
+    ]);
+  });
+
   test("retries transient specialist failure and degrades when required coverage still fails", async () => {
     const runtime = new FakeRuntime({ failingReviewer: "security" });
     const { result } = await runEngine("full", runtime, { specialistTimeoutMs: 100_000 });
@@ -313,6 +379,26 @@ describe("local coordinator engine", () => {
     expect(result.error?.category).toBe("cancellation");
     expect(runtime.closed).toBe(true);
     expect(existsSync(root)).toBe(false);
+  });
+
+  test("bounds specialist session creation and prompt admission with the task signal", async () => {
+    const creating = new FakeRuntime({ hangSpecialistCreate: true });
+    const created = await runEngine("trivial", creating, {
+      specialistTimeoutMs: 30,
+      specialistFinalizationTimeoutMs: 10
+    });
+    expect(created.result.specialistResults[0]).toMatchObject({ status: "timed_out" });
+    expect(
+      creating.prompts.filter(({ metadata }) => metadata?.reviewer !== undefined)
+    ).toHaveLength(0);
+
+    const prompting = new FakeRuntime({ hangSpecialistPrompt: "code-quality" });
+    const prompted = await runEngine("trivial", prompting, {
+      specialistTimeoutMs: 30,
+      specialistFinalizationTimeoutMs: 10
+    });
+    expect(prompted.result.specialistResults[0]).toMatchObject({ status: "timed_out" });
+    expect(prompting.interrupted).toContain("child-1");
   });
 
   test("uses event failure classification, cumulative usage, and actual session IDs", async () => {
@@ -790,6 +876,9 @@ class FakeRuntime implements ShuvcodeRuntime {
       invalidSpecialistOnce?: BuiltInReviewerId;
       invalidSpecialistAlways?: BuiltInReviewerId;
       hangSpecialistRepair?: BuiltInReviewerId;
+      finalizeTimedOutReviewer?: BuiltInReviewerId;
+      hangSpecialistCreate?: boolean;
+      hangSpecialistPrompt?: BuiltInReviewerId;
       failingReviewer?: BuiltInReviewerId;
       providerFailureReviewer?: BuiltInReviewerId;
       repeatedFailureReviewer?: BuiltInReviewerId;
@@ -806,7 +895,10 @@ class FakeRuntime implements ShuvcodeRuntime {
     } = {}
   ) {}
 
-  async createSession(input: ShuvcodeSessionCreateInput = {}) {
+  async createSession(
+    input: ShuvcodeSessionCreateInput = {},
+    options: { readonly signal?: AbortSignal } = {}
+  ) {
     if (input.policy === undefined) {
       this.parents.push(input);
       this.lifecycle.push("create:coordinator");
@@ -814,6 +906,7 @@ class FakeRuntime implements ShuvcodeRuntime {
       this.policies.set("coordinator", policy);
       return { id: "coordinator", policy };
     }
+    if (this.behavior.hangSpecialistCreate) await untilAbort(options.signal);
     const policy = input.policy;
     const id = `child-${++this.sequence}`;
     this.specialists.push(id);
@@ -844,7 +937,7 @@ class FakeRuntime implements ShuvcodeRuntime {
     this.configured.set(sessionID, input);
   }
 
-  async prompt(input: ShuvcodePromptInput) {
+  async prompt(input: ShuvcodePromptInput, options: { readonly signal?: AbortSignal } = {}) {
     if (!this.policies.has(input.sessionID)) throw new Error("prompt before policy");
     this.lifecycle.push(`prompt:${input.sessionID}`);
     this.prompts.push(input);
@@ -861,6 +954,7 @@ class FakeRuntime implements ShuvcodeRuntime {
           manifest.files.map(({ path }) => path)
         );
       }
+      if (this.behavior.hangSpecialistPrompt === reviewer) await untilAbort(options.signal);
     } else this.coordinatorPrompts += 1;
   }
 
@@ -872,6 +966,29 @@ class FakeRuntime implements ShuvcodeRuntime {
       this.active += 1;
       this.maximumActive = Math.max(this.maximumActive, this.active);
       try {
+        if (this.behavior.finalizeTimedOutReviewer === reviewer) {
+          while (
+            !this.prompts.some(
+              ({ sessionID: promptedSession, metadata }) =>
+                promptedSession === sessionID && metadata?.timeoutFinalization === true
+            )
+          ) {
+            if (options.signal?.aborted) await untilAbort(options.signal);
+            await sleep(1);
+          }
+          this.emit({
+            type: "session.usage.updated",
+            data: { sessionID, tokens: { input: 100, output: 50 }, cost: 0.05 }
+          });
+          const partial = completedEvent(sessionID, {
+            reviewer,
+            status: "completed",
+            summary: "One established finding before cutoff.",
+            findings: [findingFor(reviewer)]
+          });
+          this.emit(partial);
+          return partial;
+        }
         if (this.behavior.burnThenHangReviewer === reviewer) {
           // Spends real tokens, then never finishes - what a timed-out
           // specialist actually does.
@@ -999,7 +1116,13 @@ class FakeRuntime implements ShuvcodeRuntime {
           : coordinatedQualityFinding;
       return completedEvent(sessionID, coordinatorOutput([finding]));
     }
-    const completed = completedEvent(sessionID, coordinatorOutput());
+    const timedOutReviewer = this.behavior.finalizeTimedOutReviewer;
+    const completed = completedEvent(
+      sessionID,
+      coordinatorOutput(
+        timedOutReviewer === undefined ? [] : [coordinatedFindingFor(timedOutReviewer)]
+      )
+    );
     this.emit(completed);
     return completed;
   }
@@ -1032,6 +1155,7 @@ async function runEngine(
     maxConcurrency: number;
     overallTimeoutMs: number;
     specialistTimeoutMs: number;
+    specialistFinalizationTimeoutMs: number;
     coordinatorTimeoutMs: number;
     signal: AbortSignal;
     eventClock: CoordinatorEngineEventClock;
@@ -1095,6 +1219,9 @@ async function runEngine(
     redactor: new DefaultRedactor(),
     overallTimeoutMs: overrides.overallTimeoutMs ?? 2_000,
     specialistTimeoutMs: overrides.specialistTimeoutMs ?? 1_000,
+    ...(overrides.specialistFinalizationTimeoutMs === undefined
+      ? {}
+      : { specialistFinalizationTimeoutMs: overrides.specialistFinalizationTimeoutMs }),
     coordinatorTimeoutMs: overrides.coordinatorTimeoutMs ?? 1_000,
     ...(overrides.interruptTimeoutMs === undefined
       ? {}
@@ -1256,6 +1383,23 @@ const coordinatedQualityFinding = {
   disposition: "new",
   fingerprint: "quality-1"
 } as const;
+
+function findingFor(reviewer: BuiltInReviewerId) {
+  return reviewer === "code-quality"
+    ? qualityFinding
+    : {
+        ...qualityFinding,
+        id: `${reviewer}-1`,
+        reviewer,
+        skill: reviewer
+      };
+}
+
+function coordinatedFindingFor(reviewer: BuiltInReviewerId) {
+  if (reviewer === "code-quality") return coordinatedQualityFinding;
+  const finding = findingFor(reviewer);
+  return { ...finding, disposition: "new" as const, fingerprint: finding.id };
+}
 
 function untilAbort(signal?: AbortSignal): Promise<never> {
   return new Promise((_, reject) => {

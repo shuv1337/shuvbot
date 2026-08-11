@@ -66,6 +66,8 @@ export interface ExecuteCoordinatorEngineInput {
   readonly signal?: AbortSignal;
   readonly overallTimeoutMs: number;
   readonly specialistTimeoutMs: number;
+  /** Time reserved inside each specialist timeout for returning partial findings. */
+  readonly specialistFinalizationTimeoutMs?: number;
   readonly coordinatorTimeoutMs: number;
   readonly interruptTimeoutMs?: number;
   readonly eventClock?: CoordinatorEngineEventClock;
@@ -312,6 +314,7 @@ const coordinatorJsonSchema = toRuntimeJsonSchema(
 );
 const HEARTBEAT_QUIET_MS = 30_000;
 const HEARTBEAT_POLL_MS = 1_000;
+const DEFAULT_SPECIALIST_FINALIZATION_TIMEOUT_MS = 15_000;
 const defaultEventClock: CoordinatorEngineEventClock = {
   now: () => Date.now(),
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
@@ -324,6 +327,9 @@ export async function executeCoordinatorEngine(
 ): Promise<CoordinatorEngineResult> {
   validateTimeout("overallTimeoutMs", input.overallTimeoutMs);
   validateTimeout("specialistTimeoutMs", input.specialistTimeoutMs);
+  if (input.specialistFinalizationTimeoutMs !== undefined) {
+    validateTimeout("specialistFinalizationTimeoutMs", input.specialistFinalizationTimeoutMs);
+  }
   validateTimeout("coordinatorTimeoutMs", input.coordinatorTimeoutMs);
   if (input.interruptTimeoutMs !== undefined) {
     validateTimeout("interruptTimeoutMs", input.interruptTimeoutMs);
@@ -429,6 +435,10 @@ export async function executeCoordinatorEngine(
     specialistRecords = await runSessionTasks(tasks, {
       maxConcurrency: input.plan.maxConcurrency,
       taskTimeoutMs: input.specialistTimeoutMs,
+      timeoutFinalizationMs: Math.min(
+        input.specialistFinalizationTimeoutMs ?? DEFAULT_SPECIALIST_FINALIZATION_TIMEOUT_MS,
+        Math.floor(input.specialistTimeoutMs / 2)
+      ),
       ...(input.interruptTimeoutMs === undefined
         ? {}
         : { interruptTimeoutMs: input.interruptTimeoutMs }),
@@ -625,18 +635,23 @@ function createSpecialistTask(options: {
   scopedWorkspace: ScopedReviewWorkspace;
 }): SessionTask<ReviewerResult> {
   let activeSessionID: string | undefined;
+  let timeoutFinalizing = false;
   const definition = options.input.pluginConfig.reviewers.find(
     ({ id }) => id === options.reviewer
   )!;
   return {
     id: options.reviewer,
     async run(context) {
+      timeoutFinalizing = false;
       try {
-        const session = await options.runtime.createSession({
-          title: `shuvbot ${options.reviewer}`,
-          location: { directory: options.input.workspace.root },
-          policy: specialistSessionPolicy(definition.tools)
-        });
+        const session = await options.runtime.createSession(
+          {
+            title: `shuvbot ${options.reviewer}`,
+            location: { directory: options.input.workspace.root },
+            policy: specialistSessionPolicy(definition.tools)
+          },
+          { signal: context.signal }
+        );
         activeSessionID = session.id;
         const reviewerSessions = options.specialistSessionIds.get(options.reviewer) ?? new Map();
         reviewerSessions.set(context.attempt, session.id);
@@ -658,9 +673,11 @@ function createSpecialistTask(options: {
         }
         appendLogEvent(options.log, capture, "session.started");
         options.progress.emit("running", capture, startedAtMs);
-        await options.runtime.configureSession(session.id, {
-          model: options.modelFor(specialistModel(options.input, options.reviewer))
-        });
+        await options.runtime.configureSession(
+          session.id,
+          { model: options.modelFor(specialistModel(options.input, options.reviewer)) },
+          { signal: context.signal }
+        );
         const prompt = buildSpecialistPrompt(options.reviewer, {
           manifestPath: options.scopedWorkspace.manifestPath,
           sharedContextPath: options.input.workspace.sharedContextPath,
@@ -669,12 +686,15 @@ function createSpecialistTask(options: {
           repositoryAdditions: definition.promptSections.map(({ content }) => content)
         });
         const runPrompt = async (text: string): Promise<unknown> => {
-          await options.runtime.prompt({
-            sessionID: session.id,
-            text,
-            output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
-            metadata: { reviewer: options.reviewer }
-          });
+          await options.runtime.prompt(
+            {
+              sessionID: session.id,
+              text,
+              output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
+              metadata: { reviewer: options.reviewer }
+            },
+            { signal: context.signal }
+          );
           const event = await options.runtime.wait(session.id, { signal: context.signal });
           appendRuntimeEvents(
             options.log,
@@ -720,7 +740,7 @@ function createSpecialistTask(options: {
           parsed.usage === undefined && captureUsage(capture) !== undefined
             ? parseReviewerResult({ ...parsed, usage: captureUsage(capture) })
             : parsed;
-        appendCompletedLog(options.log, capture, options.eventClock.now());
+        if (!timeoutFinalizing) appendCompletedLog(options.log, capture, options.eventClock.now());
         return { status: "completed", value, ...(value.usage ? { usage: value.usage } : {}) };
       } catch (error) {
         const capture =
@@ -759,6 +779,25 @@ function createSpecialistTask(options: {
           ...(usage === undefined ? {} : { usage })
         };
       }
+    },
+    async finalizeOnTimeout(signal) {
+      if (activeSessionID === undefined) return;
+      timeoutFinalizing = true;
+      await options.runtime.prompt(
+        {
+          sessionID: activeSessionID,
+          text: [
+            "Stop investigating now.",
+            "Return a valid ReviewerResult using only findings you have already established.",
+            "Do not read more files or call more tools. State briefly that coverage is incomplete."
+          ].join(" "),
+          output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
+          metadata: { reviewer: options.reviewer, timeoutFinalization: true },
+          delivery: "steer",
+          resume: true
+        },
+        { signal }
+      );
     },
     async interrupt() {
       if (activeSessionID !== undefined) await options.runtime.interrupt(activeSessionID);
@@ -944,6 +983,16 @@ function reviewerResultFromRecord(record: SessionTaskRecord<ReviewerResult>): Re
   if (record.status === "completed") return parseReviewerResult(record.value);
   const error =
     record.error ?? classifyReviewError({ category: "service", message: "Session failed" });
+  if (record.status === "timed_out" && record.value !== undefined) {
+    const partial = parseReviewerResult(record.value);
+    return parseReviewerResult({
+      ...partial,
+      status: "timed_out",
+      summary: `${partial.summary} Review reached its time limit; findings are partial.`,
+      ...(record.usage === undefined ? {} : { usage: record.usage }),
+      error
+    });
+  }
   return parseReviewerResult({
     reviewer: record.id,
     status: record.status === "timed_out" ? "timed_out" : "failed",
@@ -1134,6 +1183,11 @@ function logSpecialistTransition(
       ...(usage === undefined ? {} : { usage }),
       ...(error === undefined ? {} : { error })
     });
+  }
+  if (transition.status === "timed_out" && captureOutcome(capture) === "completed") {
+    if (capture !== undefined) appendLogEvent(log, capture, "session.timed_out");
+    else appendLog(log, input, reviewer, "session.timed_out", Math.max(1, transition.attempt));
+    return;
   }
   if (captureOutcome(capture) !== "running") return;
   const event = `session.${transition.status}` as ReviewSessionLogEvent["event"];

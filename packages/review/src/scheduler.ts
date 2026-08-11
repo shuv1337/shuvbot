@@ -31,6 +31,8 @@ export type SessionTaskAttemptResult<T> =
 export interface SessionTask<T> {
   readonly id: string;
   run(context: SessionTaskContext): Promise<SessionTaskAttemptResult<T>>;
+  /** Ask an in-flight task to return its best available result before interruption. */
+  finalizeOnTimeout?(signal: AbortSignal): Promise<void> | void;
   interrupt?(): Promise<void> | void;
 }
 
@@ -60,6 +62,8 @@ export interface SessionTaskRecord<T> {
 export interface SessionTaskRunnerOptions {
   readonly maxConcurrency?: number;
   readonly taskTimeoutMs: number;
+  /** Time reserved inside taskTimeoutMs for a best-effort final result. */
+  readonly timeoutFinalizationMs?: number;
   readonly interruptTimeoutMs?: number;
   readonly signal?: AbortSignal;
   onHeartbeat?(taskId: string, attempt: number): void;
@@ -116,6 +120,10 @@ export async function runSessionTasks<T>(
   if (!Number.isFinite(interruptTimeoutMs) || interruptTimeoutMs <= 0) {
     throw new Error("interruptTimeoutMs must be a positive finite number");
   }
+  const timeoutFinalizationMs = options.timeoutFinalizationMs ?? 0;
+  if (!Number.isFinite(timeoutFinalizationMs) || timeoutFinalizationMs < 0) {
+    throw new Error("timeoutFinalizationMs must be a non-negative finite number");
+  }
   const requestedConcurrency = options.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   if (!Number.isInteger(requestedConcurrency) || requestedConcurrency <= 0) {
     throw new Error("maxConcurrency must be a positive integer");
@@ -167,11 +175,18 @@ export async function runSessionTasks<T>(
       while (true) {
         transition(index, "running", attempt);
         const controller = new AbortController();
-        const remainingMs = Math.max(0, deadline - Date.now());
+        const finalizationMs =
+          task.finalizeOnTimeout === undefined
+            ? 0
+            : Math.min(timeoutFinalizationMs, options.taskTimeoutMs);
+        const remainingMs = Math.max(0, deadline - Date.now() - finalizationMs);
         let timer: ReturnType<typeof setTimeout> | undefined;
         let removeCancellation = (): void => {};
-        const terminal = new Promise<"timed_out" | "cancelled">((resolve) => {
-          timer = setTimeout(() => resolve("timed_out"), remainingMs);
+        const terminal = new Promise<"finalize" | "timed_out" | "cancelled">((resolve) => {
+          timer = setTimeout(
+            () => resolve(finalizationMs > 0 ? "finalize" : "timed_out"),
+            remainingMs
+          );
           if (options.signal !== undefined) {
             const cancel = (): void => resolve("cancelled");
             if (options.signal.aborted) {
@@ -197,11 +212,28 @@ export async function runSessionTasks<T>(
               error: asReviewError(error)
             })
           );
-        const outcome = await Promise.race([execution, terminal]);
+        let outcome = await Promise.race([execution, terminal]);
         if (timer !== undefined) clearTimeout(timer);
         removeCancellation();
 
+        let finalizedAfterTimeout = false;
+        let finalizationController: AbortController | undefined;
+        let finalization: Promise<void> | undefined;
+        if (outcome === "finalize") {
+          finalizedAfterTimeout = true;
+          finalizationController = new AbortController();
+          // Admission failures are non-fatal: the original execution may still
+          // finish before its hard deadline, and the deadline remains bounded.
+          finalization = Promise.resolve()
+            .then(() => task.finalizeOnTimeout?.(finalizationController!.signal))
+            .catch(() => undefined);
+          const hardTerminal = terminalOutcome(deadline, options.signal);
+          outcome = await Promise.race([execution, hardTerminal.promise]);
+          hardTerminal.dispose();
+        }
+
         if (outcome === "timed_out" || outcome === "cancelled") {
+          finalizationController?.abort();
           controller.abort();
           const interrupted = await interruptTask(task, interruptTimeoutMs);
           if (!interrupted) cleanupCompromised = true;
@@ -212,6 +244,33 @@ export async function runSessionTasks<T>(
           });
           attempts.push({ attempt, status: outcome, error: finalError });
           transition(index, outcome, attempt);
+          break;
+        }
+
+        if (finalizedAfterTimeout) {
+          // A steer may have been admitted just as the original execution
+          // finished. Abort its request and interrupt the session before the
+          // worker slot is released so no queued second turn survives.
+          finalizationController?.abort();
+          if (finalization !== undefined) {
+            await settleBeforeDeadline(finalization, deadline);
+          }
+          const interrupted = await interruptTask(task, interruptTimeoutMs);
+          if (!interrupted) cleanupCompromised = true;
+          const timeoutError = classifyReviewError({
+            category: "service",
+            message: "Session task timed out"
+          });
+          if (outcome.status === "completed") value = outcome.value;
+          attempts.push({
+            attempt,
+            status: "timed_out",
+            error: timeoutError,
+            ...(outcome.usage === undefined ? {} : { usage: outcome.usage })
+          });
+          finalStatus = "timed_out";
+          finalError = timeoutError;
+          transition(index, "timed_out", attempt);
           break;
         }
 
@@ -250,7 +309,7 @@ export async function runSessionTasks<T>(
         transitions: transitions[index] ?? [],
         ...(usage === undefined ? {} : { usage }),
         ...(finalError === undefined || finalStatus === "completed" ? {} : { error: finalError }),
-        ...(finalStatus === "completed" ? { value: value as T } : {})
+        ...(value === undefined ? {} : { value })
       };
       if (cleanupCompromised) return;
     }
@@ -274,6 +333,44 @@ export async function runSessionTasks<T>(
     };
   }
   return records.filter((record): record is SessionTaskRecord<T> => record !== undefined);
+}
+
+async function settleBeforeDeadline(operation: Promise<void>, deadline: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+  });
+  await Promise.race([operation, timeout]);
+  if (timer !== undefined) clearTimeout(timer);
+}
+
+function terminalOutcome(
+  deadline: number,
+  signal?: AbortSignal
+): {
+  readonly promise: Promise<"timed_out" | "cancelled">;
+  dispose(): void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let removeCancellation = (): void => {};
+  const promise = new Promise<"timed_out" | "cancelled">((resolve) => {
+    timer = setTimeout(() => resolve("timed_out"), Math.max(0, deadline - Date.now()));
+    if (signal !== undefined) {
+      const cancel = (): void => resolve("cancelled");
+      if (signal.aborted) cancel();
+      else {
+        signal.addEventListener("abort", cancel, { once: true });
+        removeCancellation = () => signal.removeEventListener("abort", cancel);
+      }
+    }
+  });
+  return {
+    promise,
+    dispose() {
+      if (timer !== undefined) clearTimeout(timer);
+      removeCancellation();
+    }
+  };
 }
 
 async function interruptTask<T>(task: SessionTask<T>, timeoutMs: number): Promise<boolean> {

@@ -112,6 +112,124 @@ describe("session task scheduler", () => {
     expect(Date.now() - startedAt).toBeLessThan(250);
   });
 
+  test("preserves a result finalized inside the hard timeout without claiming completion", async () => {
+    let finish!: (result: { status: "completed"; value: number }) => void;
+    let interrupts = 0;
+    const execution = new Promise<{ status: "completed"; value: number }>((resolve) => {
+      finish = resolve;
+    });
+
+    const [record] = await runSessionTasks(
+      [
+        {
+          id: "partial",
+          run: () => execution,
+          finalizeOnTimeout() {
+            finish({ status: "completed", value: 42 });
+          },
+          interrupt() {
+            interrupts += 1;
+          }
+        }
+      ],
+      { taskTimeoutMs: 30, timeoutFinalizationMs: 15 }
+    );
+
+    expect(record).toMatchObject({
+      status: "timed_out",
+      value: 42,
+      error: { category: "service" },
+      attempts: [{ status: "timed_out" }]
+    });
+    expect(interrupts).toBe(1);
+  });
+
+  test("settles aborted finalization admission before interrupting the completed session", async () => {
+    let finish!: (result: { status: "completed"; value: number }) => void;
+    const lifecycle: string[] = [];
+    const execution = new Promise<{ status: "completed"; value: number }>((resolve) => {
+      finish = resolve;
+    });
+
+    await runSessionTasks(
+      [
+        {
+          id: "late-steer",
+          run: () => execution,
+          finalizeOnTimeout(signal) {
+            finish({ status: "completed", value: 1 });
+            return new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  lifecycle.push("finalization-aborted");
+                  resolve();
+                },
+                { once: true }
+              );
+            });
+          },
+          interrupt() {
+            lifecycle.push("interrupted");
+          }
+        }
+      ],
+      { taskTimeoutMs: 30, timeoutFinalizationMs: 15 }
+    );
+
+    expect(lifecycle).toEqual(["finalization-aborted", "interrupted"]);
+  });
+
+  test("interrupts when timeout finalization does not finish by the hard deadline", async () => {
+    let finalized = 0;
+    let interrupted = 0;
+    const startedAt = Date.now();
+
+    const [record] = await runSessionTasks(
+      [
+        {
+          id: "stuck-finalization",
+          run: () => new Promise(() => {}),
+          finalizeOnTimeout() {
+            finalized += 1;
+            return new Promise(() => {});
+          },
+          interrupt() {
+            interrupted += 1;
+          }
+        }
+      ],
+      { taskTimeoutMs: 30, timeoutFinalizationMs: 15 }
+    );
+
+    expect(record?.status).toBe("timed_out");
+    expect(finalized).toBe(1);
+    expect(interrupted).toBe(1);
+    expect(Date.now() - startedAt).toBeLessThan(250);
+  });
+
+  test("cancellation bypasses timeout finalization", async () => {
+    const controller = new AbortController();
+    let finalized = 0;
+    const running = runSessionTasks(
+      [
+        {
+          id: "cancelled",
+          run: () => new Promise(() => {}),
+          finalizeOnTimeout() {
+            finalized += 1;
+          }
+        }
+      ],
+      { taskTimeoutMs: 1_000, timeoutFinalizationMs: 500, signal: controller.signal }
+    );
+    await sleep(5);
+    controller.abort();
+
+    expect((await running)[0]?.status).toBe("cancelled");
+    expect(finalized).toBe(0);
+  });
+
   test("cancellation interrupts active tasks and cancels queued tasks", async () => {
     const controller = new AbortController();
     const interrupted: string[] = [];
