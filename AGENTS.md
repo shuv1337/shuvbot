@@ -102,7 +102,7 @@ otherwise without checking `main.ts` directly.
 - Keep repo learnings disabled by default; require explicit `[memory].learnings = true` before reading or writing them.
 - Telemetry/observability is a day-zero requirement: every run should produce structured run records, redacted logs, timings, tool-call summaries, and failure diagnostics. External telemetry export should remain explicit/opt-in for GitHub Action users.
 - `review.engine` defaults to `"coordinator"` (approved 2026-08-04, after the release, the packed-runtime smoke, and a real subscription dogfood). `legacy` remains selectable but has no safe production driver and fails closed, so treat it as a historical path rather than a fallback.
-- The coordinator works locally and, opt-in, in the GitHub Action, with GitHub-native posting and finding-lifecycle state. It is still not production-hardened: no opt-in coordinator workflow has been run end to end against a real pull request, the documented dogfood matrix has not been recorded, and the Action default has deliberately not been flipped. Describe it as usable and observed, not proven.
+- The coordinator works locally and, opt-in, in the GitHub Action, with GitHub-native posting and finding-lifecycle state. Full-tier Action run 31469009790 completed 6/6 specialists and reached quorum, but it is still not production-hardened: this is one full-tier Action sample, the documented fixed-corpus dogfood matrix has not been recorded, and the Action default has deliberately not been flipped. Describe it as usable and observed, not proven.
 
 ## Repository automation
 
@@ -275,10 +275,17 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
   along. Raising `activity_timeout` or `max_concurrency` fixes neither and made
   things worse: at a 10m cap with six concurrent sessions nothing finished at
   all and the run died on the overall timeout **without writing any artifacts**,
-  which is the one outcome that teaches you nothing. A reviewer that runs away
-  to ~12k output tokens and is cut off is the remaining unfixed failure: it is
-  not tied to a particular reviewer, it moves between runs, and it is why the
-  `full` tier has still never reached quorum.
+  which is the one outcome that teaches you nothing. Specialists now have a
+  code-owned cumulative budget of 40 filesystem reads. At the limit the engine
+  steers the same session to return established findings; a valid result counts
+  toward quorum and records `readBudgetExhausted`, while a hard timeout remains
+  `timed_out` and never counts. Sanitized runtime events expose only
+  `toolKind: "read" | "other"` for this counter - never restore raw tool input
+  to subscribers. Repairs and scheduler retries share the same budget, and a
+  failed steer interrupts the old execution before retry. Action run
+  31469009790 was the first full-tier quorum: 6/6 completed in 6m25s with no
+  timeout. None hit the limit in that run; the steer path is proven by repeated
+  local runs and deterministic tests, not that Action sample.
 - **Retained failure text is fail-closed, and deliberately redacted twice.**
   `sanitizeEvent` reduces a runtime failure to a category and a status, which
   is right for the event stream but leaves `Provider request failed` as the only

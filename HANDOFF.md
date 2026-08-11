@@ -44,6 +44,15 @@ timed out. It spent 41,648 output tokens and $27.33. Timeout finalization worked
 at the transport boundary, but neither timed-out specialist had an established
 structured result to retain.
 
+After landing the budget, Action run
+[31469009790](https://github.com/shuv1337/shuvbot/actions/runs/31469009790)
+became the first full-tier Action review to reach quorum: 6/6 specialists
+completed, both required reviewers were present, no session timed out, and the
+run finished in 6m25s with 31,440 specialist output tokens and $16.72 total
+cost. No specialist reached 40 reads in that particular run, so it proves the
+full-tier Action path and absence of regressions; the budget steer itself is
+exercised by the corrected local run and deterministic runtime tests.
+
 Getting there took three failed full-tier dogfoods and one local reproduction.
 
 - **#3** (`@high`, 5m cap, concurrency 3): 4/6 cut off at exactly 300s.
@@ -136,9 +145,9 @@ production proof.
 
 ## What is NOT done
 
-1. **The read budget is not yet Action-proven.** Full tier reached quorum in
-   six budget-enabled local runs, but the source and bundle must land before the
-   trusted-default-branch workflow can exercise it.
+1. **Repeated Action reliability is not measured.** The first full-tier Action
+   quorum completed 6/6, while six budget-enabled local runs completed 36/36;
+   one Action sample is proof of function, not a reliability distribution.
 2. **M7's dogfood matrix is unrecorded.** Several targeted runs exist, but
    latency, cost, recall, and precision are sampled rather than measured against
    a fixed corpus.
@@ -198,9 +207,9 @@ production proof.
 - Environment auth reaches exactly one provider. Any change to
   `REVIEW_MODEL_ALIASES` or to a repository's `[review.models]` must keep the
   roster on that provider, or every specialist fails.
-- The Action discovers `shuvbot.toml` like the CLI does; an explicit `config:`
-  input still wins, which is how `.github/shuvbot.ci.toml` keeps CI-only
-  settings (`auth = "environment"`, Anthropic-only models) out of local runs.
+- The Action does not auto-discover `shuvbot.toml`; the workflow's explicit
+  `config: .github/shuvbot.ci.toml` keeps CI-only settings
+  (`auth = "environment"`, Anthropic-only models) out of local runs.
 - `AGENTS.md` holds the operational gotchas that cost real debugging time - read
   it before touching the session, prompt, runtime, or workflow paths.
 
@@ -213,11 +222,11 @@ all green and enforced by CI rather than convention.
 
 Read `AGENTS.md`, then the "one thing to know" section above.
 
-Land the source change and regenerated Action bundle, then run one full-tier
-`@shuvbot review` against the trusted default branch. Success means quorum,
-both `code-quality` and `security` completed, no hard timeout, and session
-artifacts truthfully identifying every reviewer that exhausted its read budget.
-Do not retune timeouts, concurrency, model, or scope in the same run.
+Build the fixed-corpus M7 dogfood matrix next. Keep tier, model, concurrency,
+timeouts, and planted defects fixed across repetitions; record latency, true
+cost, coverage, precision, and recall. The existing runs establish function and
+convergence, but they cannot measure recall because the historical diff has no
+independent ground truth.
 
 Read `$RUNNER_TEMP/shuvbot` from the run - `shuvbot-run.json` for coverage and
 per-session errors, `shuvbot-findings.json` for the canonical findings
