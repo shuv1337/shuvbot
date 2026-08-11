@@ -36,8 +36,7 @@ results count as completed and session artifacts expose
 `readBudgetExhausted: true`. A hard timeout remains `timed_out`, retains any
 partial findings, and still does not count toward quorum.
 
-This is not yet Action-proven. The last Action full-tier dogfood before the read
-budget, run
+Before the budget landed, the last Action full-tier dogfood, run
 [31462297649](https://github.com/shuv1337/shuvbot/actions/runs/31462297649),
 completed 4/6 specialists in 9m54s and degraded because `security` and `release`
 timed out. It spent 41,648 output tokens and $27.33. Timeout finalization worked
