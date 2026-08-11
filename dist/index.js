@@ -64086,16 +64086,14 @@ async function startShuvcodeRuntime(options) {
     const runtimeClient = client;
     return {
       url: url2,
-      async createSession(input) {
+      async createSession(input, requestOptions = {}) {
         ensureOpen(closePromise);
         const { policy: requested, ...rest } = input ?? {};
         const policy = requested ?? REVIEW_SESSION_POLICY;
         assertReviewPolicy(policy, REVIEW_SESSION_POLICY);
         const session = await runtimeClient.session.create(
           { ...rest, policy },
-          {
-            signal: eventController.signal
-          }
+          { signal: combinedSignal(eventController.signal, requestOptions.signal) }
         );
         activeSessions.add(session.id);
         assertInstalledPolicy(session, policy, options.packageName, options.version);
@@ -64124,7 +64122,7 @@ async function startShuvcodeRuntime(options) {
         sessionPolicies.set(session.id, policy);
         return session;
       },
-      async configureSession(sessionID, input) {
+      async configureSession(sessionID, input, requestOptions = {}) {
         ensureOpen(closePromise);
         ensureProtectedSession(sessionPolicies, sessionID);
         if (input.agent !== void 0) {
@@ -64133,7 +64131,7 @@ async function startShuvcodeRuntime(options) {
           }
           await runtimeClient.session.switchAgent(
             { sessionID, agent: input.agent },
-            { signal: eventController.signal }
+            { signal: combinedSignal(eventController.signal, requestOptions.signal) }
           );
           ensureOpen(closePromise);
         }
@@ -64143,26 +64141,25 @@ async function startShuvcodeRuntime(options) {
           }
           await runtimeClient.session.switchModel(
             { sessionID, model: input.model },
-            { signal: eventController.signal }
+            { signal: combinedSignal(eventController.signal, requestOptions.signal) }
           );
           ensureOpen(closePromise);
         }
       },
-      async prompt(input) {
+      async prompt(input, promptOptions = {}) {
         ensureOpen(closePromise);
         ensureProtectedSession(sessionPolicies, input.sessionID);
         activeSessions.add(input.sessionID);
         if (input.output !== void 0) structuredSessions.add(input.sessionID);
         try {
-          const result = await runtimeClient.session.prompt(input, {
-            signal: eventController.signal
-          });
+          const signal = combinedSignal(eventController.signal, promptOptions.signal);
+          const result = await runtimeClient.session.prompt(input, { signal });
           ensureOpen(closePromise);
           return result;
         } catch (error52) {
           activeSessions.delete(input.sessionID);
           structuredSessions.delete(input.sessionID);
-          if (closePromise !== void 0 || eventController.signal.aborted) {
+          if (closePromise !== void 0 || eventController.signal.aborted || promptOptions.signal?.aborted === true) {
             throw new ShuvcodeSessionError("cancellation");
           }
           throw safeClientError(error52);
@@ -64252,6 +64249,9 @@ function ensureProtectedSession(policies, sessionID) {
   if (!policies.has(sessionID)) {
     throw new Error(`Refusing to use unprotected or unknown review session: ${sessionID}`);
   }
+}
+function combinedSignal(runtimeSignal, requestSignal) {
+  return requestSignal === void 0 ? runtimeSignal : AbortSignal.any([runtimeSignal, requestSignal]);
 }
 function policyCompatibilityError(packageName, version2) {
   return new Error(
@@ -66073,7 +66073,7 @@ function prepareCoordinator(input) {
       reviewer,
       status: entry.result.status,
       resultPath: entry.resultPath,
-      findingCount: entry.result.status === "completed" ? entry.result.findings.length : 0
+      findingCount: entry.result.status === "completed" || entry.result.status === "timed_out" ? entry.result.findings.length : 0
     });
     resultReferences.push(`- ${reviewer}: ${entry.resultPath}`);
   }
@@ -66087,7 +66087,7 @@ function prepareCoordinator(input) {
     `Previous findings: ${previousFindingsPath}`,
     "Validated specialist result files:",
     ...resultReferences.length > 0 ? resultReferences : ["- none"],
-    "Only emit findings supported by completed specialist results. Preserve each direct finding's reviewer and id.",
+    "Only emit findings supported by completed or timed-out specialist results. Timed-out results have partial coverage but their established findings remain usable. Preserve each direct finding's reviewer and id.",
     "A genuinely consolidated finding may use a new id only when tagged synthesized and its evidence cites each source as source:<reviewer>:<finding-id>.",
     "Return JSON only. Include decision, findings, dropped, coverage, and summary; deterministic code will verify coverage and quorum."
   ].join("\n");
@@ -66138,37 +66138,37 @@ function parseAndValidateCoordinator(output, specialistResults) {
   return parsed;
 }
 function validateCoordinatorProvenance(result, specialistResults) {
-  const successfulFindings = /* @__PURE__ */ new Map();
-  const successfulReviewers = /* @__PURE__ */ new Set();
+  const supportedFindings = /* @__PURE__ */ new Map();
+  const supportedReviewers = /* @__PURE__ */ new Set();
   for (const specialist of specialistResults) {
-    if (specialist.status !== "completed") continue;
-    successfulReviewers.add(specialist.reviewer);
+    if (specialist.status !== "completed" && specialist.status !== "timed_out") continue;
+    supportedReviewers.add(specialist.reviewer);
     for (const finding of specialist.findings) {
-      successfulFindings.set(sourceReference(finding.reviewer, finding.id), finding.reviewer);
+      supportedFindings.set(sourceReference(finding.reviewer, finding.id), finding.reviewer);
     }
   }
   for (const finding of result.findings) {
-    if (!successfulReviewers.has(finding.reviewer)) {
+    if (!supportedReviewers.has(finding.reviewer)) {
       throw new TypeError(
-        `coordinator finding ${finding.id} names unsuccessful reviewer: ${finding.reviewer}`
+        `coordinator finding ${finding.id} names unsupported reviewer: ${finding.reviewer}`
       );
     }
     const directReference = sourceReference(finding.reviewer, finding.id);
-    if (successfulFindings.has(directReference)) continue;
+    if (supportedFindings.has(directReference)) continue;
     if (!finding.tags?.includes("synthesized")) {
       throw new TypeError(`coordinator finding is unsupported by specialist output: ${finding.id}`);
     }
-    const citedSources = [...successfulFindings.keys()].filter(
+    const citedSources = [...supportedFindings.keys()].filter(
       (source) => finding.evidence.includes(source)
     );
     if (citedSources.length === 0) {
       throw new TypeError(
-        `synthesized coordinator finding lacks successful source evidence: ${finding.id}`
+        `synthesized coordinator finding lacks supported source evidence: ${finding.id}`
       );
     }
   }
   for (const dropped of result.dropped) {
-    if (!successfulFindings.has(sourceReference(dropped.reviewer, dropped.id))) {
+    if (!supportedFindings.has(sourceReference(dropped.reviewer, dropped.id))) {
       throw new TypeError(`dropped finding is unsupported by specialist output: ${dropped.id}`);
     }
   }
@@ -66408,6 +66408,10 @@ async function runSessionTasks(tasks, options) {
   if (!Number.isFinite(interruptTimeoutMs) || interruptTimeoutMs <= 0) {
     throw new Error("interruptTimeoutMs must be a positive finite number");
   }
+  const timeoutFinalizationMs = options.timeoutFinalizationMs ?? 0;
+  if (!Number.isFinite(timeoutFinalizationMs) || timeoutFinalizationMs < 0) {
+    throw new Error("timeoutFinalizationMs must be a non-negative finite number");
+  }
   const requestedConcurrency = options.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   if (!Number.isInteger(requestedConcurrency) || requestedConcurrency <= 0) {
     throw new Error("maxConcurrency must be a positive integer");
@@ -66454,12 +66458,16 @@ async function runSessionTasks(tasks, options) {
       while (true) {
         transition(index, "running", attempt);
         const controller = new AbortController();
-        const remainingMs2 = Math.max(0, deadline - Date.now());
+        const finalizationMs = task.finalizeOnTimeout === void 0 ? 0 : Math.min(timeoutFinalizationMs, options.taskTimeoutMs);
+        const remainingMs2 = Math.max(0, deadline - Date.now() - finalizationMs);
         let timer;
         let removeCancellation = () => {
         };
         const terminal = new Promise((resolve7) => {
-          timer = setTimeout(() => resolve7("timed_out"), remainingMs2);
+          timer = setTimeout(
+            () => resolve7(finalizationMs > 0 ? "finalize" : "timed_out"),
+            remainingMs2
+          );
           if (options.signal !== void 0) {
             const cancel = () => resolve7("cancelled");
             if (options.signal.aborted) {
@@ -66483,10 +66491,22 @@ async function runSessionTasks(tasks, options) {
             error: asReviewError(error52)
           })
         );
-        const outcome = await Promise.race([execution, terminal]);
+        let outcome = await Promise.race([execution, terminal]);
         if (timer !== void 0) clearTimeout(timer);
         removeCancellation();
+        let finalizedAfterTimeout = false;
+        let finalizationController;
+        let finalization;
+        if (outcome === "finalize") {
+          finalizedAfterTimeout = true;
+          finalizationController = new AbortController();
+          finalization = Promise.resolve().then(() => task.finalizeOnTimeout?.(finalizationController.signal)).catch(() => void 0);
+          const hardTerminal = terminalOutcome(deadline, options.signal);
+          outcome = await Promise.race([execution, hardTerminal.promise]);
+          hardTerminal.dispose();
+        }
         if (outcome === "timed_out" || outcome === "cancelled") {
+          finalizationController?.abort();
           controller.abort();
           const interrupted = await interruptTask(task, interruptTimeoutMs);
           if (!interrupted) cleanupCompromised = true;
@@ -66497,6 +66517,29 @@ async function runSessionTasks(tasks, options) {
           });
           attempts.push({ attempt, status: outcome, error: finalError });
           transition(index, outcome, attempt);
+          break;
+        }
+        if (finalizedAfterTimeout) {
+          finalizationController?.abort();
+          if (finalization !== void 0) {
+            await settleBeforeDeadline(finalization, deadline);
+          }
+          const interrupted = await interruptTask(task, interruptTimeoutMs);
+          if (!interrupted) cleanupCompromised = true;
+          const timeoutError = classifyReviewError({
+            category: "service",
+            message: "Session task timed out"
+          });
+          if (outcome.status === "completed") value = outcome.value;
+          attempts.push({
+            attempt,
+            status: "timed_out",
+            error: timeoutError,
+            ...outcome.usage === void 0 ? {} : { usage: outcome.usage }
+          });
+          finalStatus = "timed_out";
+          finalError = timeoutError;
+          transition(index, "timed_out", attempt);
           break;
         }
         if (outcome.status === "completed") {
@@ -66528,7 +66571,7 @@ async function runSessionTasks(tasks, options) {
         transitions: transitions[index] ?? [],
         ...usage === void 0 ? {} : { usage },
         ...finalError === void 0 || finalStatus === "completed" ? {} : { error: finalError },
-        ...finalStatus === "completed" ? { value } : {}
+        ...value === void 0 ? {} : { value }
       };
       if (cleanupCompromised) return;
     }
@@ -66551,6 +66594,37 @@ async function runSessionTasks(tasks, options) {
     };
   }
   return records.filter((record3) => record3 !== void 0);
+}
+async function settleBeforeDeadline(operation, deadline) {
+  let timer;
+  const timeout = new Promise((resolve7) => {
+    timer = setTimeout(resolve7, Math.max(0, deadline - Date.now()));
+  });
+  await Promise.race([operation, timeout]);
+  if (timer !== void 0) clearTimeout(timer);
+}
+function terminalOutcome(deadline, signal) {
+  let timer;
+  let removeCancellation = () => {
+  };
+  const promise2 = new Promise((resolve7) => {
+    timer = setTimeout(() => resolve7("timed_out"), Math.max(0, deadline - Date.now()));
+    if (signal !== void 0) {
+      const cancel = () => resolve7("cancelled");
+      if (signal.aborted) cancel();
+      else {
+        signal.addEventListener("abort", cancel, { once: true });
+        removeCancellation = () => signal.removeEventListener("abort", cancel);
+      }
+    }
+  });
+  return {
+    promise: promise2,
+    dispose() {
+      if (timer !== void 0) clearTimeout(timer);
+      removeCancellation();
+    }
+  };
 }
 async function interruptTask(task, timeoutMs) {
   if (task.interrupt === void 0) return true;
@@ -67002,6 +67076,7 @@ var coordinatorJsonSchema = toRuntimeJsonSchema(
 );
 var HEARTBEAT_QUIET_MS = 3e4;
 var HEARTBEAT_POLL_MS = 1e3;
+var DEFAULT_SPECIALIST_FINALIZATION_TIMEOUT_MS = 15e3;
 var defaultEventClock = {
   now: () => Date.now(),
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
@@ -67011,6 +67086,9 @@ var defaultFileSystem = { mkdir: mkdir5, rename: rename3, rm: rm4, writeFile: wr
 async function executeCoordinatorEngine(input) {
   validateTimeout("overallTimeoutMs", input.overallTimeoutMs);
   validateTimeout("specialistTimeoutMs", input.specialistTimeoutMs);
+  if (input.specialistFinalizationTimeoutMs !== void 0) {
+    validateTimeout("specialistFinalizationTimeoutMs", input.specialistFinalizationTimeoutMs);
+  }
   validateTimeout("coordinatorTimeoutMs", input.coordinatorTimeoutMs);
   if (input.interruptTimeoutMs !== void 0) {
     validateTimeout("interruptTimeoutMs", input.interruptTimeoutMs);
@@ -67106,6 +67184,10 @@ async function executeCoordinatorEngine(input) {
     specialistRecords = await runSessionTasks(tasks, {
       maxConcurrency: input.plan.maxConcurrency,
       taskTimeoutMs: input.specialistTimeoutMs,
+      timeoutFinalizationMs: Math.min(
+        input.specialistFinalizationTimeoutMs ?? DEFAULT_SPECIALIST_FINALIZATION_TIMEOUT_MS,
+        Math.floor(input.specialistTimeoutMs / 2)
+      ),
       ...input.interruptTimeoutMs === void 0 ? {} : { interruptTimeoutMs: input.interruptTimeoutMs },
       signal: overall.signal,
       onTransition(reviewer, transition) {
@@ -67275,18 +67357,23 @@ async function executeCoordinatorEngine(input) {
 }
 function createSpecialistTask(options) {
   let activeSessionID;
+  let timeoutFinalizing = false;
   const definition = options.input.pluginConfig.reviewers.find(
     ({ id }) => id === options.reviewer
   );
   return {
     id: options.reviewer,
     async run(context) {
+      timeoutFinalizing = false;
       try {
-        const session = await options.runtime.createSession({
-          title: `shuvbot ${options.reviewer}`,
-          location: { directory: options.input.workspace.root },
-          policy: specialistSessionPolicy(definition.tools)
-        });
+        const session = await options.runtime.createSession(
+          {
+            title: `shuvbot ${options.reviewer}`,
+            location: { directory: options.input.workspace.root },
+            policy: specialistSessionPolicy(definition.tools)
+          },
+          { signal: context.signal }
+        );
         activeSessionID = session.id;
         const reviewerSessions = options.specialistSessionIds.get(options.reviewer) ?? /* @__PURE__ */ new Map();
         reviewerSessions.set(context.attempt, session.id);
@@ -67308,9 +67395,11 @@ function createSpecialistTask(options) {
         }
         appendLogEvent(options.log, capture, "session.started");
         options.progress.emit("running", capture, startedAtMs);
-        await options.runtime.configureSession(session.id, {
-          model: options.modelFor(specialistModel(options.input, options.reviewer))
-        });
+        await options.runtime.configureSession(
+          session.id,
+          { model: options.modelFor(specialistModel(options.input, options.reviewer)) },
+          { signal: context.signal }
+        );
         const prompt = buildSpecialistPrompt(options.reviewer, {
           manifestPath: options.scopedWorkspace.manifestPath,
           sharedContextPath: options.input.workspace.sharedContextPath,
@@ -67319,12 +67408,15 @@ function createSpecialistTask(options) {
           repositoryAdditions: definition.promptSections.map(({ content }) => content)
         });
         const runPrompt = async (text) => {
-          await options.runtime.prompt({
-            sessionID: session.id,
-            text,
-            output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
-            metadata: { reviewer: options.reviewer }
-          });
+          await options.runtime.prompt(
+            {
+              sessionID: session.id,
+              text,
+              output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
+              metadata: { reviewer: options.reviewer }
+            },
+            { signal: context.signal }
+          );
           const event = await options.runtime.wait(session.id, { signal: context.signal });
           appendRuntimeEvents(
             options.log,
@@ -67370,7 +67462,7 @@ Return one corrected JSON value only.`
           }
         }
         const value = parsed.usage === void 0 && captureUsage(capture) !== void 0 ? parseReviewerResult({ ...parsed, usage: captureUsage(capture) }) : parsed;
-        appendCompletedLog(options.log, capture, options.eventClock.now());
+        if (!timeoutFinalizing) appendCompletedLog(options.log, capture, options.eventClock.now());
         return { status: "completed", value, ...value.usage ? { usage: value.usage } : {} };
       } catch (error52) {
         const capture = activeSessionID === void 0 ? void 0 : options.captures.get(activeSessionID);
@@ -67407,6 +67499,25 @@ Return one corrected JSON value only.`
           ...usage === void 0 ? {} : { usage }
         };
       }
+    },
+    async finalizeOnTimeout(signal) {
+      if (activeSessionID === void 0) return;
+      timeoutFinalizing = true;
+      await options.runtime.prompt(
+        {
+          sessionID: activeSessionID,
+          text: [
+            "Stop investigating now.",
+            "Return a valid ReviewerResult using only findings you have already established.",
+            "Do not read more files or call more tools. State briefly that coverage is incomplete."
+          ].join(" "),
+          output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
+          metadata: { reviewer: options.reviewer, timeoutFinalization: true },
+          delivery: "steer",
+          resume: true
+        },
+        { signal }
+      );
     },
     async interrupt() {
       if (activeSessionID !== void 0) await options.runtime.interrupt(activeSessionID);
@@ -67563,6 +67674,16 @@ async function persistSpecialistResults(workspace, results, fileSystem, deadline
 function reviewerResultFromRecord(record3) {
   if (record3.status === "completed") return parseReviewerResult(record3.value);
   const error52 = record3.error ?? classifyReviewError({ category: "service", message: "Session failed" });
+  if (record3.status === "timed_out" && record3.value !== void 0) {
+    const partial2 = parseReviewerResult(record3.value);
+    return parseReviewerResult({
+      ...partial2,
+      status: "timed_out",
+      summary: `${partial2.summary} Review reached its time limit; findings are partial.`,
+      ...record3.usage === void 0 ? {} : { usage: record3.usage },
+      error: error52
+    });
+  }
   return parseReviewerResult({
     reviewer: record3.id,
     status: record3.status === "timed_out" ? "timed_out" : "failed",
@@ -67696,6 +67817,11 @@ function logSpecialistTransition(log, input, reviewer, transition, specialistSes
       ...usage === void 0 ? {} : { usage },
       ...error52 === void 0 ? {} : { error: error52 }
     });
+  }
+  if (transition.status === "timed_out" && captureOutcome(capture) === "completed") {
+    if (capture !== void 0) appendLogEvent(log, capture, "session.timed_out");
+    else appendLog(log, input, reviewer, "session.timed_out", Math.max(1, transition.attempt));
+    return;
   }
   if (captureOutcome(capture) !== "running") return;
   const event = `session.${transition.status}`;
