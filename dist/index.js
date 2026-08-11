@@ -66491,22 +66491,51 @@ async function runSessionTasks(tasks, options) {
             error: asReviewError(error52)
           })
         );
-        let outcome = await Promise.race([execution, terminal]);
+        const outcome = await Promise.race([execution, terminal]);
         if (timer !== void 0) clearTimeout(timer);
         removeCancellation();
-        let finalizedAfterTimeout = false;
-        let finalizationController;
-        let finalization;
         if (outcome === "finalize") {
-          finalizedAfterTimeout = true;
-          finalizationController = new AbortController();
-          finalization = Promise.resolve().then(() => task.finalizeOnTimeout?.(finalizationController.signal)).catch(() => void 0);
+          const finalizationController = new AbortController();
+          const finalization = Promise.resolve().then(() => task.finalizeOnTimeout?.(finalizationController.signal)).catch(
+            (error52) => ({
+              status: "failed",
+              error: asReviewError(error52)
+            })
+          );
           const hardTerminal = terminalOutcome(deadline, options.signal);
-          outcome = await Promise.race([execution, hardTerminal.promise]);
+          const finalized = await Promise.race([finalization, hardTerminal.promise]);
           hardTerminal.dispose();
+          finalizationController.abort();
+          controller.abort();
+          const interrupted = await interruptTask(task, interruptTimeoutMs);
+          if (!interrupted) cleanupCompromised = true;
+          if (finalized === "timed_out" || finalized === "cancelled") {
+            finalStatus = finalized;
+            finalError = classifyReviewError({
+              category: finalized === "cancelled" ? "cancellation" : "service",
+              message: finalized === "cancelled" ? "Session task cancelled" : "Session task timed out"
+            });
+            attempts.push({ attempt, status: finalized, error: finalError });
+            transition(index, finalized, attempt);
+            break;
+          }
+          const timeoutError = classifyReviewError({
+            category: "service",
+            message: "Session task timed out"
+          });
+          if (finalized?.status === "completed") value = finalized.value;
+          attempts.push({
+            attempt,
+            status: "timed_out",
+            error: timeoutError,
+            ...finalized?.usage === void 0 ? {} : { usage: finalized.usage }
+          });
+          finalStatus = "timed_out";
+          finalError = timeoutError;
+          transition(index, "timed_out", attempt);
+          break;
         }
         if (outcome === "timed_out" || outcome === "cancelled") {
-          finalizationController?.abort();
           controller.abort();
           const interrupted = await interruptTask(task, interruptTimeoutMs);
           if (!interrupted) cleanupCompromised = true;
@@ -66517,29 +66546,6 @@ async function runSessionTasks(tasks, options) {
           });
           attempts.push({ attempt, status: outcome, error: finalError });
           transition(index, outcome, attempt);
-          break;
-        }
-        if (finalizedAfterTimeout) {
-          finalizationController?.abort();
-          if (finalization !== void 0) {
-            await settleBeforeDeadline(finalization, deadline);
-          }
-          const interrupted = await interruptTask(task, interruptTimeoutMs);
-          if (!interrupted) cleanupCompromised = true;
-          const timeoutError = classifyReviewError({
-            category: "service",
-            message: "Session task timed out"
-          });
-          if (outcome.status === "completed") value = outcome.value;
-          attempts.push({
-            attempt,
-            status: "timed_out",
-            error: timeoutError,
-            ...outcome.usage === void 0 ? {} : { usage: outcome.usage }
-          });
-          finalStatus = "timed_out";
-          finalError = timeoutError;
-          transition(index, "timed_out", attempt);
           break;
         }
         if (outcome.status === "completed") {
@@ -66594,14 +66600,6 @@ async function runSessionTasks(tasks, options) {
     };
   }
   return records.filter((record3) => record3 !== void 0);
-}
-async function settleBeforeDeadline(operation, deadline) {
-  let timer;
-  const timeout = new Promise((resolve7) => {
-    timer = setTimeout(resolve7, Math.max(0, deadline - Date.now()));
-  });
-  await Promise.race([operation, timeout]);
-  if (timer !== void 0) clearTimeout(timer);
 }
 function terminalOutcome(deadline, signal) {
   let timer;
@@ -67357,6 +67355,7 @@ async function executeCoordinatorEngine(input) {
 }
 function createSpecialistTask(options) {
   let activeSessionID;
+  let activeCapture;
   let timeoutFinalizing = false;
   const definition = options.input.pluginConfig.reviewers.find(
     ({ id }) => id === options.reviewer
@@ -67365,6 +67364,7 @@ function createSpecialistTask(options) {
     id: options.reviewer,
     async run(context) {
       timeoutFinalizing = false;
+      activeCapture = void 0;
       try {
         const session = await options.runtime.createSession(
           {
@@ -67388,6 +67388,7 @@ function createSpecialistTask(options) {
           startedAtMs,
           hardDeadlineAtMs: startedAtMs + Math.max(0, context.deadline - Date.now())
         });
+        activeCapture = capture;
         options.captures.set(session.id, capture);
         options.allCaptures.push(capture);
         if (context.attempt > 1) {
@@ -67469,6 +67470,13 @@ Return one corrected JSON value only.`
         const captured = captureError(capture);
         const usage = captureUsage(capture);
         const classified = captured ?? classifyAndRedact(error52, "failed", context.signal, options.input.redactor);
+        if (timeoutFinalizing) {
+          return {
+            status: "failed",
+            error: classified,
+            ...usage === void 0 ? {} : { usage }
+          };
+        }
         recordFailedSession(options.rejectedSamples, options.input.redactor, {
           role: "specialist",
           reviewer: options.reviewer,
@@ -67501,7 +67509,7 @@ Return one corrected JSON value only.`
       }
     },
     async finalizeOnTimeout(signal) {
-      if (activeSessionID === void 0) return;
+      if (activeSessionID === void 0 || activeCapture === void 0) return void 0;
       timeoutFinalizing = true;
       await options.runtime.prompt(
         {
@@ -67518,6 +67526,15 @@ Return one corrected JSON value only.`
         },
         { signal }
       );
+      const event = await options.runtime.wait(activeSessionID, { signal });
+      appendRuntimeEvents(
+        options.log,
+        activeCapture.accumulator.ingest(event, options.eventClock.now())
+      );
+      const parsed = parseSpecialistOutput(eventValue(event), options.reviewer);
+      const usage = captureUsage(activeCapture);
+      const value = parsed.usage === void 0 && usage !== void 0 ? parseReviewerResult({ ...parsed, usage }) : parsed;
+      return { status: "completed", value, ...value.usage ? { usage: value.usage } : {} };
     },
     async interrupt() {
       if (activeSessionID !== void 0) await options.runtime.interrupt(activeSessionID);
@@ -67818,7 +67835,7 @@ function logSpecialistTransition(log, input, reviewer, transition, specialistSes
       ...error52 === void 0 ? {} : { error: error52 }
     });
   }
-  if (transition.status === "timed_out" && captureOutcome(capture) === "completed") {
+  if (transition.status === "timed_out" && captureOutcome(capture) !== "running") {
     if (capture !== void 0) appendLogEvent(log, capture, "session.timed_out");
     else appendLog(log, input, reviewer, "session.timed_out", Math.max(1, transition.attempt));
     return;
