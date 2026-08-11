@@ -30,6 +30,7 @@ import { buildSpecialistPrompt } from "./reviewers/index.ts";
 import {
   runSessionTasks,
   type SessionTask,
+  type SessionTaskAttemptResult,
   type SessionTaskRecord,
   type SessionTaskTransition
 } from "./scheduler.ts";
@@ -214,6 +215,7 @@ export interface CoordinatorEngineSessionSummary {
   readonly retryCount: number;
   readonly attempt?: number;
   readonly repairAttempted?: boolean;
+  readonly readBudgetExhausted?: boolean;
   readonly usage?: Usage;
   readonly error?: ClassifiedReviewError;
 }
@@ -279,6 +281,7 @@ interface SessionCapture {
   model: string;
   attempt: number;
   repairAttempted: boolean;
+  readBudgetExhausted: boolean;
   startedAtMs: number;
   accumulator: ShuvcodeSessionEventAccumulator;
 }
@@ -315,6 +318,7 @@ const coordinatorJsonSchema = toRuntimeJsonSchema(
 const HEARTBEAT_QUIET_MS = 30_000;
 const HEARTBEAT_POLL_MS = 1_000;
 const DEFAULT_SPECIALIST_FINALIZATION_TIMEOUT_MS = 15_000;
+const MAX_SPECIALIST_READ_CALLS = 40;
 const defaultEventClock: CoordinatorEngineEventClock = {
   now: () => Date.now(),
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
@@ -637,6 +641,55 @@ function createSpecialistTask(options: {
   let activeSessionID: string | undefined;
   let activeCapture: SessionCapture | undefined;
   let timeoutFinalizing = false;
+  let activeFinalization: Promise<SessionTaskAttemptResult<ReviewerResult> | undefined> | undefined;
+  let readCalls = 0;
+  const finalize = async (
+    signal: AbortSignal,
+    reason: "read_budget" | "timeout"
+  ): Promise<SessionTaskAttemptResult<ReviewerResult> | undefined> => {
+    if (activeSessionID === undefined || activeCapture === undefined) return undefined;
+    await options.runtime.prompt(
+      {
+        sessionID: activeSessionID,
+        text: [
+          "Stop investigating now.",
+          "Return a valid ReviewerResult using only findings you have already established.",
+          "Do not read more files or call more tools. State briefly that coverage is incomplete."
+        ].join(" "),
+        output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
+        metadata: {
+          reviewer: options.reviewer,
+          finalization: reason,
+          ...(reason === "timeout" ? { timeoutFinalization: true } : {})
+        },
+        delivery: "steer",
+        resume: true
+      },
+      { signal }
+    );
+    const event = await options.runtime.wait(activeSessionID, { signal });
+    appendRuntimeEvents(
+      options.log,
+      activeCapture.accumulator.ingest(event, options.eventClock.now())
+    );
+    const parsed = parseSpecialistOutput(eventValue(event), options.reviewer);
+    const usage = captureUsage(activeCapture);
+    const value =
+      parsed.usage === undefined && usage !== undefined
+        ? parseReviewerResult({ ...parsed, usage })
+        : parsed;
+    if (!timeoutFinalizing) {
+      appendCompletedLog(options.log, activeCapture, options.eventClock.now());
+    }
+    return { status: "completed", value, ...(value.usage ? { usage: value.usage } : {}) };
+  };
+  const requestFinalization = (
+    signal: AbortSignal,
+    reason: "read_budget" | "timeout"
+  ): Promise<SessionTaskAttemptResult<ReviewerResult> | undefined> => {
+    activeFinalization ??= finalize(signal, reason);
+    return activeFinalization;
+  };
   const definition = options.input.pluginConfig.reviewers.find(
     ({ id }) => id === options.reviewer
   )!;
@@ -645,6 +698,8 @@ function createSpecialistTask(options: {
     async run(context) {
       timeoutFinalizing = false;
       activeCapture = undefined;
+      activeFinalization = undefined;
+      let unsubscribeReadBudget = (): void => {};
       try {
         const session = await options.runtime.createSession(
           {
@@ -676,6 +731,22 @@ function createSpecialistTask(options: {
         }
         appendLogEvent(options.log, capture, "session.started");
         options.progress.emit("running", capture, startedAtMs);
+        let signalReadBudget!: () => void;
+        const readBudgetReached = new Promise<void>((resolve) => {
+          signalReadBudget = resolve;
+          if (readCalls >= MAX_SPECIALIST_READ_CALLS) resolve();
+        });
+        unsubscribeReadBudget = options.runtime.subscribe((event) => {
+          if (
+            event.type !== "session.tool.called" ||
+            event.data?.sessionID !== session.id ||
+            event.data.toolKind !== "read" ||
+            ++readCalls !== MAX_SPECIALIST_READ_CALLS
+          ) {
+            return;
+          }
+          signalReadBudget();
+        });
         await options.runtime.configureSession(
           session.id,
           { model: options.modelFor(specialistModel(options.input, options.reviewer)) },
@@ -688,7 +759,15 @@ function createSpecialistTask(options: {
           contentsDirectory: options.scopedWorkspace.contentsDir,
           repositoryAdditions: definition.promptSections.map(({ content }) => content)
         });
-        const runPrompt = async (text: string): Promise<unknown> => {
+        const runPrompt = async (
+          text: string
+        ): Promise<
+          | { readonly kind: "output"; readonly value: unknown }
+          | {
+              readonly kind: "finalized";
+              readonly result: SessionTaskAttemptResult<ReviewerResult>;
+            }
+        > => {
           await options.runtime.prompt(
             {
               sessionID: session.id,
@@ -698,14 +777,27 @@ function createSpecialistTask(options: {
             },
             { signal: context.signal }
           );
-          const event = await options.runtime.wait(session.id, { signal: context.signal });
+          const wait = options.runtime.wait(session.id, { signal: context.signal });
+          const outcome = await Promise.race([
+            wait.then((event) => ({ kind: "event" as const, event })),
+            readBudgetReached.then(() => ({ kind: "budget" as const }))
+          ]);
+          if (outcome.kind === "budget") {
+            capture.readBudgetExhausted = true;
+            const result = await requestFinalization(context.signal, "read_budget");
+            if (result === undefined) throw new Error("Specialist finalization was unavailable");
+            return { kind: "finalized", result };
+          }
+          const { event } = outcome;
           appendRuntimeEvents(
             options.log,
             capture.accumulator.ingest(event, options.eventClock.now())
           );
-          return eventValue(event);
+          return { kind: "output", value: eventValue(event) };
         };
-        const firstOutput = await runPrompt(prompt);
+        const first = await runPrompt(prompt);
+        if (first.kind === "finalized") return first.result;
+        const firstOutput = first.value;
         let parsed: ReviewerResult;
         try {
           parsed = parseSpecialistOutput(firstOutput, options.reviewer);
@@ -721,9 +813,11 @@ function createSpecialistTask(options: {
           });
           capture.repairAttempted = true;
           appendLogEvent(options.log, capture, "session.retrying");
-          const repairOutput = await runPrompt(
+          const repaired = await runPrompt(
             `${prompt}\n\nYour previous JSON failed structured result validation: ${options.input.redactor.redactString(String(validationError))}\nReturn one corrected JSON value only.`
           );
+          if (repaired.kind === "finalized") return repaired.result;
+          const repairOutput = repaired.value;
           try {
             parsed = parseSpecialistOutput(repairOutput, options.reviewer);
           } catch (repairError) {
@@ -750,8 +844,35 @@ function createSpecialistTask(options: {
           activeSessionID === undefined ? undefined : options.captures.get(activeSessionID);
         const captured = captureError(capture);
         const usage = captureUsage(capture);
-        const classified =
+        let classified =
           captured ?? classifyAndRedact(error, "failed", context.signal, options.input.redactor);
+        if (
+          capture?.readBudgetExhausted === true &&
+          !timeoutFinalizing &&
+          !context.signal.aborted &&
+          activeSessionID !== undefined
+        ) {
+          const interrupted = await settleValueWithin(
+            options.runtime.interrupt(activeSessionID),
+            Math.min(
+              options.input.interruptTimeoutMs ?? 5_000,
+              Math.max(0, context.deadline - Date.now())
+            )
+          );
+          if (interrupted.status !== "completed") {
+            classified = {
+              ...classifyAndRedact(
+                new Error(
+                  "Read-budget finalization failed and session interruption did not complete"
+                ),
+                "failed",
+                context.signal,
+                options.input.redactor
+              ),
+              retryable: false
+            };
+          }
+        }
         if (timeoutFinalizing) {
           return {
             status: "failed",
@@ -788,38 +909,13 @@ function createSpecialistTask(options: {
           error: classified,
           ...(usage === undefined ? {} : { usage })
         };
+      } finally {
+        unsubscribeReadBudget();
       }
     },
     async finalizeOnTimeout(signal) {
-      if (activeSessionID === undefined || activeCapture === undefined) return undefined;
       timeoutFinalizing = true;
-      await options.runtime.prompt(
-        {
-          sessionID: activeSessionID,
-          text: [
-            "Stop investigating now.",
-            "Return a valid ReviewerResult using only findings you have already established.",
-            "Do not read more files or call more tools. State briefly that coverage is incomplete."
-          ].join(" "),
-          output: { schema: reviewerJsonSchema, name: "ReviewerResult" },
-          metadata: { reviewer: options.reviewer, timeoutFinalization: true },
-          delivery: "steer",
-          resume: true
-        },
-        { signal }
-      );
-      const event = await options.runtime.wait(activeSessionID, { signal });
-      appendRuntimeEvents(
-        options.log,
-        activeCapture.accumulator.ingest(event, options.eventClock.now())
-      );
-      const parsed = parseSpecialistOutput(eventValue(event), options.reviewer);
-      const usage = captureUsage(activeCapture);
-      const value =
-        parsed.usage === undefined && usage !== undefined
-          ? parseReviewerResult({ ...parsed, usage })
-          : parsed;
-      return { status: "completed", value, ...(value.usage ? { usage: value.usage } : {}) };
+      return requestFinalization(signal, "timeout");
     },
     async interrupt() {
       if (activeSessionID !== undefined) await options.runtime.interrupt(activeSessionID);
@@ -1148,6 +1244,9 @@ function sessionSummaries(
       const repairAttempted = captures.some(
         (capture) => capture.id === sessionId && capture.repairAttempted
       );
+      const readBudgetExhausted = captures.some(
+        (capture) => capture.id === sessionId && capture.readBudgetExhausted
+      );
       // A timed-out or cancelled attempt never reports usage: the scheduler
       // abandons the losing side of the race, so whatever the task consumed
       // before it was cut off is discarded. The capture accumulated it anyway,
@@ -1164,6 +1263,7 @@ function sessionSummaries(
         retryCount: repairAttempted ? 1 : 0,
         attempt: attempt.attempt,
         ...(repairAttempted ? { repairAttempted: true } : {}),
+        ...(readBudgetExhausted ? { readBudgetExhausted: true } : {}),
         ...(usage === undefined ? {} : { usage }),
         ...(attempt.error === undefined ? {} : { error: attempt.error })
       };
@@ -1277,6 +1377,7 @@ function createCapture(options: {
     model: options.model,
     attempt: options.attempt,
     repairAttempted: false,
+    readBudgetExhausted: false,
     startedAtMs: options.startedAtMs,
     accumulator: new ShuvcodeSessionEventAccumulator({
       sessionId: options.sessionId,

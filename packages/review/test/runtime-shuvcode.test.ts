@@ -643,6 +643,7 @@ describe("shuvcode isolated runtime", () => {
 
   test("traces raw source events and never lets a failing sink break the review", async () => {
     const seen: unknown[] = [];
+    const received: ShuvcodeEvent[] = [];
     const subject = fixture();
     const runtime = await subject.start(
       undefined,
@@ -655,6 +656,7 @@ describe("shuvcode isolated runtime", () => {
         if (seen.length === 1) throw new Error("sink exploded");
       }
     );
+    runtime.subscribe((event) => received.push(event));
     await runtime.createSession({ id: "traced" });
     const waiting = runtime.wait("traced");
     subject.events.push({
@@ -667,6 +669,11 @@ describe("shuvcode isolated runtime", () => {
     // The raw event keeps the tool arguments sanitizeEvent would have dropped;
     // that detail is what diagnoses a session that never converges.
     expect(JSON.stringify(seen)).toContain("offset");
+    expect(received.find(({ type }) => type === "session.tool.called")).toEqual({
+      type: "session.tool.called",
+      data: { sessionID: "traced", toolKind: "read" }
+    });
+    expect(JSON.stringify(received)).not.toContain("offset");
     expect(seen.length).toBeGreaterThan(1);
     await runtime.close();
   });

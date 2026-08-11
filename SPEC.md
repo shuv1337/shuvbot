@@ -1600,6 +1600,12 @@ The coordinator is the independent judge. It may inspect source to verify a find
 
 Initial full-review quorum requires the coordinator, code-quality reviewer, security reviewer, and at least three of performance, tests, documentation, and release. Trivial requires coordinator plus code quality. Lite requires coordinator, code quality, and two scheduled specialists.
 
+Each specialist has a code-owned cumulative budget of 40 filesystem reads. At
+the limit, the engine steers that session to return only findings it has already
+established. A valid result counts toward quorum and its session summary records
+`readBudgetExhausted`; a specialist that reaches its hard deadline remains
+`timed_out`, may contribute retained findings, and never counts toward quorum.
+
 ### 14.2 Posting Budget
 
 Defaults:

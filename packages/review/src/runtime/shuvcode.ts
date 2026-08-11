@@ -962,6 +962,10 @@ function sanitizeEvent(event: ShuvcodeEvent): ShuvcodeEvent {
   if (event.type === "session.structured.completed" && "value" in (event.data ?? {})) {
     data.value = event.data?.value;
   }
+  if (event.type === "session.tool.called") {
+    const input = isRecord(event.data?.input) ? event.data.input : undefined;
+    data.toolKind = typeof input?.path === "string" ? "read" : "other";
+  }
   const usage = sanitizeUsage(event.data);
   if (usage !== undefined) Object.assign(data, usage);
   if (isFailureType(event.type)) {

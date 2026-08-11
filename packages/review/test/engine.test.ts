@@ -336,6 +336,101 @@ describe("local coordinator engine", () => {
     ]);
   });
 
+  test("finalizes a runaway specialist at its read budget and counts the valid result", async () => {
+    const runtime = new FakeRuntime({ readBudgetReviewer: "release" });
+    const { result } = await runEngine("full", runtime);
+
+    expect(result.coverage).toMatchObject({
+      completed: [...BUILT_IN_REVIEWER_IDS],
+      failed: [],
+      timedOut: [],
+      quorumMet: true
+    });
+    expect(result.result.decision).toBe("comments");
+    expect(result.result.findings).toMatchObject([{ id: "release-1", reviewer: "release" }]);
+    expect(
+      runtime.prompts.filter(
+        ({ metadata }) =>
+          metadata?.reviewer === "release" && metadata.finalization === "read_budget"
+      )
+    ).toHaveLength(1);
+    expect(result.sessions.find(({ reviewer }) => reviewer === "release")).toMatchObject({
+      status: "completed",
+      readBudgetExhausted: true
+    });
+  });
+
+  test("applies the cumulative read budget to specialist repair prompts", async () => {
+    const runtime = new FakeRuntime({ readBudgetOnRepairReviewer: "release" });
+    const { result } = await runEngine("full", runtime);
+
+    expect(result.coverage).toMatchObject({
+      completed: [...BUILT_IN_REVIEWER_IDS],
+      timedOut: [],
+      quorumMet: true
+    });
+    expect(result.sessions.find(({ reviewer }) => reviewer === "release")).toMatchObject({
+      status: "completed",
+      repairAttempted: true,
+      readBudgetExhausted: true
+    });
+    expect(
+      runtime.prompts.filter(
+        ({ metadata }) =>
+          metadata?.reviewer === "release" && metadata.finalization === "read_budget"
+      )
+    ).toHaveLength(1);
+  });
+
+  test("does not count structured output calls against the read budget", async () => {
+    const runtime = new FakeRuntime({ structuredOutputCallsReviewer: "release" });
+    const { result } = await runEngine("full", runtime);
+
+    expect(result.coverage.quorumMet).toBe(true);
+    expect(result.sessions.find(({ reviewer }) => reviewer === "release")).toMatchObject({
+      status: "completed"
+    });
+    expect(
+      result.sessions.find(({ reviewer }) => reviewer === "release")?.readBudgetExhausted
+    ).toBeUndefined();
+    expect(
+      runtime.prompts.filter(({ metadata }) => metadata?.finalization === "read_budget")
+    ).toHaveLength(0);
+  });
+
+  test("keeps the read budget cumulative across scheduler retries", async () => {
+    const runtime = new FakeRuntime({ retryingReadBudgetReviewer: "release" });
+    const { result } = await runEngine("full", runtime, { specialistTimeoutMs: 100_000 });
+
+    expect(result.coverage).toMatchObject({
+      completed: [...BUILT_IN_REVIEWER_IDS],
+      timedOut: [],
+      quorumMet: true
+    });
+    expect(
+      result.sessions.find(
+        ({ reviewer, status }) => reviewer === "release" && status === "completed"
+      )
+    ).toMatchObject({ readBudgetExhausted: true });
+  });
+
+  test("interrupts the old execution before retrying a failed read-budget steer", async () => {
+    const runtime = new FakeRuntime({
+      readBudgetReviewer: "release",
+      failReadBudgetFinalizationOnceReviewer: "release"
+    });
+    const { result } = await runEngine("full", runtime, { specialistTimeoutMs: 100_000 });
+
+    expect(
+      runtime.interrupted.some((sessionID) => runtime.reviewers.get(sessionID) === "release")
+    ).toBe(true);
+    expect(result.coverage).toMatchObject({
+      completed: [...BUILT_IN_REVIEWER_IDS],
+      timedOut: [],
+      quorumMet: true
+    });
+  });
+
   test("retries transient specialist failure and degrades when required coverage still fails", async () => {
     const runtime = new FakeRuntime({ failingReviewer: "security" });
     const { result } = await runEngine("full", runtime, { specialistTimeoutMs: 100_000 });
@@ -877,6 +972,11 @@ class FakeRuntime implements ShuvcodeRuntime {
       invalidSpecialistAlways?: BuiltInReviewerId;
       hangSpecialistRepair?: BuiltInReviewerId;
       finalizeTimedOutReviewer?: BuiltInReviewerId;
+      readBudgetReviewer?: BuiltInReviewerId;
+      readBudgetOnRepairReviewer?: BuiltInReviewerId;
+      structuredOutputCallsReviewer?: BuiltInReviewerId;
+      retryingReadBudgetReviewer?: BuiltInReviewerId;
+      failReadBudgetFinalizationOnceReviewer?: BuiltInReviewerId;
       hangSpecialistCreate?: boolean;
       hangSpecialistPrompt?: BuiltInReviewerId;
       failingReviewer?: BuiltInReviewerId;
@@ -942,6 +1042,16 @@ class FakeRuntime implements ShuvcodeRuntime {
     this.lifecycle.push(`prompt:${input.sessionID}`);
     this.prompts.push(input);
     const reviewer = input.metadata?.reviewer;
+    if (
+      reviewer === this.behavior.failReadBudgetFinalizationOnceReviewer &&
+      input.metadata?.finalization === "read_budget" &&
+      this.prompts.filter(
+        ({ metadata }) =>
+          metadata?.reviewer === reviewer && metadata?.finalization === "read_budget"
+      ).length === 1
+    ) {
+      throw classifyReviewError({ category: "provider", message: "Steer admission failed" });
+    }
     if (typeof reviewer === "string") {
       this.reviewers.set(input.sessionID, reviewer as BuiltInReviewerId);
       const manifestPath = input.text.match(/manifest at ([^\n]+)\./)?.[1];
@@ -966,6 +1076,119 @@ class FakeRuntime implements ShuvcodeRuntime {
       this.active += 1;
       this.maximumActive = Math.max(this.maximumActive, this.active);
       try {
+        if (this.behavior.retryingReadBudgetReviewer === reviewer) {
+          if (attempt === 1) {
+            for (let call = 0; call < 39; call += 1) {
+              this.emit({
+                type: "session.tool.called",
+                data: { sessionID, call, toolKind: "read" }
+              });
+            }
+            throw classifyReviewError({ category: "provider", message: "Provider request failed" });
+          }
+          if (attempt === 2) {
+            this.emit({
+              type: "session.tool.called",
+              data: { sessionID, call: 39, toolKind: "read" }
+            });
+            while (
+              !this.prompts.some(
+                ({ sessionID: promptedSession, metadata }) =>
+                  promptedSession === sessionID && metadata?.finalization === "read_budget"
+              )
+            ) {
+              await sleep(1);
+            }
+            throw new Error("retry execution steered");
+          }
+          const partial = completedEvent(sessionID, {
+            reviewer,
+            status: "completed",
+            summary: "One established finding before the cumulative read budget.",
+            findings: [findingFor(reviewer)]
+          });
+          this.emit(partial);
+          return partial;
+        }
+        if (this.behavior.structuredOutputCallsReviewer === reviewer) {
+          for (let call = 0; call < 40; call += 1) {
+            this.emit({
+              type: "session.tool.called",
+              data: { sessionID, call, toolKind: "other" }
+            });
+          }
+          const completed = completedEvent(sessionID, {
+            reviewer,
+            status: "completed",
+            summary: "No findings.",
+            findings: []
+          });
+          this.emit(completed);
+          return completed;
+        }
+        if (this.behavior.readBudgetOnRepairReviewer === reviewer) {
+          if (attempt === 1) {
+            for (let call = 0; call < 39; call += 1) {
+              this.emit({
+                type: "session.tool.called",
+                data: { sessionID, call, toolKind: "read" }
+              });
+            }
+            const invalid = completedEvent(sessionID, { invalid: true });
+            this.emit(invalid);
+            return invalid;
+          }
+          if (attempt === 2) {
+            this.emit({
+              type: "session.tool.called",
+              data: { sessionID, call: 39, toolKind: "read" }
+            });
+            while (
+              !this.prompts.some(
+                ({ sessionID: promptedSession, metadata }) =>
+                  promptedSession === sessionID && metadata?.finalization === "read_budget"
+              )
+            ) {
+              await sleep(1);
+            }
+            throw new Error("repair execution steered");
+          }
+          const partial = completedEvent(sessionID, {
+            reviewer,
+            status: "completed",
+            summary: "One established finding before the read budget.",
+            findings: [findingFor(reviewer)]
+          });
+          this.emit(partial);
+          return partial;
+        }
+        if (this.behavior.readBudgetReviewer === reviewer) {
+          if (attempt === 1) {
+            for (let call = 0; call < 40; call += 1) {
+              this.emit({
+                type: "session.tool.called",
+                data: { sessionID, call, toolKind: "read" }
+              });
+            }
+            while (
+              !this.prompts.some(
+                ({ sessionID: promptedSession, metadata }) =>
+                  promptedSession === sessionID && metadata?.finalization === "read_budget"
+              )
+            ) {
+              await sleep(1);
+            }
+            throw new Error("original execution steered");
+          }
+          const partial = completedEvent(sessionID, {
+            reviewer,
+            status: "completed",
+            summary: "One established finding before the read budget.",
+            findings: [findingFor(reviewer)]
+          });
+          this.emit(partial);
+          return partial;
+        }
         if (this.behavior.finalizeTimedOutReviewer === reviewer) {
           while (
             !this.prompts.some(
@@ -1116,7 +1339,11 @@ class FakeRuntime implements ShuvcodeRuntime {
           : coordinatedQualityFinding;
       return completedEvent(sessionID, coordinatorOutput([finding]));
     }
-    const timedOutReviewer = this.behavior.finalizeTimedOutReviewer;
+    const timedOutReviewer =
+      this.behavior.finalizeTimedOutReviewer ??
+      this.behavior.readBudgetReviewer ??
+      this.behavior.readBudgetOnRepairReviewer ??
+      this.behavior.retryingReadBudgetReviewer;
     const completed = completedEvent(
       sessionID,
       coordinatorOutput(

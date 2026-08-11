@@ -145,7 +145,7 @@ Each run writes `.shuvbot/runs/<id>/`:
 | ------------------------------- | --------------------------------------------------- |
 | `shuvbot-run.json`              | Run record: timings, engine, config summary         |
 | `shuvbot-review-result.json`    | Decision, coverage, quorum, retries                 |
-| `shuvbot-review-sessions.json`  | Per-session model, status, usage, errors            |
+| `shuvbot-review-sessions.json`  | Per-session model, status, usage, limits, errors    |
 | `shuvbot-events.jsonl`          | Redacted session timeline                           |
 | `shuvbot-findings.json`         | Findings as structured data                         |
 | `shuvbot-rejected-results.json` | Only when a result was refused: the offending value |

@@ -27,19 +27,22 @@ still open.
 
 ## The one thing to know before continuing
 
-**Multi-specialist review now reaches quorum in the Action, and the run record
-finally reports what it spent.** Dogfood #6, run
-[31068925734](https://github.com/shuv1337/shuvbot/actions/runs/31068925734) on
-PR #27: `tier: lite`, **quorum met**, `minor_issues`, no reviewer missing,
-3m32s, and a reported cost of **$8.13** that is now the real number rather than
-a fraction of it.
+**A deterministic 40-read specialist budget is the first convergence change to
+reach full-tier quorum repeatedly.** On the same historical range and models,
+five consecutive local runs completed all 30/30 specialists, met quorum 5/5
+times, and kept both required reviewers every time. Each reviewer is steered to
+return only established findings at its 40th filesystem read; valid structured
+results count as completed and session artifacts expose
+`readBudgetExhausted: true`. A hard timeout remains `timed_out`, retains any
+partial findings, and still does not count toward quorum.
 
-Read that with one caveat: `selectReviewers` schedules **exactly three**
-reviewers at `lite` - `code-quality`, `tests`, and one content reviewer chosen
-by path - and `minimumSuccessfulSpecialists` is also three. Lite therefore has
-no slack at all, and `full` (6 scheduled, 5 required) tolerates exactly one
-runaway. Against an observed runaway rate of about two sessions in six, quorum
-at the top tier is not something a retune can rescue.
+This is not yet Action-proven. The last Action full-tier dogfood before the read
+budget, run
+[31462297649](https://github.com/shuv1337/shuvbot/actions/runs/31462297649),
+completed 4/6 specialists in 9m54s and degraded because `security` and `release`
+timed out. It spent 41,648 output tokens and $27.33. Timeout finalization worked
+at the transport boundary, but neither timed-out specialist had an established
+structured result to retain.
 
 Getting there took three failed full-tier dogfoods and one local reproduction.
 
@@ -67,7 +70,8 @@ so a credential straddling the boundary was cut in half and no longer matched
 the exact-value scrub, leaving a fragment of a real secret in retained text. It
 also twice caught tests that passed for the wrong reason. All are fixed.
 
-**The runaway is now diagnosed, and one fix for it has already been disproved.**
+**The runaway is diagnosed, and all context-shaping fixes tested so far made
+reviewers hunt more.**
 `SHUVBOT_TRACE=1` on a local review records every raw runtime event. It shows
 immediately what lifecycle events never could: reviewers **page through the
 materialised content**, roughly 110-140 lines per `read` call, with `offset`
@@ -75,28 +79,27 @@ and `limit`. One scope held ~6,500 lines across 8 files - about 50 tool calls
 to see it once - and the largest file (1,788 lines) was read ten times.
 Tool-call volume tracks timeouts closely.
 
-Measured, same range (`d89f4c4..master`), same models:
+Measured on the same historical range (`d89f4c4..2aca00a`), same models:
 
-| variant                                                              | tool calls | timed out  |
-| -------------------------------------------------------------------- | ---------- | ---------- |
-| whole-file content (baseline)                                        | 160        | 3 of 6     |
-| large files reduced to changed hunks + "read the patch first" prompt | **284**    | **5 of 6** |
+| variant                                        | calls | timed out |
+| ---------------------------------------------- | ----- | --------- |
+| whole-file baseline                            | 160   | 3 of 6    |
+| changed-hunk elision plus prompt               | 284   | 5 of 6    |
+| prompt-only: forbid paging                     | 186   | 1 of 6    |
+| reviewer-specific path scopes                  | 286   | 3 of 6    |
+| 128 KB whole-content budget per reviewer scope | 281   | 3 of 6    |
 
-So the obvious fix is wrong: fragmentary context made reviewers hunt _more_,
-not less. That change is reverted; only the tracing is on master. Note the
-experiment also changed two things at once and so cannot attribute between
-them - repeat it one variable at a time.
-
-Next single-variable experiments, in order: (1) prompt-only, forbidding paging
-and requiring one read per file; (2) fewer files per reviewer rather than less
-of each file; (3) partial results on timeout, which makes the runaway survivable
-regardless of cause.
-
-**What is still not right:** at the `full` tier a local run reached only 4/6,
-with `performance` and `release` running away to ~11.6k output tokens and
-timing out. The runaway is not tied to a particular reviewer - it moves between
-runs - and quorum at the full tier needs 5. Full tier has therefore still never
-reached quorum, in the Action or locally.
+The prompt-only run happened to reach quorum, but 90 of 96 content reads still
+used offsets and the runaway made 76 calls, so the mechanism was ignored. The
+read-budget variant then reached 6/6 in five consecutive runs. End-to-end
+elapsed time ranged from 4m58s to 7m20s; specialist output ranged from 21,819 to
+30,786 tokens. Those runs prove local reliability, not finding recall or Action
+behavior. A subsequent path-filtered counter initially failed because sanitized
+runtime events omitted tool input; its 257-call negative control left every
+budget marker false and timed out `release`. The adapter now exposes only a
+non-sensitive `toolKind` classification, and a load-bearing runtime test pins
+that contract. One corrected repetition and an Action dogfood remain before
+calling the fix shipped.
 
 **A real coordinator review has produced real findings in GitHub Actions.**
 Dogfood #2, run
@@ -124,32 +127,23 @@ spanned **three providers**. The posted review said `DEGRADED - REVIEW
 INCOMPLETE`, reported 0/6 coverage, named every failed reviewer, and refused to
 claim clean - a totally broken review did not masquerade as a clean one.
 
-What dogfood #2 proved, and what it did not:
-
-- **Proved:** specialists produce accurate, well-evidenced findings through the
-  Action, and they reason from the pull request's content rather than the
-  checked-out default branch.
-- **Not proved:** anything above the `trivial` tier. A two-line diff scheduled
-  exactly one reviewer (`code-quality`), so the six-specialist full tier, its
-  scheduling, and its quorum arithmetic are still unexercised in the Action.
+Across later dogfoods, the Action has proved accurate content-backed findings,
+lite-tier quorum, full-tier scheduling, honest degradation, usage accounting,
+and timeout finalization. Full-tier quorum with the read budget is the remaining
+production proof.
 
 ## What is NOT done
 
-1. **The full tier has still never reached quorum.** After the build-output
-   fix a local full-tier run reached 4/6, needing 5; `performance` and
-   `release` ran away to ~11.6k output tokens and were cut off. The `lite`
-   tier now works end to end in the Action, so the coordinator is proven up to
-   `lite` and no further.
-2. **M7's dogfood matrix is unrecorded.** Six runs exist (#1 degraded on auth,
-   #2 trivial clean, #3/#4/#5 full-tier degraded, #6 lite-tier clean), so
-   latency, cost and quality are sampled rather than measured.
+1. **The read budget is not yet Action-proven.** Full tier reached quorum in
+   five consecutive local runs, but the source and bundle must land before the
+   trusted-default-branch workflow can exercise it.
+2. **M7's dogfood matrix is unrecorded.** Several targeted runs exist, but
+   latency, cost, recall, and precision are sampled rather than measured against
+   a fixed corpus.
 3. **The Action default has deliberately not been flipped** to the coordinator.
-4. **Two specialists fail their own validation.** In an earlier _local_
-   full-tier run, `security` and `performance` completed their model calls but
-   their results were rejected as `REVIEW_SCHEMA_INVALID`. The engine retains
-   redacted samples of refused results, so one real full-tier run should explain
-   it. Unrelated to the CI provider failure above, and still the highest-value
-   correctness item: one of the two is security.
+4. **Finding recall under the 40-read budget is unmeasured.** Repeated runs
+   produced plausible findings, but no planted-defect precision/recall corpus
+   exists yet.
 
 ## Known issues
 
@@ -217,13 +211,11 @@ all green and enforced by CI rather than convention.
 
 Read `AGENTS.md`, then the "one thing to know" section above.
 
-The full-tier dogfood has run and it degraded on timeouts, so the next step is
-to retune and repeat it. Pick one of `activity_timeout`, `max_concurrency`, or
-the specialist effort in `.github/shuvbot.ci.toml`, change only that, and
-re-run `@shuvbot review` on a full-tier pull request so the variable is
-identifiable. Each attempt costs roughly $3 and ten minutes. Success means
-`code-quality` and `security` both completing, because they are the full tier's
-required reviewers and nothing reaches quorum without them.
+Land the source change and regenerated Action bundle, then run one full-tier
+`@shuvbot review` against the trusted default branch. Success means quorum,
+both `code-quality` and `security` completed, no hard timeout, and session
+artifacts truthfully identifying every reviewer that exhausted its read budget.
+Do not retune timeouts, concurrency, model, or scope in the same run.
 
 Read `$RUNNER_TEMP/shuvbot` from the run - `shuvbot-run.json` for coverage and
 per-session errors, `shuvbot-findings.json` for the canonical findings
