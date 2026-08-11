@@ -29,7 +29,7 @@ still open.
 
 **A deterministic 40-read specialist budget is the first convergence change to
 reach full-tier quorum repeatedly.** On the same historical range and models,
-five consecutive local runs completed all 30/30 specialists, met quorum 5/5
+six budget-enabled local runs completed all 36/36 specialists, met quorum 6/6
 times, and kept both required reviewers every time. Each reviewer is steered to
 return only established findings at its 40th filesystem read; valid structured
 results count as completed and session artifacts expose
@@ -91,15 +91,17 @@ Measured on the same historical range (`d89f4c4..2aca00a`), same models:
 
 The prompt-only run happened to reach quorum, but 90 of 96 content reads still
 used offsets and the runaway made 76 calls, so the mechanism was ignored. The
-read-budget variant then reached 6/6 in five consecutive runs. End-to-end
-elapsed time ranged from 4m58s to 7m20s; specialist output ranged from 21,819 to
-30,786 tokens. Those runs prove local reliability, not finding recall or Action
-behavior. A subsequent path-filtered counter initially failed because sanitized
-runtime events omitted tool input; its 257-call negative control left every
-budget marker false and timed out `release`. The adapter now exposes only a
-non-sensitive `toolKind` classification, and a load-bearing runtime test pins
-that contract. One corrected repetition and an Action dogfood remain before
-calling the fix shipped.
+read-budget variant then reached 6/6 in five consecutive runs. A subsequent
+path-filtered counter initially failed because sanitized runtime events omitted
+tool input; its 257-call negative control left every budget marker false and
+timed out `release`. The adapter now exposes only a non-sensitive `toolKind`
+classification, and a load-bearing runtime test pins that contract. The
+corrected repetition again completed 6/6 in 7m16s: three reviewers stopped at
+exactly 40 reads, all three returned valid results, total specialist output was
+27,887 tokens, and no reviewer timed out. Across budget-enabled runs,
+end-to-end time ranged from 4m58s to 7m20s and specialist output from 21,819 to
+30,786 tokens. This proves local reliability, not recall or Action behavior; an
+Action dogfood remains before calling the fix shipped.
 
 **A real coordinator review has produced real findings in GitHub Actions.**
 Dogfood #2, run
@@ -135,7 +137,7 @@ production proof.
 ## What is NOT done
 
 1. **The read budget is not yet Action-proven.** Full tier reached quorum in
-   five consecutive local runs, but the source and bundle must land before the
+   six budget-enabled local runs, but the source and bundle must land before the
    trusted-default-branch workflow can exercise it.
 2. **M7's dogfood matrix is unrecorded.** Several targeted runs exist, but
    latency, cost, recall, and precision are sampled rather than measured against
