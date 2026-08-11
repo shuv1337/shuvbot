@@ -113,19 +113,15 @@ describe("session task scheduler", () => {
   });
 
   test("preserves a result finalized inside the hard timeout without claiming completion", async () => {
-    let finish!: (result: { status: "completed"; value: number }) => void;
     let interrupts = 0;
-    const execution = new Promise<{ status: "completed"; value: number }>((resolve) => {
-      finish = resolve;
-    });
 
     const [record] = await runSessionTasks(
       [
         {
           id: "partial",
-          run: () => execution,
+          run: () => new Promise(() => {}),
           finalizeOnTimeout() {
-            finish({ status: "completed", value: 42 });
+            return { status: "completed", value: 42 } as const;
           },
           interrupt() {
             interrupts += 1;
@@ -145,29 +141,18 @@ describe("session task scheduler", () => {
   });
 
   test("settles aborted finalization admission before interrupting the completed session", async () => {
-    let finish!: (result: { status: "completed"; value: number }) => void;
     const lifecycle: string[] = [];
-    const execution = new Promise<{ status: "completed"; value: number }>((resolve) => {
-      finish = resolve;
-    });
 
     await runSessionTasks(
       [
         {
           id: "late-steer",
-          run: () => execution,
+          run: () => new Promise(() => {}),
           finalizeOnTimeout(signal) {
-            finish({ status: "completed", value: 1 });
-            return new Promise<void>((resolve) => {
-              signal.addEventListener(
-                "abort",
-                () => {
-                  lifecycle.push("finalization-aborted");
-                  resolve();
-                },
-                { once: true }
-              );
+            signal.addEventListener("abort", () => lifecycle.push("finalization-aborted"), {
+              once: true
             });
+            return { status: "completed", value: 1 } as const;
           },
           interrupt() {
             lifecycle.push("interrupted");
@@ -218,6 +203,7 @@ describe("session task scheduler", () => {
           run: () => new Promise(() => {}),
           finalizeOnTimeout() {
             finalized += 1;
+            return undefined;
           }
         }
       ],

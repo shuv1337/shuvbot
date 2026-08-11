@@ -635,6 +635,7 @@ function createSpecialistTask(options: {
   scopedWorkspace: ScopedReviewWorkspace;
 }): SessionTask<ReviewerResult> {
   let activeSessionID: string | undefined;
+  let activeCapture: SessionCapture | undefined;
   let timeoutFinalizing = false;
   const definition = options.input.pluginConfig.reviewers.find(
     ({ id }) => id === options.reviewer
@@ -643,6 +644,7 @@ function createSpecialistTask(options: {
     id: options.reviewer,
     async run(context) {
       timeoutFinalizing = false;
+      activeCapture = undefined;
       try {
         const session = await options.runtime.createSession(
           {
@@ -666,6 +668,7 @@ function createSpecialistTask(options: {
           startedAtMs,
           hardDeadlineAtMs: startedAtMs + Math.max(0, context.deadline - Date.now())
         });
+        activeCapture = capture;
         options.captures.set(session.id, capture);
         options.allCaptures.push(capture);
         if (context.attempt > 1) {
@@ -749,6 +752,13 @@ function createSpecialistTask(options: {
         const usage = captureUsage(capture);
         const classified =
           captured ?? classifyAndRedact(error, "failed", context.signal, options.input.redactor);
+        if (timeoutFinalizing) {
+          return {
+            status: "failed",
+            error: classified,
+            ...(usage === undefined ? {} : { usage })
+          };
+        }
         recordFailedSession(options.rejectedSamples, options.input.redactor, {
           role: "specialist",
           reviewer: options.reviewer,
@@ -781,7 +791,7 @@ function createSpecialistTask(options: {
       }
     },
     async finalizeOnTimeout(signal) {
-      if (activeSessionID === undefined) return;
+      if (activeSessionID === undefined || activeCapture === undefined) return undefined;
       timeoutFinalizing = true;
       await options.runtime.prompt(
         {
@@ -798,6 +808,18 @@ function createSpecialistTask(options: {
         },
         { signal }
       );
+      const event = await options.runtime.wait(activeSessionID, { signal });
+      appendRuntimeEvents(
+        options.log,
+        activeCapture.accumulator.ingest(event, options.eventClock.now())
+      );
+      const parsed = parseSpecialistOutput(eventValue(event), options.reviewer);
+      const usage = captureUsage(activeCapture);
+      const value =
+        parsed.usage === undefined && usage !== undefined
+          ? parseReviewerResult({ ...parsed, usage })
+          : parsed;
+      return { status: "completed", value, ...(value.usage ? { usage: value.usage } : {}) };
     },
     async interrupt() {
       if (activeSessionID !== undefined) await options.runtime.interrupt(activeSessionID);
@@ -1184,7 +1206,7 @@ function logSpecialistTransition(
       ...(error === undefined ? {} : { error })
     });
   }
-  if (transition.status === "timed_out" && captureOutcome(capture) === "completed") {
+  if (transition.status === "timed_out" && captureOutcome(capture) !== "running") {
     if (capture !== undefined) appendLogEvent(log, capture, "session.timed_out");
     else appendLog(log, input, reviewer, "session.timed_out", Math.max(1, transition.attempt));
     return;
