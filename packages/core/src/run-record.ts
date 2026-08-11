@@ -1,4 +1,5 @@
 import type { AgentId, ShuvbotMode } from "./types.ts";
+import type { CommandSource } from "./commands.ts";
 import type { RuntimePolicy } from "./policy.ts";
 import type { ReviewFinding } from "./review-schema.ts";
 import type { ReviewerId, ReviewTier } from "../../review/src/types.ts";
@@ -76,6 +77,16 @@ export interface ReviewRunSummary {
 export interface RunRecord {
   runId: string;
   repo?: string;
+  subject?: {
+    kind: "issue" | "pull_request";
+    number: number;
+    commentId: number;
+  };
+  command?: {
+    name: string;
+    args: string;
+    source: CommandSource;
+  };
   event: string;
   eventAction?: string;
   actor: string;
@@ -133,6 +144,8 @@ export interface PolicySummary {
 
 export interface CreateRunRecordInput {
   repo?: string;
+  subject?: RunRecord["subject"];
+  command?: RunRecord["command"];
   event: string;
   eventAction?: string;
   actor: string;
@@ -160,6 +173,8 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     errors: []
   };
   if (input.repo !== undefined) record.repo = input.repo;
+  if (input.subject !== undefined) record.subject = input.subject;
+  if (input.command !== undefined) record.command = input.command;
   if (input.eventAction !== undefined) record.eventAction = input.eventAction;
   return record;
 }

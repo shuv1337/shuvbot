@@ -1,15 +1,12 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { APPROVED_SHUVCODE_RUNTIME_VERSION } from "../../core/src/config.ts";
 import type { CoordinatorEngineResult } from "../../review/src/engine.ts";
 import { parseCoordinatorResult } from "../../review/src/results.ts";
 import { main } from "../src/main.ts";
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const FIXTURE_PATH = join(REPO_ROOT, "fixtures", "events", "pull_request.synchronize.json");
 // See main.integration.test.ts: core.summary memoizes this path per process.
 const SUMMARY_PATH = join(tmpdir(), "shuvbot-tests-github-step-summary.md");
 
@@ -195,6 +192,29 @@ describe("main() coordinator review mode", () => {
         ""
       ].join("\n")
     );
+    const eventPath = join(cwd, "event.json");
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        action: "created",
+        repository: {
+          owner: { login: "octo" },
+          name: "repo",
+          full_name: "octo/repo",
+          private: false
+        },
+        sender: { login: "alice" },
+        issue: {
+          number: 1,
+          title: "Add feature",
+          body: "",
+          state: "open",
+          user: { login: "alice" },
+          pull_request: { url: "https://api.github.com/repos/octo/repo/pulls/1" }
+        },
+        comment: { id: 10, body: "@shuvbot review", user: { login: "alice" } }
+      })
+    );
 
     previousEnv = Object.fromEntries(
       [
@@ -212,8 +232,8 @@ describe("main() coordinator review mode", () => {
       ].map((key) => [key, process.env[key]])
     );
 
-    process.env.GITHUB_EVENT_NAME = "pull_request";
-    process.env.GITHUB_EVENT_PATH = FIXTURE_PATH;
+    process.env.GITHUB_EVENT_NAME = "issue_comment";
+    process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_ACTOR = "alice";
     process.env.GITHUB_STEP_SUMMARY = SUMMARY_PATH;
     process.env.GITHUB_OUTPUT = outputPath;
@@ -577,7 +597,7 @@ describe("main() coordinator review mode", () => {
     );
     // The pull request's head commit, from the event fixture - not the SHA the
     // job happens to have checked out.
-    expect(contentsCall?.query).toBe("?ref=headsha2");
+    expect(contentsCall?.query).toBe(`?ref=${"a".repeat(40)}`);
   });
 
   test("reviews from the patch alone when the pull request's content is unavailable", async () => {

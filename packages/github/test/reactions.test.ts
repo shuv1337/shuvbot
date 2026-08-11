@@ -86,10 +86,15 @@ describe("triggerCommentFromEvent", () => {
 describe("mention reaction lifecycle", () => {
   test("start posts eyes on an issue comment", async () => {
     const client = new MockClient({
+      "GET /repos/octo/repo/issues/comments/10/reactions": [],
       "POST /repos/octo/repo/issues/comments/10/reactions": { id: 1 }
     });
     await applyMentionLifecycle({ ...baseInput(client), phase: "start" });
     expect(client.calls).toEqual([
+      {
+        key: "GET /repos/octo/repo/issues/comments/10/reactions",
+        body: undefined
+      },
       {
         key: "POST /repos/octo/repo/issues/comments/10/reactions",
         body: { content: "eyes" }
@@ -113,6 +118,29 @@ describe("mention reaction lifecycle", () => {
       "POST /repos/octo/repo/issues/comments/10/reactions"
     ]);
     expect(client.calls.at(-1)?.body).toEqual({ content: "rocket" });
+  });
+
+  test("terminal phases remove contradictory bot reactions", async () => {
+    const client = new MockClient({
+      "GET /repos/octo/repo/issues/comments/10/reactions": [
+        { id: 1, content: "eyes", user: { login: "github-actions[bot]" } },
+        { id: 2, content: "rocket", user: { login: "github-actions[bot]" } },
+        { id: 3, content: "confused", user: { login: "github-actions[bot]" } }
+      ],
+      "DELETE /repos/octo/repo/issues/comments/10/reactions/1": {},
+      "DELETE /repos/octo/repo/issues/comments/10/reactions/2": {},
+      "DELETE /repos/octo/repo/issues/comments/10/reactions/3": {},
+      "POST /repos/octo/repo/issues/comments/10/reactions": { id: 4 }
+    });
+
+    await applyMentionLifecycle({ ...baseInput(client), phase: "success" });
+
+    expect(client.calls.map((call) => call.key)).toEqual([
+      "GET /repos/octo/repo/issues/comments/10/reactions",
+      "DELETE /repos/octo/repo/issues/comments/10/reactions/1",
+      "DELETE /repos/octo/repo/issues/comments/10/reactions/3",
+      "POST /repos/octo/repo/issues/comments/10/reactions"
+    ]);
   });
 
   test("failure replaces eyes with confused on an inline review comment", async () => {

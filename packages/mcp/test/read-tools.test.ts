@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -20,6 +21,7 @@ import { readFileTool, searchRepoTool } from "../src/tools/files.ts";
 import { getIssueCommentsTool, getIssueTool, getReviewCommentsTool } from "../src/tools/issue.ts";
 import { getPrDiffTool, getPrFilesTool, getPrTool } from "../src/tools/pr.ts";
 
+const mkdtemp = useTemporaryDirectories();
 let server: ShuvbotMcpServer | undefined;
 
 afterEach(async () => {

@@ -203,8 +203,8 @@ their policy and tooling path and stop at a documented no-op. See `docs/workflow
 
 ### Asking for a review by comment
 
-Comment `@shuvbot review` on any pull request to review it on demand, instead of waiting for a
-push. It needs an `issue_comment` trigger in the workflow; see
+Comment `@shuvbot review` on any pull request to review it on demand. Manual commands can also be
+sent on ordinary issues. The workflow needs both comment triggers; see
 `.github/workflows/shuvbot.yml` in this repository for the shape. The triggering comment gets
 eyes while the run is in flight, then rocket or confused when it ends.
 

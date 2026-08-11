@@ -1,7 +1,8 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import {
   createDefaultCoordinatorDiagnostics,
   runDoctor,
@@ -9,6 +10,8 @@ import {
   type CoordinatorDiagnosticOperations,
   type CoordinatorDiagnosticRuntime
 } from "./doctor.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 const legacyConfig = `[review]
 engine = "legacy"

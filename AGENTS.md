@@ -106,9 +106,9 @@ otherwise without checking `main.ts` directly.
 
 ## Repository automation
 
-- `.github/workflows/shuvbot.yml` is **manual and owner-only by design**. There is no `pull_request` trigger: shuvbot reviews only when `shuv1337` mentions `@shuvbot` in a comment on a pull request, never automatically on push or open. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make shuvbot blocking.
+- `.github/workflows/shuvbot.yml` is **manual and owner-only by design**. There is no `pull_request` trigger: shuvbot runs only when `shuv1337` mentions `@shuvbot` in a pull-request or issue comment, never automatically on push or open. It is advisory only: leave `fail_check`/`request_changes` unset unless the repository deliberately chooses to make shuvbot blocking.
 - **"Commenting on a pull request" is two GitHub events**, and the workflow subscribes to both: `issue_comment` (the conversation tab) and `pull_request_review_comment` (an inline comment on a diff line). They look like one act in the UI, so subscribing to only one leaves the other silently dead - it starts no run and reports nothing. The action has always handled both (`normalizeEvent`, `resolveReviewTarget`, `fixtures/events/review_comment.mention.json`); only the subscription was missing. Both paths are covered end to end in `main.integration.test.ts`.
-- `issue_comment` also fires for **plain issues**, which carry no diff and nothing shuvbot can act on, so the job guard requires `github.event.issue.pull_request != null`. Without it a mention on an ordinary issue starts a run that can only fail (see the "fails loudly when an explicit mention refers to no pull request" test).
+- `issue_comment` also fires for **plain issues**. The workflow allows those mentions so issue-oriented commands remain observable; review commands fail closed when no pull request exists (see the "fails loudly when an explicit mention refers to no pull request" test).
 - The actor gate is `github.event.comment.user.login == 'shuv1337'`. GitHub sets that field, so it cannot be spoofed - but it is the **only** identity gate. The action re-checks write access and has no concept of an actor allowlist, so weakening that line is not caught anywhere downstream.
 - The workflow runs the action from an explicit checkout of the **trusted default branch** (`uses: ./`), not from the pull request and not from published `shuv1337/shuvbot@v0`. Coordinator review fetches the pull request diff through GitHub's API. Never change this back to a merge-ref checkout: doing so lets a same-repository pull request replace `dist/index.js` or the pinned runtime and execute attacker-controlled code with `CLAUDE_CODE_OAUTH_TOKEN`. The local checkout remains necessary until `engine: coordinator` exists in a published release.
 - It runs the **coordinator** engine, which needs two things the single-agent path does not: the pinned shuvcode runtime installed in the job (`bun install --frozen-lockfile`, since shuvcode is an exact devDependency, so the lockfile is the pin) and `config: .github/shuvbot.ci.toml`. That CI config exists separately from any root `shuvbot.toml` because the Action does **not** auto-discover a config file the way the CLI does, and because `auth = "environment"` is correct on a runner and wrong on a laptop - one shared file would force local review to require a CI secret.
@@ -137,6 +137,14 @@ with `bun run build` and commit `index.js` and `index.js.map` together.
 
 ## Notes for future agents
 
+- **Test-created temp directories must use the shared cleanup tracker.** Import
+  `useTemporaryDirectories` from `packages/test-support/temp-directories.ts`,
+  bind its returned `mkdtemp` replacement once per test module, and create all
+  disposable directories through it. Its `afterEach` hook removes directories
+  even when a test fails. When a production helper creates nested workspaces,
+  give it a tracker-owned `tempRoot` so validation failures cannot strand a
+  child directory. Do not apply this to the process-wide GitHub summary path
+  described below; that path must survive for the full test process.
 - When implementing from a plan, keep edits aligned with `SPEC.md` and update both the plan checkboxes and this file if repository reality changes.
 - Commit atomically per logical slice - don't combine unrelated concerns into mega-commits (this repo's own convention, see git log).
 - Testing `main()` directly: `packages/action/src/main.ts`'s `main()` takes an

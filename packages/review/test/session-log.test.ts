@@ -1,9 +1,12 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { ReviewSessionLog } from "../src/session-log.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("review session log", () => {
   test("buffers allowlisted redacted events and flushes JSONL atomically", async () => {

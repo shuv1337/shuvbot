@@ -1,10 +1,13 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { ConfigError } from "../../core/src/errors.ts";
 import { parseReviewOptions, runDoctorCommand, runReviewCommand } from "./index.ts";
 import { runLocalReview, type LocalReviewOptions } from "./local-review.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("review command routing", () => {
   test("auto-loads shuvbot.toml from cwd", async () => {

@@ -4,7 +4,7 @@
 `fix-ci` run their full policy/branch/tooling path but end in a no-op agent
 step that says so in the run summary - see the notes on each workflow below.
 
-## Automatic PR Review
+## Manual Comment Review
 
 Review mode needs the Claude Code CLI on `PATH` and Claude credentials in
 addition to the GitHub token: install Claude Code before the shuvbot step, then
@@ -13,24 +13,26 @@ expose `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to the step via
 fails before normal review artifacts are written, shuvbot logs a redacted
 diagnostic tail and persists it as `$RUNNER_TEMP/shuvbot/shuvbot-agent-error.txt`.
 
-Review runs from two triggers: a `pull_request` event, and an `@shuvbot review` comment on a pull
-request. The comment path is opt-in - add the `issue_comment` trigger below, and see
-"Comment-triggered review" for its guards.
+Review runs only from an `@shuvbot <command>` mention in an issue or pull-request comment. PR
+bodies, issue bodies, pushes, schedules, workflow dispatch, and workflow-run events never start
+shuvbot.
 
 ```yaml
 name: shuvbot
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  issue_comment: # optional: enables `@shuvbot review`
+  issue_comment: # conversation tab, including ordinary issues
+    types: [created, edited]
+  pull_request_review_comment: # inline diff comments
     types: [created, edited]
 
 permissions: {}
 
 jobs:
   review:
-    # Public repos can add this guard to skip fork PRs without secrets and draft PRs:
-    # if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: >-
+      contains(github.event.comment.body, '@shuvbot') &&
+      (github.event_name == 'issue_comment' ||
+        github.event_name == 'pull_request_review_comment')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -147,9 +149,9 @@ Fork pull requests are reviewed but never posted to, and never receive state.
 
 ## Comment-Triggered Review
 
-Commenting `@shuvbot review` on a pull request reviews it on demand. This is the same review that
-the `pull_request` trigger runs; only the way it starts differs. Used on its own, without a
-`pull_request` trigger, it makes review entirely manual - shuvbot then does nothing until asked.
+Commenting `@shuvbot review` on a pull request reviews it on demand. Comment commands on ordinary
+issues are accepted as manual invocations too; review mode then fails closed because an issue has
+no pull-request diff. Other commands can use the issue context when their mode supports it.
 
 A mention gets a lifecycle reaction on that comment: **eyes** when the run starts, **rocket** if
 it finishes, **confused** if it fails. The signal is mechanical and never fails the job. It is
@@ -172,9 +174,9 @@ The action handles both. Subscribing to only `issue_comment` - the easy mistake 
 `github.event.issue.number` is undefined for `pull_request_review_comment`, so guards, concurrency
 groups, and any PR-number lookup need `github.event.issue.number || github.event.pull_request.number`.
 
-`issue_comment` also fires for **plain issues**, which carry no diff. Require
-`github.event.issue.pull_request != null` so a mention on an ordinary issue starts no run at all;
-without it, the run starts and then fails, because there is nothing to review.
+`issue_comment` also fires for **plain issues**. The workflow intentionally allows those mentions so
+issue-oriented commands are observable; a review command on a plain issue fails closed because
+there is no pull-request diff.
 
 To restrict who can invoke shuvbot, match the login directly - `github.event.comment.user.login ==
 '<you>'`. GitHub sets that field, so it cannot be spoofed. Be aware this is then the _only_ identity

@@ -1,11 +1,13 @@
-import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { reconcileReviewState } from "../src/reconcile.ts";
 import { parseCoordinatorResult, type CoordinatedFinding } from "../src/results.ts";
 import { FileReviewStateStore } from "../src/state.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("sequential local review lifecycle", () => {
   test("persists new, unresolved, fixed, and user-resolved transitions atomically", async () => {

@@ -1,8 +1,11 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { assembleReviewContext, loadRepoInstructions } from "../src/context/assembler.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("review context assembly", () => {
   test("loads repo instructions and labels untrusted blocks", async () => {

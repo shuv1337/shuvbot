@@ -69,14 +69,15 @@ export async function applyMentionLifecycle(
 ): Promise<void> {
   switch (input.phase) {
     case "start":
+      await removeOwnCommentReactions(input, ["rocket", "confused"]);
       await addCommentReaction(input, "eyes");
       return;
     case "success":
-      await removeOwnCommentReaction(input, "eyes");
+      await removeOwnCommentReactions(input, ["eyes", "confused"]);
       await addCommentReaction(input, "rocket");
       return;
     case "failure":
-      await removeOwnCommentReaction(input, "eyes");
+      await removeOwnCommentReactions(input, ["eyes", "rocket"]);
       await addCommentReaction(input, "confused");
       return;
     default: {
@@ -105,6 +106,13 @@ export async function removeOwnCommentReaction(
   input: MentionReactionInput,
   content: CommentReaction
 ): Promise<void> {
+  await removeOwnCommentReactions(input, [content]);
+}
+
+async function removeOwnCommentReactions(
+  input: MentionReactionInput,
+  contents: readonly CommentReaction[]
+): Promise<void> {
   let reactions: unknown;
   try {
     const response = await input.client.request(`GET ${reactionCollectionPath(input.target)}`, {
@@ -116,10 +124,13 @@ export async function removeOwnCommentReaction(
   }
   if (!Array.isArray(reactions)) return;
   const bot = input.botLogin.toLowerCase();
+  const removable = new Set(contents);
   for (const reaction of reactions) {
     if (typeof reaction !== "object" || reaction === null) continue;
     const record = reaction as Record<string, unknown>;
-    if (record.content !== content) continue;
+    if (typeof record.content !== "string" || !removable.has(record.content as CommentReaction)) {
+      continue;
+    }
     const user = record.user;
     const login =
       typeof user === "object" && user !== null && "login" in user

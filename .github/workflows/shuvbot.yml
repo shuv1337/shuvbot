@@ -25,11 +25,7 @@ jobs:
   review:
     name: shuvbot review
     # Only the repository owner, only an explicit @shuvbot mention, and only on
-    # a pull request.
-    #
-    # `issue_comment` also fires for plain issues, which carry no diff and
-    # nothing shuvbot can act on; filtering them here means an unrelated issue
-    # comment starts no run at all, rather than starting one that can only fail.
+    # a pull request or issue comment.
     #
     # `comment.user.login` is set by GitHub and cannot be spoofed, so this is a
     # real gate - but it is the *only* identity gate. The action independently
@@ -38,8 +34,8 @@ jobs:
     if: >-
       github.event.comment.user.login == 'shuv1337' &&
       contains(github.event.comment.body, '@shuvbot') &&
-      (github.event_name == 'pull_request_review_comment' ||
-        github.event.issue.pull_request != null)
+      (github.event_name == 'issue_comment' ||
+        github.event_name == 'pull_request_review_comment')
     runs-on: ubuntu-latest
     permissions:
       contents: read

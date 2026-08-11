@@ -1,7 +1,8 @@
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { createRunRecord, recordReview, type RunRecord } from "../../core/src/run-record.ts";
 import type { ReviewFinding } from "../../core/src/review-schema.ts";
 import {
@@ -11,6 +12,8 @@ import {
   writeFailureDiagnostics,
   writeReviewArtifacts
 } from "../src/artifacts.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("review artifacts", () => {
   test("writes redacted run, findings, manifest, session, and event artifacts with safe modes", async () => {

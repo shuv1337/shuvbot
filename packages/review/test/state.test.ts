@@ -1,13 +1,16 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import {
   FileReviewStateStore,
   parsePersistedReviewState,
   type PersistedReviewState
 } from "../src/state.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("incremental review state", () => {
   test("writes and reads redacted state using a hashed change ID", async () => {

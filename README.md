@@ -1,6 +1,6 @@
 # shuvbot
 
-`shuvbot` is a GitHub-native code review and coding-agent action. In this version it reviews pull requests with a real agent, classifies trusted `@shuvbot` mentions, runs guarded no-op implement/fix-ci paths, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
+`shuvbot` is a GitHub-native code review and coding-agent action. In this version it runs only for trusted `@shuvbot` mentions in pull-request or issue comments, runs guarded no-op implement/fix-ci paths, and keeps all runtime authority in deterministic policy code rather than prompts or GitHub payloads.
 
 **Status: review mode is live in this version.** It runs the real Claude Code
 driver against the MCP tool server and posts real findings. `implement` and
@@ -13,15 +13,19 @@ run summary. See `docs/workflows.md` for details.
 ```yaml
 name: shuvbot
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
 
 permissions: {}
 
 jobs:
   review:
-    # Public repos can add this guard to skip fork PRs without secrets and draft PRs:
-    # if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: >-
+      contains(github.event.comment.body, '@shuvbot') &&
+      (github.event_name == 'issue_comment' ||
+        github.event_name == 'pull_request_review_comment')
     runs-on: ubuntu-latest
     permissions:
       contents: read

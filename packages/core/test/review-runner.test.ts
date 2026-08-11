@@ -1,11 +1,14 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { normalizeConfig } from "../src/config.ts";
 import { defaultRuntimePolicy } from "../src/policy.ts";
 import { createFakeReviewAgent, runReview, type ReviewAgent } from "../src/review-runner.ts";
 import type { PullRequestEvent } from "../src/events.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("review runner", () => {
   test("runs a fake-agent PR review end to end", async () => {

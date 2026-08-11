@@ -1,13 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentDriver, AgentRunInput } from "../../agents/src/driver.ts";
 import { main } from "../src/main.ts";
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const FIXTURE_PATH = join(REPO_ROOT, "fixtures", "events", "pull_request.synchronize.json");
 
 // @actions/core's `core.summary` is a process-wide singleton that memoizes
 // GITHUB_STEP_SUMMARY's file path on first use and ignores later env changes
@@ -153,10 +149,34 @@ function scriptedDriver(observedToolNames?: string[][]): AgentDriver {
 describe("main() end to end (review mode)", () => {
   let cwd: string;
   let previousEnv: Record<string, string | undefined>;
+  let eventPath: string;
 
   beforeEach(async () => {
     cwd = await mkdtemp(join(tmpdir(), "shuvbot-e2e-"));
     const outputPath = join(cwd, "output.txt");
+    eventPath = join(cwd, "event.json");
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        action: "created",
+        repository: {
+          owner: { login: "octo" },
+          name: "repo",
+          full_name: "octo/repo",
+          private: false
+        },
+        sender: { login: "alice" },
+        issue: {
+          number: 1,
+          title: "Add feature",
+          body: "",
+          state: "open",
+          user: { login: "alice" },
+          pull_request: { url: "https://api.github.com/repos/octo/repo/pulls/1" }
+        },
+        comment: { id: 10, body: "@shuvbot review", user: { login: "alice" } }
+      })
+    );
     await writeFile(SUMMARY_PATH, "");
     await writeFile(outputPath, "");
 
@@ -171,8 +191,8 @@ describe("main() end to end (review mode)", () => {
       INPUT_CWD: process.env.INPUT_CWD
     };
 
-    process.env.GITHUB_EVENT_NAME = "pull_request";
-    process.env.GITHUB_EVENT_PATH = FIXTURE_PATH;
+    process.env.GITHUB_EVENT_NAME = "issue_comment";
+    process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_ACTOR = "alice";
     process.env.GITHUB_STEP_SUMMARY = SUMMARY_PATH;
     process.env.GITHUB_OUTPUT = outputPath;
@@ -195,7 +215,8 @@ describe("main() end to end (review mode)", () => {
         status: 200,
         body: { role_name: "write" }
       },
-      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_DIFF },
+      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_PAYLOAD },
+      "GET /repos/octo/repo/pulls/1 [diff]": { status: 200, body: PR_DIFF },
       "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] },
       "GET /repos/octo/repo/pulls/1/comments": { status: 200, body: [] },
       "POST /repos/octo/repo/pulls/1/reviews": {
@@ -255,7 +276,8 @@ describe("main() end to end (review mode)", () => {
         status: 200,
         body: { role_name: "write" }
       },
-      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_DIFF },
+      "GET /repos/octo/repo/pulls/1": { status: 200, body: PR_PAYLOAD },
+      "GET /repos/octo/repo/pulls/1 [diff]": { status: 200, body: PR_DIFF },
       "GET /repos/octo/repo/pulls/1/files": { status: 200, body: [{ filename: "src/app.ts" }] }
     });
     const failingDriver: AgentDriver = {
@@ -428,6 +450,36 @@ describe("main() unhandled requests", () => {
 
     const postedReview = server.calls.find((call) => call.method === "POST");
     expect(postedReview).toBeUndefined();
+  });
+
+  test("does not review when a pull request body contains a mention", async () => {
+    process.env.GITHUB_EVENT_NAME = "pull_request";
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        action: "opened",
+        repository: {
+          owner: { login: "octo" },
+          name: "repo",
+          full_name: "octo/repo",
+          private: false
+        },
+        sender: { login: "alice" },
+        pull_request: { ...PR_PAYLOAD, body: "@shuvbot review" }
+      })
+    );
+    const server = fakeGitHubServer({
+      "GET /repos/octo/repo/collaborators/alice/permission": {
+        status: 200,
+        body: { role_name: "write" }
+      }
+    });
+
+    await main({ fetchImpl: server.fetchImpl });
+
+    const outputs = await readFile(process.env.GITHUB_OUTPUT!, "utf8");
+    expect(outputs).toContain('"status":"skipped"');
+    expect(server.calls.find((call) => call.method === "POST")).toBeUndefined();
   });
 
   test("@shuvbot review on a same-repo pull request comment posts a review", async () => {

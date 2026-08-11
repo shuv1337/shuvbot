@@ -1,10 +1,13 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../src/redaction.ts";
 import { FileStateStore, GitHubStateStore, MemoryStateStore } from "../src/state.ts";
 import type { GitHubClient } from "../../github/src/octokit.ts";
+
+const mkdtemp = useTemporaryDirectories();
 
 describe("state stores", () => {
   test("memory store reads and writes summaries and learnings", async () => {

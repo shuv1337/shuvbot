@@ -75,7 +75,6 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
   const logger = new RunLogger();
   const inputs = readActionInputs();
   const cwd = inputs.cwd ?? process.cwd();
-  const fileConfig = await resolveActionConfig(inputs.config, cwd, logger);
 
   const eventName = process.env.GITHUB_EVENT_NAME ?? "workflow_dispatch";
   const eventPayload = await readEventPayload();
@@ -84,7 +83,8 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
       ? normalizeEvent({ eventName, payload: eventPayload })
       : null;
 
-  const command = findCommandInEvent(event);
+  const parsedCommand = findCommandInEvent(event);
+  const command = isManualMentionCommand(event, parsedCommand) ? parsedCommand : null;
   const explicitMode = isExplicitMode(inputs.mode) ? inputs.mode : "auto";
   const resolved = resolveMode({
     explicit: explicitMode,
@@ -94,80 +94,13 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
   });
   const mode: ShuvbotMode = resolved.mode;
 
-  const config = {
-    ...fileConfig,
-    agent: inputs.agent ?? fileConfig.agent,
-    model: inputs.model ?? fileConfig.model,
-    mode,
-    timeout: inputs.timeout ?? fileConfig.timeout,
-    activityTimeout: inputs.activityTimeout ?? fileConfig.activityTimeout,
-    shell: inputs.shell ?? fileConfig.shell,
-    push: inputs.push ?? fileConfig.push
-  };
-
   const actorLogin = process.env.GITHUB_ACTOR ?? event?.sender.login ?? "unknown";
   const client = inputs.token
     ? createGitHubClient({
         token: inputs.token,
         ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {})
-      })
+    })
     : undefined;
-  // Resolve the target before policy: an issue_comment cannot report fork
-  // status from its payload, and policy depends on the real answer.
-  const reviewTarget = event
-    ? await resolveReviewTarget({ event, ...(client ? { client } : {}) })
-    : null;
-
-  const actor = event
-    ? await deriveActorContext({
-        event,
-        ...(client ? { client } : {}),
-        ...(reviewTarget ? { isFork: reviewTarget.isFork } : {})
-      })
-    : fallbackActor(actorLogin);
-
-  const eventAction = extractAction(event);
-  const record = createRunRecord({
-    event: eventName,
-    actor: actor.login || actorLogin,
-    trigger: triggerLabel(event, command, explicitMode),
-    mode,
-    agent: config.agent,
-    model: config.model,
-    ...(event?.repo.fullName ? { repo: event.repo.fullName } : {}),
-    ...(eventAction ? { eventAction } : {})
-  });
-
-  let withPolicy: RunRecord = record;
-  let policy: ReturnType<typeof buildRuntimePolicy> | undefined;
-  if (event) {
-    policy = buildRuntimePolicy({
-      event,
-      mode,
-      actor,
-      configCaps: { shell: fileConfig.shell, push: fileConfig.push },
-      inputCaps: {
-        ...(inputs.shell ? { shell: inputs.shell } : {}),
-        ...(inputs.push ? { push: inputs.push } : {})
-      }
-    });
-    withPolicy = recordPolicy(record, policy);
-    logger.log("info", "policy.resolved", {
-      shell: policy.shell,
-      push: policy.push,
-      reasons: policy.reasons
-    });
-  }
-
-  logger.log("info", "run.initialized", {
-    runId: withPolicy.runId,
-    mode,
-    agent: config.agent,
-    model: config.model,
-    trigger: withPolicy.trigger,
-    modeReason: resolved.reason
-  });
-
   const mentionSignal = mentionReactionInput({
     event,
     command: Boolean(command),
@@ -179,13 +112,84 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
   }
 
   let mentionPhase: "success" | "failure" = "success";
+  let withPolicy: RunRecord | undefined;
   try {
+    const fileConfig = await resolveActionConfig(inputs.config, cwd, logger);
+    const config = {
+      ...fileConfig,
+      agent: inputs.agent ?? fileConfig.agent,
+      model: inputs.model ?? fileConfig.model,
+      mode,
+      timeout: inputs.timeout ?? fileConfig.timeout,
+      activityTimeout: inputs.activityTimeout ?? fileConfig.activityTimeout,
+      shell: inputs.shell ?? fileConfig.shell,
+      push: inputs.push ?? fileConfig.push
+    };
+
+    // Resolve the target before policy: an issue_comment cannot report fork
+    // status from its payload, and policy depends on the real answer.
+    const reviewTarget = event
+      ? await resolveReviewTarget({ event, ...(client ? { client } : {}) })
+      : null;
+
+    const actor = event
+      ? await deriveActorContext({
+          event,
+          ...(client ? { client } : {}),
+          ...(reviewTarget ? { isFork: reviewTarget.isFork } : {})
+        })
+      : fallbackActor(actorLogin);
+
+    const eventAction = extractAction(event);
+    const record = createRunRecord({
+      event: eventName,
+      actor: actor.login || actorLogin,
+      trigger: triggerLabel(event, command, explicitMode),
+      mode,
+      agent: config.agent,
+      model: config.model,
+      ...(event?.repo.fullName ? { repo: event.repo.fullName } : {}),
+      ...(eventSubject(event) === undefined ? {} : { subject: eventSubject(event) }),
+      ...(command === null
+        ? {}
+        : { command: { name: command.command, args: command.args, source: command.source } }),
+      ...(eventAction ? { eventAction } : {})
+    });
+
+    withPolicy = record;
+    let policy: ReturnType<typeof buildRuntimePolicy> | undefined;
+    if (event) {
+      policy = buildRuntimePolicy({
+        event,
+        mode,
+        actor,
+        configCaps: { shell: fileConfig.shell, push: fileConfig.push },
+        inputCaps: {
+          ...(inputs.shell ? { shell: inputs.shell } : {}),
+          ...(inputs.push ? { push: inputs.push } : {})
+        }
+      });
+      withPolicy = recordPolicy(record, policy);
+      logger.log("info", "policy.resolved", {
+        shell: policy.shell,
+        push: policy.push,
+        reasons: policy.reasons
+      });
+    }
+
+    logger.log("info", "run.initialized", {
+      runId: withPolicy.runId,
+      mode,
+      agent: config.agent,
+      model: config.model,
+      trigger: withPolicy.trigger,
+      modeReason: resolved.reason
+    });
+
     // A pull_request event asks for a review by firing. A comment asks only if
     // it actually mentioned the bot - otherwise every comment on every pull
     // request would start a review.
-    const reviewRequested = reviewTarget
-      ? reviewTarget.trigger === "event" || Boolean(command)
-      : false;
+    const reviewRequested = reviewTarget?.trigger === "comment" && Boolean(command);
 
     if (mode === "review" && event && reviewTarget && reviewRequested && client && policy) {
       const repo = { owner: event.repo.owner, name: event.repo.name };
@@ -212,6 +216,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
           ...(overrides.signal ? { signal: overrides.signal } : {}),
           ...(overrides.coordinator ? { dependencies: overrides.coordinator } : {})
         });
+        if (withPolicy.status === "failure") mentionPhase = "failure";
         await writeWorkflowSummary(withPolicy);
         return;
       }
@@ -476,8 +481,10 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
   } catch (error) {
     mentionPhase = "failure";
-    withPolicy = recordError(withPolicy, error);
-    await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
+    if (withPolicy !== undefined) {
+      withPolicy = recordError(withPolicy, error);
+      await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
+    }
     throw error;
   } finally {
     if (mentionSignal) {
@@ -696,6 +703,33 @@ function mentionReactionInput(input: {
     target,
     botLogin: input.botLogin
   };
+}
+
+function isManualMentionCommand(
+  event: BotEvent | null,
+  command: ReturnType<typeof findCommandInEvent>
+): command is NonNullable<ReturnType<typeof findCommandInEvent>> {
+  if (event === null || command === null) return false;
+  return (
+    (event.kind === "issue_comment" && command.source === "issue_comment") ||
+    (event.kind === "pull_request_review_comment" && command.source === "review_comment")
+  );
+}
+
+function eventSubject(event: BotEvent | null): RunRecord["subject"] {
+  if (event === null) return undefined;
+  switch (event.kind) {
+    case "issue_comment":
+      return {
+        kind: event.issue.isPullRequest ? "pull_request" : "issue",
+        number: event.issue.number,
+        commentId: event.comment.id
+      };
+    case "pull_request_review_comment":
+      return { kind: "pull_request", number: event.pullRequest.number, commentId: event.comment.id };
+    default:
+      return undefined;
+  }
 }
 
 /**

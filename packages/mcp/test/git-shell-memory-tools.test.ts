@@ -1,9 +1,10 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, test } from "bun:test";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { defaultRuntimePolicy } from "../../core/src/policy.ts";
 import { MemoryStateStore } from "../../core/src/state.ts";
@@ -26,6 +27,7 @@ import {
 } from "../src/tools/memory.ts";
 
 const execFileAsync = promisify(execFile);
+const mkdtemp = useTemporaryDirectories();
 
 describe("git, shell, and memory MCP tools", () => {
   test("read-only git tools expose status and diff under policy gate", async () => {

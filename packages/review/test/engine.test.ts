@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { useTemporaryDirectories } from "../../test-support/temp-directories.ts";
 import { DefaultRedactor } from "../../core/src/redaction.ts";
 import { executeCoordinatorEngine } from "../src/engine.ts";
 import type {
@@ -24,6 +25,7 @@ import type {
 import { BUILT_IN_REVIEWER_IDS, type BuiltInReviewerId, type ReviewTier } from "../src/types.ts";
 import { createReviewWorkspace } from "../src/workspace.ts";
 
+const mkdtemp = useTemporaryDirectories();
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("local coordinator engine", () => {
@@ -1412,9 +1414,11 @@ async function runEngine(
   });
   expect(plan.risk.tier).toBe(tier);
   const planSnapshot = structuredClone(plan);
+  const tempRoot = await mkdtemp(join(tmpdir(), "shuvbot-engine-"));
   const workspace = await createReviewWorkspace({
     files: files.map(({ path, patch }) => ({ path, patch: patch ?? "" })),
-    sharedContext: "Trusted deterministic context."
+    sharedContext: "Trusted deterministic context.",
+    tempRoot
   });
   if (overrides.onWorkspaceCleanup !== undefined) {
     const cleanup = workspace.cleanup.bind(workspace);
