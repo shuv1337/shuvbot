@@ -35,6 +35,7 @@ import type { ReviewSessionLogEvent } from "../../review/src/session-log.ts";
 import { executeCoordinatorEngine } from "../../review/src/engine.ts";
 import { GitHubReviewStateStore } from "../../review/src/state-github.ts";
 import type { ChangedFileStatus } from "../../review/src/types.ts";
+import { buildPostedReviewBody, renderFindingComment } from "./review-body.ts";
 
 const MAX_PULL_REQUEST_FILE_PAGES = 30;
 const PULL_REQUEST_FILES_PER_PAGE = 100;
@@ -254,7 +255,11 @@ export async function runCoordinatorActionReview(
           client: input.client,
           repo: input.repo,
           pullNumber: input.pullNumber,
-          body: buildReviewBody(summary, summaryOnly, posting),
+          body: buildPostedReviewBody({
+            report: run.report,
+            summaryOnly,
+            posting
+          }),
           event: posting.reviewEvent,
           comments: inline,
           botLogin: input.botLogin
@@ -339,7 +344,7 @@ export function partitionFindings(
     inline.push({
       path: finding.path,
       position,
-      body: renderFindingBody(finding),
+      body: renderFindingComment(finding),
       markerKey: findingMarkerKey(finding)
     });
   }
@@ -350,42 +355,6 @@ export function partitionFindings(
 /** Stable per-finding marker so a re-review updates rather than duplicates. */
 export function findingMarkerKey(finding: CoordinatedFinding): string {
   return finding.fingerprint;
-}
-
-function renderFindingBody(finding: CoordinatedFinding): string {
-  const parts = [
-    `**${finding.severity}** · ${finding.title}`,
-    "",
-    finding.body,
-    "",
-    `_Evidence:_ ${finding.evidence}`,
-    `_Reviewer:_ \`${finding.reviewer}\` · confidence ${finding.confidence}`
-  ];
-  if (finding.suggestedFix !== undefined) {
-    parts.push("", "```suggestion", finding.suggestedFix, "```");
-  }
-  return parts.join("\n");
-}
-
-function buildReviewBody(
-  summary: string,
-  summaryOnly: readonly CoordinatedFinding[],
-  posting: CoordinatorPostingPolicy
-): string {
-  const sections = [summary, "", `_${posting.reason}_`];
-  if (summaryOnly.length > 0) {
-    sections.push(
-      "",
-      "### Findings without a commentable diff line",
-      "",
-      ...summaryOnly.map((finding) => {
-        const line = finding.line ?? finding.endLine;
-        const location = line === undefined ? finding.path : `${finding.path}:${line}`;
-        return `- **${finding.severity}** ${finding.title} (${location})\n  ${finding.body}`;
-      })
-    );
-  }
-  return sections.join("\n");
 }
 
 function noChanges(redactor: Redactor, reason: string): CoordinatorActionReviewResult {

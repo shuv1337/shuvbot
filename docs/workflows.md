@@ -151,6 +151,11 @@ Commenting `@shuvbot review` on a pull request reviews it on demand. This is the
 the `pull_request` trigger runs; only the way it starts differs. Used on its own, without a
 `pull_request` trigger, it makes review entirely manual - shuvbot then does nothing until asked.
 
+A mention gets a lifecycle reaction on that comment: **eyes** when the run starts, **rocket** if
+it finishes, **confused** if it fails. The signal is mechanical and never fails the job. It is
+not posted on the pull request itself, because a rocket there can read as endorsing the change.
+A comment that never mentioned the bot is left alone.
+
 **Subscribe to both comment events.** "Commenting on a pull request" is two distinct GitHub events,
 and they look like a single act from the UI:
 

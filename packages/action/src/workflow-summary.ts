@@ -1,6 +1,6 @@
 import * as core from "@actions/core";
 import { DefaultRedactor, type Redactor } from "../../core/src/redaction.ts";
-import type { RunRecord } from "../../core/src/run-record.ts";
+import type { ReviewRunSummary, RunRecord } from "../../core/src/run-record.ts";
 
 export async function writeWorkflowSummary(
   rawRecord: RunRecord,
@@ -21,6 +21,11 @@ export async function writeWorkflowSummary(
     ["Agent", record.agent],
     ["Model", record.model]
   ]);
+
+  const elapsed = formatElapsed(record);
+  if (elapsed !== undefined) {
+    summary.addRaw(`\nElapsed: ${elapsed}\n`);
+  }
 
   if (record.policy) {
     const p = record.policy;
@@ -82,8 +87,29 @@ export async function writeWorkflowSummary(
       ["Quorum met", String(review.quorumMet)],
       ["Reviewers completed", review.successfulReviewers.join(", ") || "none"],
       ["Reviewers missing", review.missingReviewers.join(", ") || "none"],
-      ["Retries", String(review.retries)]
+      ["Retries", String(review.retries)],
+      ...usageRows(review.usage)
     ]);
+    if (review.sessions.length > 0) {
+      summary.addHeading("Sessions", 3).addTable([
+        [
+          { data: "Role", header: true },
+          { data: "Reviewer", header: true },
+          { data: "Status", header: true },
+          { data: "Model", header: true },
+          { data: "Tokens in/out", header: true },
+          { data: "Cost", header: true }
+        ],
+        ...review.sessions.map((session) => [
+          session.role,
+          session.reviewer ?? "—",
+          session.status,
+          session.model,
+          session.usage ? `${session.usage.inputTokens} / ${session.usage.outputTokens}` : "—",
+          formatCost(session.usage?.cost)
+        ])
+      ]);
+    }
     if (review.findingAccounting) {
       const counts = review.findingAccounting;
       summary.addHeading("Findings", 3).addTable([
@@ -136,4 +162,31 @@ export async function writeWorkflowSummary(
   }
 
   await summary.write();
+}
+
+function usageRows(usage: ReviewRunSummary["usage"]): string[][] {
+  if (usage === undefined) return [];
+  const rows = [
+    ["Input tokens", String(usage.inputTokens)],
+    ["Output tokens", String(usage.outputTokens)]
+  ];
+  if (usage.cost !== undefined) rows.push(["Cost", formatCost(usage.cost)]);
+  return rows;
+}
+
+function formatCost(cost: number | undefined): string {
+  return cost === undefined ? "—" : `$${cost.toFixed(2)}`;
+}
+
+function formatElapsed(record: RunRecord): string | undefined {
+  if (record.completedAt === undefined) return undefined;
+  const started = Date.parse(record.startedAt);
+  const completed = Date.parse(record.completedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) {
+    return undefined;
+  }
+  const seconds = Math.floor((completed - started) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes === 0 ? `${remainder}s` : `${minutes}m ${remainder}s`;
 }

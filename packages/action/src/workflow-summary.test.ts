@@ -55,8 +55,19 @@ describe("writeWorkflowSummary", () => {
         requiredReviewers: ["code-quality", "security"],
         successfulReviewers: ["code-quality"],
         missingReviewers: ["security"],
-        sessions: [],
         retries: 1,
+        usage: { inputTokens: 1200, outputTokens: 340, cost: 1.5 },
+        sessions: [
+          {
+            sessionId: "session-security",
+            role: "specialist",
+            reviewer: "security",
+            model: "subscription/claude-fable-5@high",
+            status: "timed_out",
+            retryCount: 0,
+            usage: { inputTokens: 900, outputTokens: 300, cost: 1.25 }
+          }
+        ],
         findingAccounting: {
           active: 2,
           new: 2,
@@ -76,5 +87,10 @@ describe("writeWorkflowSummary", () => {
     expect(written).toContain("Reviewers missing");
     expect(written).toContain("security");
     expect(written).toContain("User-resolved");
+    expect(written).toContain("Input tokens");
+    expect(written).toContain("1200");
+    expect(written).toContain("$1.50");
+    expect(written).toContain("Sessions");
+    expect(written).toContain("timed_out");
   });
 });
