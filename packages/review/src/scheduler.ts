@@ -131,7 +131,7 @@ export async function runSessionTasks<T>(
     throw new Error("maxConcurrency must be a positive integer");
   }
   const concurrency = Math.min(requestedConcurrency, DEFAULT_MAX_CONCURRENCY, tasks.length);
-  const records: Array<SessionTaskRecord<T> | undefined> = new Array(tasks.length);
+  const records = Array.from<SessionTaskRecord<T> | undefined>({ length: tasks.length });
   const transitions = tasks.map<SessionTaskTransition[]>(() => []);
   let nextIndex = 0;
   let cleanupCompromised = false;

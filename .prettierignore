@@ -3,3 +3,5 @@
 dist/
 node_modules/
 bun.lock
+tools/oxlint/anti-slop/
+packages/dashboard/worker-configuration.d.ts

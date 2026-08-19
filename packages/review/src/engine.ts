@@ -1009,9 +1009,12 @@ async function runCoordinator(options: {
     if (capture !== undefined) {
       const usage = captureUsage(capture);
       appendCompletedLog(options.log, capture, options.eventClock.now());
-      options.progress.emit("completed", capture, options.eventClock.now(), {
-        ...(usage === undefined ? {} : { usage })
-      });
+      options.progress.emit(
+        "completed",
+        capture,
+        options.eventClock.now(),
+        usage === undefined ? {} : { usage }
+      );
     }
     return finalized;
   } catch (error) {

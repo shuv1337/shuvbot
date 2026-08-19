@@ -99,7 +99,7 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     ? createGitHubClient({
         token: inputs.token,
         ...(overrides.fetchImpl ? { fetchImpl: overrides.fetchImpl } : {})
-    })
+      })
     : undefined;
   const mentionSignal = mentionReactionInput({
     event,
@@ -726,7 +726,11 @@ function eventSubject(event: BotEvent | null): RunRecord["subject"] {
         commentId: event.comment.id
       };
     case "pull_request_review_comment":
-      return { kind: "pull_request", number: event.pullRequest.number, commentId: event.comment.id };
+      return {
+        kind: "pull_request",
+        number: event.pullRequest.number,
+        commentId: event.comment.id
+      };
     default:
       return undefined;
   }

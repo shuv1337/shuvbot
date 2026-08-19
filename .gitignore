@@ -1,4 +1,6 @@
 node_modules/
+.wrangler/
+*.cpuprofile
 
 # Local credentials. Jujutsu snapshots every non-ignored file into the working
 # copy commit automatically, so an unignored .env is one `jj commit` away from

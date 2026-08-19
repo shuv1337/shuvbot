@@ -116,7 +116,9 @@ async function storedComment(value: PersistedReviewState): Promise<string> {
     botLogin: "shuvbot[bot]"
   });
   await subject.writeReviewState(value.changeId, value);
-  const body = (transport.requests.at(-1)?.body as { body: string }).body;
+  const request = transport.requests.at(-1);
+  if (request === undefined) throw new Error("expected a state request");
+  const body = (request.body as { body: string }).body;
   return body;
 }
 
@@ -285,7 +287,9 @@ describe("GitHub review state store", () => {
 
     await subject.writeReviewState(CHANGE_ID, state({ findings: many }));
 
-    const body = (requests.at(-1)?.body as { body: string }).body;
+    const request = requests.at(-1);
+    if (request === undefined) throw new Error("expected a state request");
+    const body = (request.body as { body: string }).body;
     expect(Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(60_000);
     const written = JSON.parse(
       body.match(/```shuvbot-review-state\s*\n([\s\S]*?)\n```/)![1]!

@@ -66,10 +66,37 @@ raw session traces or rejected model payloads by default.
 - Local CLI runs are not visible unless a later exporter is added. v1 should
   explicitly label them as outside the dashboard's source boundary.
 
-## Follow-up before implementation
+## Implementation status
 
-Choose the dashboard hosting target and GitHub App ownership model. The minimum
-required App permissions are read-only Actions, pull requests, issues, and
-metadata access. Once selected, implement the server-side GitHub client,
-artifact parser, bounded read model, and a read-only UI as a separate package so
-dashboard credentials and UI code never enter the Action bundle.
+The hosting target is Cloudflare Workers with D1. The first implementation slice
+lives in `packages/dashboard` and includes the D1 schema, bounded artifact
+projection, GET-only API, and read-only run list UI. It deliberately stores no
+raw event stream, rejected model payload, or unvalidated artifact JSON.
+
+The current ingestion boundary treats the downloaded artifact set as version 1.
+Coordinator `shuvbot-findings.json` files must carry their existing `version: 1`;
+the legacy findings array and the currently unversioned `shuvbot-run.json` are
+validated by the dashboard's own bounded schemas before projection.
+
+GitHub App polling is implemented as a server-side scheduled handler. It requires a server-side App identity with
+read-only Actions, pull requests, issues, and metadata access. Browser routes
+must remain GET/HEAD-only when scheduled polling is added; credentials and D1
+writes stay behind the Worker boundary.
+
+The scheduled poller runs every 15 minutes and reads bounded recent workflow
+runs from each GitHub App installation. Configure `GITHUB_APP_ID` and
+`GITHUB_APP_PRIVATE_KEY` with `wrangler secret put`; neither belongs in
+`wrangler.jsonc` or browser code. ZIP ingestion accepts only the expected
+top-level files, rejects traversal/duplicates/unknown versions, and caps both
+downloads and extracted files before JSON parsing.
+
+One scheduled invocation examines at most 10 installations, 20 repositories,
+and 10 recent completed runs per repository, and ingests at most five new runs.
+Each run is capped at 100 findings and 20 session summaries; bulk inserts stay
+under D1's 100-bound-parameter query limit. These bounds assume a Workers Paid
+deployment's 1,000-query/subrequest allowance rather than the Free plan's 50.
+
+`workers_dev` is disabled deliberately. Before adding a custom domain or route,
+protect it with Cloudflare Access; otherwise a read-only dashboard can still
+leak private repository history. The Worker itself exposes no browser write
+route, but Cloudflare Access remains the viewer-authentication boundary.
