@@ -259,6 +259,9 @@ describe("main() coordinator review mode", () => {
     expect(body.comments).toHaveLength(1);
     expect(body.comments[0]?.path).toBe("src/app.ts");
     expect(body.comments[0]?.body).toContain("Unsanitized input logged");
+    expect(body.comments[0]?.body).toContain("🟠 **High**");
+    expect(body.body).toContain("**Verdict:");
+    expect(body.body.toLowerCase()).not.toContain("approv");
     const marker = body.comments[0]?.body.match(/<!-- shuvbot:([^:]+:[^:]+:[^:]+):/i)?.[1];
     expect(marker).toMatch(/^finding:v1:[a-f0-9]{64}$/);
     expect(body.comments[0]?.body).not.toContain("finding:v1:finding:v1:");

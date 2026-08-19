@@ -108,6 +108,7 @@ The design should focus on these projects, but not be limited to them:
 - [All-Hands-AI/OpenHands](https://github.com/All-Hands-AI/OpenHands)
 - [Cloudflare AI code review](https://blog.cloudflare.com/ai-code-review/)
 - [shuvcode](https://github.com/Latitudes-Dev/shuvcode) (the pinned OpenCode v2 fork used by shuvbot)
+- [Mirrowel/Mirrobot-agent](https://github.com/Mirrowel/Mirrobot-agent) (mention UX, author-facing review, thread context; see `docs/lessons-mirrobot.md`)
 
 ### 2.1 Pullfrog Lessons
 
@@ -1790,9 +1791,22 @@ For v1:
 
 ## 17. Progress UX
 
-### 17.1 Progress Comment
+### 17.1 Mention reactions
 
-For mention/manual runs, create one progress comment:
+For mention/manual runs, react on the triggering comment:
+
+- `eyes` as soon as the mention is accepted
+- `rocket` when the run finishes
+- `confused` when the run fails
+
+Do not react on the pull request or issue itself. A rocket on the change can
+read as endorsing it. A comment that never mentioned the bot is left alone.
+Reactions are cosmetic: a GitHub failure posting them must not fail the run.
+
+### 17.2 Progress comment
+
+A living progress comment remains specified for longer mention tasks
+(`implement`, `fix-ci`) once those modes are wired to a real agent:
 
 ```md
 ### Shuvbot is working
@@ -1808,16 +1822,17 @@ Using: `claude-code` / `claude/sonnet`
 Run: <workflow-run-link>
 ```
 
-### 17.2 Rules
+### 17.3 Rules
 
-- Create progress comment only for mention/manual runs by default.
+- React on mention/manual runs by default.
+- Create a progress comment only for long mention/manual tasks, not for review.
 - Automatic PR reviews should prefer check summaries unless configured otherwise.
 - Update progress at most every 10–15 seconds.
 - Delete or replace progress comment when final artifact supersedes it.
 - Keep progress comment if the run fails so users see why.
 - Avoid posting chatty logs into PR comments.
 
-### 17.3 Final Summary
+### 17.4 Final Summary
 
 Final summary should include:
 
@@ -1830,6 +1845,15 @@ Final summary should include:
 - Commits pushed
 - Follow-up required
 ```
+
+The GitHub review body for coordinator review states a plain-language verdict
+(`incomplete`, `changes requested`, `commented`, or `no blocking issues`), groups
+active findings by severity, and reports previous-feedback status. It never
+submits `APPROVE`.
+
+Workflow summaries include reviewer coverage, session token/cost totals, and
+finding accounting so a degraded or expensive run cannot look like a cheap
+clean one.
 
 ---
 

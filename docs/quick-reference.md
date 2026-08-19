@@ -205,7 +205,8 @@ their policy and tooling path and stop at a documented no-op. See `docs/workflow
 
 Comment `@shuvbot review` on any pull request to review it on demand, instead of waiting for a
 push. It needs an `issue_comment` trigger in the workflow; see
-`.github/workflows/shuvbot.yml` in this repository for the shape.
+`.github/workflows/shuvbot.yml` in this repository for the shape. The triggering comment gets
+eyes while the run is in flight, then rocket or confused when it ends.
 
 Four things are worth knowing:
 

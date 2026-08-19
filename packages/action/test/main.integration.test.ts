@@ -397,7 +397,8 @@ describe("main() unhandled requests", () => {
       "GET /repos/octo/repo/collaborators/alice/permission": {
         status: 200,
         body: { role_name: "write" }
-      }
+      },
+      ...mentionReactionRoutes(10)
     });
 
     // Understood (mode resolves to review) but there is no pull request to
@@ -406,6 +407,7 @@ describe("main() unhandled requests", () => {
 
     const summary = await readFile(SUMMARY_PATH, "utf8");
     expect(summary).toContain("Errors");
+    expect(mentionReactionContents(server.calls, 10)).toEqual(["eyes", "confused"]);
   });
 
   test("does not review when a comment never mentioned shuvbot", async () => {
@@ -442,7 +444,8 @@ describe("main() unhandled requests", () => {
       "POST /repos/octo/repo/pulls/1/reviews": {
         status: 200,
         body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
-      }
+      },
+      ...mentionReactionRoutes(10)
     });
 
     await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
@@ -457,6 +460,7 @@ describe("main() unhandled requests", () => {
     };
     expect(reviewBody.comments[0]!.path).toBe("src/app.ts");
     expect(JSON.stringify(reviewBody)).toContain(INJECTED_FINDING.body);
+    expect(mentionReactionContents(server.calls, 10)).toEqual(["eyes", "rocket"]);
   });
 
   test("@shuvbot review on an inline diff comment posts a review", async () => {
@@ -472,7 +476,8 @@ describe("main() unhandled requests", () => {
       "POST /repos/octo/repo/pulls/1/reviews": {
         status: 200,
         body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
-      }
+      },
+      ...mentionReactionRoutes(11, "review")
     });
 
     await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
@@ -482,6 +487,7 @@ describe("main() unhandled requests", () => {
     );
     expect(postedReview).toBeDefined();
     expect(JSON.stringify(postedReview!.body)).toContain(INJECTED_FINDING.body);
+    expect(mentionReactionContents(server.calls, 11, "review")).toEqual(["eyes", "rocket"]);
   });
 
   test("an inline diff comment without a mention reviews nothing", async () => {
@@ -520,7 +526,8 @@ describe("main() unhandled requests", () => {
       "POST /repos/octo/repo/pulls/1/reviews": {
         status: 200,
         body: { id: 42, html_url: "https://example.test/pr/1#review-42" }
-      }
+      },
+      ...mentionReactionRoutes(10)
     });
 
     await main({ driver: scriptedDriver(), fetchImpl: server.fetchImpl });
@@ -530,5 +537,36 @@ describe("main() unhandled requests", () => {
       (call) => call.method === "POST" && call.path === "/repos/octo/repo/pulls/1/reviews"
     );
     expect(postedReview).toBeUndefined();
+    expect(mentionReactionContents(server.calls, 10)).toEqual(["eyes", "rocket"]);
   });
 });
+
+function mentionReactionRoutes(commentId: number, kind: "issue" | "review" = "issue") {
+  const base =
+    kind === "issue"
+      ? `/repos/octo/repo/issues/comments/${commentId}/reactions`
+      : `/repos/octo/repo/pulls/comments/${commentId}/reactions`;
+  return {
+    [`POST ${base}`]: { status: 200, body: { id: 1 } },
+    [`GET ${base}`]: {
+      status: 200,
+      body: [{ id: 1, content: "eyes", user: { login: "github-actions[bot]" } }]
+    },
+    [`DELETE ${base}/1`]: { status: 200, body: {} }
+  };
+}
+
+function mentionReactionContents(
+  calls: RecordedCall[],
+  commentId: number,
+  kind: "issue" | "review" = "issue"
+): string[] {
+  const base =
+    kind === "issue"
+      ? `/repos/octo/repo/issues/comments/${commentId}/reactions`
+      : `/repos/octo/repo/pulls/comments/${commentId}/reactions`;
+  return calls
+    .filter((call) => call.method === "POST" && call.path === base)
+    .map((call) => (call.body as { content?: string }).content)
+    .filter((content): content is string => typeof content === "string");
+}

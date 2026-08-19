@@ -33849,6 +33849,12 @@ async function writeWorkflowSummary(rawRecord, redactor = new DefaultRedactor())
     ["Agent", record3.agent],
     ["Model", record3.model]
   ]);
+  const elapsed2 = formatElapsed(record3);
+  if (elapsed2 !== void 0) {
+    summary2.addRaw(`
+Elapsed: ${elapsed2}
+`);
+  }
   if (record3.policy) {
     const p = record3.policy;
     summary2.addHeading("Runtime policy", 2).addTable([
@@ -33906,8 +33912,29 @@ async function writeWorkflowSummary(rawRecord, redactor = new DefaultRedactor())
       ["Quorum met", String(review.quorumMet)],
       ["Reviewers completed", review.successfulReviewers.join(", ") || "none"],
       ["Reviewers missing", review.missingReviewers.join(", ") || "none"],
-      ["Retries", String(review.retries)]
+      ["Retries", String(review.retries)],
+      ...usageRows(review.usage)
     ]);
+    if (review.sessions.length > 0) {
+      summary2.addHeading("Sessions", 3).addTable([
+        [
+          { data: "Role", header: true },
+          { data: "Reviewer", header: true },
+          { data: "Status", header: true },
+          { data: "Model", header: true },
+          { data: "Tokens in/out", header: true },
+          { data: "Cost", header: true }
+        ],
+        ...review.sessions.map((session) => [
+          session.role,
+          session.reviewer ?? "\u2014",
+          session.status,
+          session.model,
+          session.usage ? `${session.usage.inputTokens} / ${session.usage.outputTokens}` : "\u2014",
+          formatCost(session.usage?.cost)
+        ])
+      ]);
+    }
     if (review.findingAccounting) {
       const counts = review.findingAccounting;
       summary2.addHeading("Findings", 3).addTable([
@@ -33959,6 +33986,30 @@ async function writeWorkflowSummary(rawRecord, redactor = new DefaultRedactor())
     ]);
   }
   await summary2.write();
+}
+function usageRows(usage) {
+  if (usage === void 0) return [];
+  const rows = [
+    ["Input tokens", String(usage.inputTokens)],
+    ["Output tokens", String(usage.outputTokens)]
+  ];
+  if (usage.cost !== void 0) rows.push(["Cost", formatCost(usage.cost)]);
+  return rows;
+}
+function formatCost(cost) {
+  return cost === void 0 ? "\u2014" : `$${cost.toFixed(2)}`;
+}
+function formatElapsed(record3) {
+  if (record3.completedAt === void 0) return void 0;
+  const started = Date.parse(record3.startedAt);
+  const completed = Date.parse(record3.completedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) {
+    return void 0;
+  }
+  const seconds = Math.floor((completed - started) / 1e3);
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes === 0 ? `${remainder}s` : `${minutes}m ${remainder}s`;
 }
 
 // packages/action/src/artifacts.ts
@@ -34787,6 +34838,112 @@ function applyParams(url2, params, mode) {
   if (queryEntries.length === 0) return resolved;
   const search = new URLSearchParams(queryEntries).toString();
   return resolved.includes("?") ? `${resolved}&${search}` : `${resolved}?${search}`;
+}
+
+// packages/github/src/reactions.ts
+function triggerCommentFromEvent(event) {
+  switch (event.kind) {
+    case "issue_comment":
+      return event.comment.id > 0 ? { kind: "issue_comment", commentId: event.comment.id } : void 0;
+    case "pull_request_review_comment":
+      return event.comment.id > 0 ? { kind: "pull_request_review_comment", commentId: event.comment.id } : void 0;
+    case "pull_request":
+    case "issues":
+    case "workflow_dispatch":
+    case "workflow_run":
+    case "schedule":
+      return void 0;
+    default: {
+      const _exhaustive = event;
+      return _exhaustive;
+    }
+  }
+}
+async function signalMentionLifecycle(input) {
+  try {
+    await applyMentionLifecycle(input);
+    return "applied";
+  } catch {
+    return "skipped";
+  }
+}
+async function applyMentionLifecycle(input) {
+  switch (input.phase) {
+    case "start":
+      await addCommentReaction(input, "eyes");
+      return;
+    case "success":
+      await removeOwnCommentReaction(input, "eyes");
+      await addCommentReaction(input, "rocket");
+      return;
+    case "failure":
+      await removeOwnCommentReaction(input, "eyes");
+      await addCommentReaction(input, "confused");
+      return;
+    default: {
+      const _exhaustive = input.phase;
+      throw new Error(`unhandled mention reaction phase: ${_exhaustive}`);
+    }
+  }
+}
+async function addCommentReaction(input, content) {
+  try {
+    await input.client.request(`POST ${reactionCollectionPath(input.target)}`, {
+      params: reactionParams(input),
+      body: { content }
+    });
+  } catch (error52) {
+    if (error52 instanceof GitHubRequestError && error52.status === 422) return;
+    throw error52;
+  }
+}
+async function removeOwnCommentReaction(input, content) {
+  let reactions;
+  try {
+    const response = await input.client.request(`GET ${reactionCollectionPath(input.target)}`, {
+      params: reactionParams(input)
+    });
+    reactions = response.data;
+  } catch {
+    return;
+  }
+  if (!Array.isArray(reactions)) return;
+  const bot = input.botLogin.toLowerCase();
+  for (const reaction of reactions) {
+    if (typeof reaction !== "object" || reaction === null) continue;
+    const record3 = reaction;
+    if (record3.content !== content) continue;
+    const user = record3.user;
+    const login = typeof user === "object" && user !== null && "login" in user ? String(user.login ?? "") : "";
+    if (login.toLowerCase() !== bot) continue;
+    const id = record3.id;
+    if (typeof id !== "number" || !Number.isFinite(id)) continue;
+    try {
+      await input.client.request(`DELETE ${reactionCollectionPath(input.target)}/{reaction_id}`, {
+        params: { ...reactionParams(input), reaction_id: id }
+      });
+    } catch {
+    }
+  }
+}
+function reactionCollectionPath(target) {
+  switch (target.kind) {
+    case "issue_comment":
+      return "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions";
+    case "pull_request_review_comment":
+      return "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions";
+    default: {
+      const _exhaustive = target.kind;
+      throw new Error(`unhandled comment reaction target: ${_exhaustive}`);
+    }
+  }
+}
+function reactionParams(input) {
+  return {
+    owner: input.repo.owner,
+    repo: input.repo.name,
+    comment_id: input.target.commentId
+  };
 }
 
 // packages/github/src/diff.ts
@@ -68701,6 +68858,130 @@ async function withinDeadline(operation, deadlineAtMs, stage) {
   }
 }
 
+// packages/action/src/review-body.ts
+var SEVERITY_ORDER2 = ["critical", "high", "medium", "low", "info"];
+var SEVERITY_BADGE = {
+  critical: { icon: "\u{1F534}", label: "Critical" },
+  high: { icon: "\u{1F7E0}", label: "High" },
+  medium: { icon: "\u{1F7E1}", label: "Medium" },
+  low: { icon: "\u26AA", label: "Low" },
+  info: { icon: "\u{1F535}", label: "Info" }
+};
+function severityBadge(severity) {
+  const badge = SEVERITY_BADGE[severity];
+  return `${badge.icon} **${badge.label}**`;
+}
+function renderFindingComment(finding) {
+  const parts = [
+    `${severityBadge(finding.severity)} \u2014 ${finding.title}`,
+    "",
+    finding.body,
+    "",
+    `_Evidence:_ ${finding.evidence}`,
+    `_Reviewer:_ \`${finding.reviewer}\` \xB7 confidence ${finding.confidence}`
+  ];
+  if (finding.suggestedFix !== void 0) {
+    parts.push("", "```suggestion", finding.suggestedFix, "```");
+  }
+  return parts.join("\n");
+}
+function buildPostedReviewBody(input) {
+  const sections = [verdictLine(input.report, input.posting)];
+  const previous = previousFeedback(input.report);
+  if (previous.length > 0) {
+    sections.push("", "### Previous feedback", "", ...previous);
+  }
+  const grouped = groupActiveFindings(input.report);
+  if (grouped.length === 0) {
+    sections.push("", "No active findings.");
+  } else {
+    sections.push("", ...grouped);
+  }
+  if (input.summaryOnly.length > 0) {
+    sections.push(
+      "",
+      "### Findings without a commentable diff line",
+      "",
+      "These have no valid inline position on this diff, so they are reported here instead of being dropped.",
+      "",
+      ...input.summaryOnly.map((finding) => {
+        const line = finding.line ?? finding.endLine;
+        const location = line === void 0 ? finding.path : `${finding.path}:${line}`;
+        return `- ${severityBadge(finding.severity)} ${finding.title} (\`${location}\`)
+  ${finding.body}`;
+      })
+    );
+  }
+  sections.push("", coverageDetails(input.report, input.posting));
+  return sections.join("\n");
+}
+function verdictLine(report, posting) {
+  if (posting.degraded || report.degraded || report.decision === "degraded") {
+    return `**Verdict: incomplete** \u2014 ${posting.reason}`;
+  }
+  switch (report.decision) {
+    case "clean":
+      return `**Verdict: no blocking issues** \u2014 ${posting.reason}`;
+    case "significant_concerns":
+      return posting.reviewEvent === "REQUEST_CHANGES" ? `**Verdict: changes requested** \u2014 ${posting.reason}` : `**Verdict: commented** \u2014 ${posting.reason}`;
+    case "comments":
+    case "minor_issues":
+      return `**Verdict: commented** \u2014 ${posting.reason}`;
+    default: {
+      const _exhaustive = report.decision;
+      return _exhaustive;
+    }
+  }
+}
+function previousFeedback(report) {
+  const { fixed, unresolved, userResolved } = report.counts;
+  if (fixed === 0 && unresolved === 0 && userResolved === 0) return [];
+  const lines = [];
+  if (fixed > 0) {
+    lines.push(`- ${countLabel(fixed, "finding")} from an earlier review look fixed`);
+  }
+  if (unresolved > 0) {
+    lines.push(`- ${countLabel(unresolved, "finding")} still open`);
+  }
+  if (userResolved > 0) {
+    lines.push(`- ${countLabel(userResolved, "finding")} marked resolved in the review discussion`);
+  }
+  return lines;
+}
+function groupActiveFindings(report) {
+  const lines = [];
+  for (const severity of SEVERITY_ORDER2) {
+    const findings = report.findings.filter((finding) => finding.severity === severity);
+    if (findings.length === 0) continue;
+    const badge = SEVERITY_BADGE[severity];
+    lines.push(`### ${badge.icon} ${badge.label}`, "");
+    for (const finding of findings) {
+      const location = finding.line === null ? finding.path : `${finding.path}:${finding.line}`;
+      lines.push(`- \`${location}\` \u2014 ${finding.title}`);
+    }
+    lines.push("");
+  }
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+}
+function coverageDetails(report, posting) {
+  const { coverage } = report;
+  const lines = [
+    "<details>",
+    `<summary>Coverage \xB7 ${coverage.completed.length}/${coverage.scheduled.length} reviewers \xB7 quorum ${coverage.quorumMet ? "met" : "not met"}</summary>`,
+    "",
+    posting.reason,
+    ""
+  ];
+  if (coverage.failed.length > 0) lines.push(`Failed: ${coverage.failed.join(", ")}`);
+  if (coverage.timedOut.length > 0) lines.push(`Timed out: ${coverage.timedOut.join(", ")}`);
+  lines.push("</details>");
+  return lines.join("\n");
+}
+function countLabel(count2, noun) {
+  return `${count2} ${noun}${count2 === 1 ? "" : "s"}`;
+}
+
 // packages/action/src/coordinator-review.ts
 var MAX_PULL_REQUEST_FILE_PAGES = 30;
 var PULL_REQUEST_FILES_PER_PAGE = 100;
@@ -68826,7 +69107,11 @@ async function runCoordinatorActionReview(input) {
           client: input.client,
           repo: input.repo,
           pullNumber: input.pullNumber,
-          body: buildReviewBody(summary2, summaryOnly, posting),
+          body: buildPostedReviewBody({
+            report: run.report,
+            summaryOnly,
+            posting
+          }),
           event: posting.reviewEvent,
           comments: inline,
           botLogin: input.botLogin
@@ -68893,7 +69178,7 @@ function partitionFindings(findings, positions) {
     inline.push({
       path: finding.path,
       position,
-      body: renderFindingBody(finding),
+      body: renderFindingComment(finding),
       markerKey: findingMarkerKey(finding)
     });
   }
@@ -68901,37 +69186,6 @@ function partitionFindings(findings, positions) {
 }
 function findingMarkerKey(finding) {
   return finding.fingerprint;
-}
-function renderFindingBody(finding) {
-  const parts = [
-    `**${finding.severity}** \xB7 ${finding.title}`,
-    "",
-    finding.body,
-    "",
-    `_Evidence:_ ${finding.evidence}`,
-    `_Reviewer:_ \`${finding.reviewer}\` \xB7 confidence ${finding.confidence}`
-  ];
-  if (finding.suggestedFix !== void 0) {
-    parts.push("", "```suggestion", finding.suggestedFix, "```");
-  }
-  return parts.join("\n");
-}
-function buildReviewBody(summary2, summaryOnly, posting) {
-  const sections = [summary2, "", `_${posting.reason}_`];
-  if (summaryOnly.length > 0) {
-    sections.push(
-      "",
-      "### Findings without a commentable diff line",
-      "",
-      ...summaryOnly.map((finding) => {
-        const line = finding.line ?? finding.endLine;
-        const location = line === void 0 ? finding.path : `${finding.path}:${line}`;
-        return `- **${finding.severity}** ${finding.title} (${location})
-  ${finding.body}`;
-      })
-    );
-  }
-  return sections.join("\n");
 }
 function noChanges(redactor, reason) {
   return {
@@ -69122,6 +69376,16 @@ async function main(overrides = {}) {
     trigger: withPolicy.trigger,
     modeReason: resolved.reason
   });
+  const mentionSignal = mentionReactionInput({
+    event,
+    command: Boolean(command),
+    client,
+    botLogin: resolveBotLogin(inputs.botLogin)
+  });
+  if (mentionSignal) {
+    await signalMentionLifecycle({ ...mentionSignal, phase: "start" });
+  }
+  let mentionPhase = "success";
   try {
     const reviewRequested = reviewTarget ? reviewTarget.trigger === "event" || Boolean(command) : false;
     if (mode === "review" && event && reviewTarget && reviewRequested && client && policy) {
@@ -69385,9 +69649,14 @@ ${boundedLogTail(message)}`);
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
   } catch (error52) {
+    mentionPhase = "failure";
     withPolicy = recordError(withPolicy, error52);
     await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
     throw error52;
+  } finally {
+    if (mentionSignal) {
+      await signalMentionLifecycle({ ...mentionSignal, phase: mentionPhase });
+    }
   }
 }
 async function runCoordinatorReviewMode(input) {
@@ -69514,6 +69783,17 @@ function processCancellation() {
 }
 function resolveBotLogin(configured) {
   return configured ?? "github-actions[bot]";
+}
+function mentionReactionInput(input) {
+  if (!input.command || !input.event || !input.client) return void 0;
+  const target = triggerCommentFromEvent(input.event);
+  if (target === void 0) return void 0;
+  return {
+    client: input.client,
+    repo: { owner: input.event.repo.owner, name: input.event.repo.name },
+    target,
+    botLogin: input.botLogin
+  };
 }
 async function resolveActionConfig(explicitPath, cwd, logger) {
   if (explicitPath !== void 0) return loadConfigFile(explicitPath);

@@ -27,6 +27,11 @@ import { resolveMode } from "../../core/src/modes.ts";
 import { buildRuntimePolicy } from "../../core/src/policy.ts";
 import { deriveActorContext, type ActorContext } from "../../github/src/permissions.ts";
 import { createGitHubClient } from "../../github/src/octokit.ts";
+import {
+  signalMentionLifecycle,
+  triggerCommentFromEvent,
+  type MentionReactionInput
+} from "../../github/src/reactions.ts";
 import { ConfigError, UnsupportedRequestError } from "../../core/src/errors.ts";
 import { MODES, type AgentId, type ShuvbotMode } from "../../core/src/types.ts";
 import { fetchPullRequestDiff } from "../../github/src/diff.ts";
@@ -163,6 +168,17 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     modeReason: resolved.reason
   });
 
+  const mentionSignal = mentionReactionInput({
+    event,
+    command: Boolean(command),
+    client,
+    botLogin: resolveBotLogin(inputs.botLogin)
+  });
+  if (mentionSignal) {
+    await signalMentionLifecycle({ ...mentionSignal, phase: "start" });
+  }
+
+  let mentionPhase: "success" | "failure" = "success";
   try {
     // A pull_request event asks for a review by firing. A comment asks only if
     // it actually mentioned the bot - otherwise every comment on every pull
@@ -459,9 +475,14 @@ export async function main(overrides: MainOverrides = {}): Promise<void> {
     );
     await writeWorkflowSummary(completeRunRecord(withPolicy, "success"));
   } catch (error) {
+    mentionPhase = "failure";
     withPolicy = recordError(withPolicy, error);
     await writeWorkflowSummary(completeRunRecord(withPolicy, "failure"));
     throw error;
+  } finally {
+    if (mentionSignal) {
+      await signalMentionLifecycle({ ...mentionSignal, phase: mentionPhase });
+    }
   }
 }
 
@@ -658,6 +679,23 @@ function processCancellation(): { signal: AbortSignal; dispose(): void } {
 /** Login whose review comments own finding threads for lifecycle state. */
 function resolveBotLogin(configured?: string): string {
   return configured ?? "github-actions[bot]";
+}
+
+function mentionReactionInput(input: {
+  event: BotEvent | null;
+  command: boolean;
+  client: GitHubClient | undefined;
+  botLogin: string;
+}): MentionReactionInput | undefined {
+  if (!input.command || !input.event || !input.client) return undefined;
+  const target = triggerCommentFromEvent(input.event);
+  if (target === undefined) return undefined;
+  return {
+    client: input.client,
+    repo: { owner: input.event.repo.owner, name: input.event.repo.name },
+    target,
+    botLogin: input.botLogin
+  };
 }
 
 /**
