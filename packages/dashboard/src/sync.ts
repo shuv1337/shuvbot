@@ -19,12 +19,26 @@ const MAX_REPOSITORIES = 20;
 const MAX_RUNS_PER_REPOSITORY = 10;
 const MAX_INGESTED_RUNS = 5;
 
+const githubCredentialsSchema = z
+  .object({
+    GITHUB_APP_ID: z.string().min(1, "GITHUB_APP_ID secret is not configured"),
+    GITHUB_APP_PRIVATE_KEY: z.string().min(1, "GITHUB_APP_PRIVATE_KEY secret is not configured")
+  })
+  .transform(({ GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY }) => ({
+    appId: GITHUB_APP_ID,
+    privateKey: GITHUB_APP_PRIVATE_KEY
+  }));
+
 export interface DashboardSyncSummary {
   installations: number;
   repositories: number;
   discoveredRuns: number;
   ingestedRuns: number;
   skippedRuns: number;
+}
+
+export function isDashboardSyncConfigured(env: Env): boolean {
+  return githubCredentialsSchema.safeParse(env).success;
 }
 
 export async function syncDashboard(
@@ -120,14 +134,5 @@ async function isAlreadyIngested(db: D1Database, workflowRunId: number): Promise
 }
 
 function githubCredentials(env: Env): GitHubAppCredentials {
-  return z
-    .object({
-      GITHUB_APP_ID: z.string().min(1, "GITHUB_APP_ID secret is not configured"),
-      GITHUB_APP_PRIVATE_KEY: z.string().min(1, "GITHUB_APP_PRIVATE_KEY secret is not configured")
-    })
-    .transform(({ GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY }) => ({
-      appId: GITHUB_APP_ID,
-      privateKey: GITHUB_APP_PRIVATE_KEY
-    }))
-    .parse(env);
+  return githubCredentialsSchema.parse(env) satisfies GitHubAppCredentials;
 }

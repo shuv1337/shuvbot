@@ -1,6 +1,6 @@
 import { DASHBOARD_HTML } from "./ui.ts";
 import { getRun, listRepositories, listRuns, parseRunFilters } from "./read-model.ts";
-import { syncDashboard } from "./sync.ts";
+import { isDashboardSyncConfigured, syncDashboard } from "./sync.ts";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const READ_ONLY_HEADERS = {
@@ -67,6 +67,15 @@ export default {
     return handleRequest(request, env);
   },
   scheduled(_controller, env, ctx): void {
+    if (!isDashboardSyncConfigured(env)) {
+      console.warn(
+        JSON.stringify({
+          message: "dashboard sync skipped",
+          reason: "GitHub App secrets are not configured"
+        })
+      );
+      return;
+    }
     ctx.waitUntil(
       syncDashboard(env).then((summary) => {
         console.log(JSON.stringify({ message: "dashboard sync completed", ...summary }));
