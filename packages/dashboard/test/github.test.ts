@@ -54,6 +54,15 @@ describe("dashboard GitHub client", () => {
     );
   });
 
+  test("calls fetch implementations with the global receiver", async () => {
+    const client = new DashboardGitHubClient("token", async function (this: typeof globalThis) {
+      expect(this).toBe(globalThis);
+      return Response.json([]);
+    });
+
+    await client.json("/app/installations", z.array(z.never()));
+  });
+
   test("follows trusted artifact redirects without forwarding authorization", async () => {
     const requests: Array<{ url: string; headers: Headers }> = [];
     const client = new DashboardGitHubClient("installation-token", async (input, init) => {

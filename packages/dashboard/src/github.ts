@@ -61,10 +61,14 @@ export type DashboardFetch = (
 ) => ReturnType<typeof fetch>;
 
 export class DashboardGitHubClient {
+  private readonly fetchImpl: DashboardFetch;
+
   constructor(
     private readonly token: string,
-    private readonly fetchImpl: DashboardFetch = fetch
-  ) {}
+    fetchImpl: DashboardFetch = fetch
+  ) {
+    this.fetchImpl = fetchImpl.bind(globalThis);
+  }
 
   async json<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
     const response = await this.fetchImpl(`${API_URL}${path}`, {
