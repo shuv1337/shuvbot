@@ -1,7 +1,12 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createGitHubAppJwt, DashboardGitHubClient, listWorkflowRuns } from "../src/github.ts";
+import {
+  createGitHubAppJwt,
+  createInstallationClient,
+  DashboardGitHubClient,
+  listWorkflowRuns
+} from "../src/github.ts";
 
 describe("dashboard GitHub client", () => {
   test("creates a short-lived RS256 GitHub App JWT", () => {
@@ -47,5 +52,57 @@ describe("dashboard GitHub client", () => {
     await expect(client.json("/app/installations", z.array(z.never()))).rejects.toThrow(
       "Response exceeds"
     );
+  });
+
+  test("follows trusted artifact redirects without forwarding authorization", async () => {
+    const requests: Array<{ url: string; headers: Headers }> = [];
+    const client = new DashboardGitHubClient("installation-token", async (input, init) => {
+      requests.push({ url: String(input), headers: new Headers(init?.headers) });
+      if (requests.length === 1) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            location: "https://results.actions.githubusercontent.com/artifact.zip?signature=opaque"
+          }
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+
+    await expect(client.downloadArtifact("example/repo", 7)).resolves.toEqual(
+      new Uint8Array([1, 2, 3])
+    );
+    expect(requests[0]?.headers.get("authorization")).toBe("Bearer installation-token");
+    expect(requests[1]?.headers.get("authorization")).toBeNull();
+  });
+
+  test("rejects artifact redirects outside GitHub-owned storage", async () => {
+    const client = new DashboardGitHubClient(
+      "installation-token",
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://attacker.example/artifact.zip" }
+        })
+    );
+
+    await expect(client.downloadArtifact("example/repo", 7)).rejects.toThrow("untrusted URL");
+  });
+
+  test("requests an installation token with read-only permissions", async () => {
+    let body = "";
+    const appClient = new DashboardGitHubClient("app-token", async (_input, init) => {
+      body = String(init?.body);
+      return Response.json({ token: "installation-token" });
+    });
+    await createInstallationClient(appClient, 1, async () => Response.json({}));
+    expect(JSON.parse(body)).toEqual({ permissions: { actions: "read", metadata: "read" } });
+  });
+
+  test("rejects non-GitHub browser URLs", async () => {
+    const client = new DashboardGitHubClient("token", async () =>
+      Response.json({ workflow_runs: [{ id: 1, html_url: "javascript:alert(1)" }] })
+    );
+    await expect(listWorkflowRuns(client, "example/repo", 10)).rejects.toThrow("HTTPS github.com");
   });
 });

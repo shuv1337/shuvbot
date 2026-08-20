@@ -9,6 +9,7 @@
     {
       "binding": "DB",
       "database_name": "shuvbot-dashboard",
+      "database_id": "f38d6ea3-0787-4f2c-bb3c-fddb93cf620b",
       "migrations_dir": "migrations"
     }
   ],

@@ -58,66 +58,79 @@ export async function syncDashboard(
 
   for (const installationId of installationIds) {
     if (summary.repositories >= MAX_REPOSITORIES) break;
-    const client = await createInstallationClient(appClient, installationId, fetchImpl);
-    const repositories = await listInstallationRepositories(
-      client,
-      MAX_REPOSITORIES - summary.repositories
-    );
+    let client: DashboardGitHubClient;
+    let repositories;
+    try {
+      client = await createInstallationClient(appClient, installationId, fetchImpl);
+      repositories = await listInstallationRepositories(
+        client,
+        MAX_REPOSITORIES - summary.repositories
+      );
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      logSyncFailure("dashboard installation skipped", failure, { installationId });
+      continue;
+    }
     for (const repository of repositories) {
       summary.repositories += 1;
-      const runs = await listWorkflowRuns(client, repository.full_name, MAX_RUNS_PER_REPOSITORY);
+      let runs;
+      try {
+        runs = await listWorkflowRuns(client, repository.full_name, MAX_RUNS_PER_REPOSITORY);
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        logSyncFailure("dashboard repository skipped", failure, {
+          repository: repository.full_name
+        });
+        continue;
+      }
       summary.discoveredRuns += runs.length;
       for (const workflowRun of runs) {
-        if (summary.ingestedRuns >= MAX_INGESTED_RUNS) return summary;
-        if (await isAlreadyIngested(env.DB, workflowRun.id)) {
-          summary.skippedRuns += 1;
-          continue;
-        }
-        const artifact = await findShuvbotArtifact(client, repository.full_name, workflowRun.id);
-        if (artifact === null) {
-          summary.skippedRuns += 1;
-          continue;
-        }
+        if (summary.ingestedRuns >= MAX_INGESTED_RUNS) break;
         try {
+          if (await isAlreadyIngested(env.DB, workflowRun.id)) {
+            summary.skippedRuns += 1;
+            continue;
+          }
+          const artifact = await findShuvbotArtifact(client, repository.full_name, workflowRun.id);
+          if (artifact === null) {
+            summary.skippedRuns += 1;
+            continue;
+          }
           const bytes = await client.downloadArtifact(repository.full_name, artifact.id);
+          const encodedBytes = bytes.byteLength;
           const files = extractDashboardArtifactFiles(bytes);
-          const parsed = parseDashboardArtifact(
-            {
-              version: 1,
-              workflow: {
-                id: workflowRun.id,
-                htmlUrl: workflowRun.html_url,
-                repository: {
-                  id: repository.id,
-                  fullName: repository.full_name,
-                  htmlUrl: repository.html_url,
-                  private: repository.private
-                },
-                artifact: {
-                  id: artifact.id,
-                  name: artifact.name,
-                  sizeBytes: artifact.size_in_bytes,
-                  expiresAt: artifact.expires_at
-                }
+          const input = {
+            version: 1,
+            workflow: {
+              id: workflowRun.id,
+              htmlUrl: workflowRun.html_url,
+              repository: {
+                id: repository.id,
+                fullName: repository.full_name,
+                htmlUrl: repository.html_url,
+                private: repository.private
               },
-              run: files.run,
-              findings: files.findings,
-              sessions: files.sessions ?? []
+              artifact: {
+                id: artifact.id,
+                name: artifact.name,
+                sizeBytes: artifact.size_in_bytes,
+                expiresAt: artifact.expires_at
+              }
             },
-            bytes.byteLength
-          );
+            run: files.run,
+            findings: files.findings,
+            sessions: files.sessions ?? null
+          };
+          const parsed = parseDashboardArtifact(input, encodedBytes);
           await ingestDashboardArtifact(env.DB, parsed);
           summary.ingestedRuns += 1;
         } catch (error) {
           summary.skippedRuns += 1;
-          console.warn(
-            JSON.stringify({
-              message: "dashboard artifact skipped",
-              repository: repository.full_name,
-              workflowRunId: workflowRun.id,
-              error: error instanceof Error ? error.message : String(error)
-            })
-          );
+          const failure = error instanceof Error ? error : new Error(String(error));
+          logSyncFailure("dashboard workflow run skipped", failure, {
+            repository: repository.full_name,
+            workflowRunId: workflowRun.id
+          });
         }
       }
     }
@@ -135,4 +148,18 @@ async function isAlreadyIngested(db: D1Database, workflowRunId: number): Promise
 
 function githubCredentials(env: Env): GitHubAppCredentials {
   return githubCredentialsSchema.parse(env) satisfies GitHubAppCredentials;
+}
+
+function logSyncFailure(
+  message: string,
+  error: Error,
+  context: Record<string, number | string>
+): void {
+  console.warn(
+    JSON.stringify({
+      message,
+      ...context,
+      error: error instanceof Error ? error.message : String(error)
+    })
+  );
 }

@@ -182,7 +182,13 @@ export async function listRuns(db: D1Database, filters: RunFilters): Promise<Run
 export async function getRun(db: D1Database, id: number): Promise<RunDetail | null> {
   const run = await db
     .prepare(
-      `SELECT w.*, r.full_name AS repository, r.html_url AS repository_url
+      `SELECT w.id, w.shuvbot_run_id, w.repository_id, w.subject_kind,
+              w.subject_number, w.triggering_comment_id, w.actor, w.command_name,
+              w.command_args, w.mode, w.event, w.status, w.review_decision,
+              w.quorum_met, w.finding_count, w.started_at, w.completed_at,
+              w.duration_ms, w.html_url, w.artifact_schema_version,
+              w.artifact_available, w.failure_class, w.failure_message,
+              r.full_name AS repository, r.html_url AS repository_url
        FROM workflow_runs w
        JOIN repositories r ON r.id = w.repository_id
        WHERE w.id = ?`

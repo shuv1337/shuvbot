@@ -36,6 +36,28 @@ describe("dashboard artifact ZIP", () => {
       )
     ).toThrow("duplicate shuvbot-run.json");
   });
+
+  test("rejects mismatched local and central entry names", () => {
+    const bytes = zip([
+      ["shuvbot-run.json", "{}"],
+      ["shuvbot-findings.json", "[]"]
+    ]);
+    bytes[30] = "x".charCodeAt(0);
+    expect(() => extractDashboardArtifactFiles(bytes)).toThrow("entry names do not match");
+  });
+
+  test("bounds the total extracted content", () => {
+    const largeJson = JSON.stringify("x".repeat(6 * 1024 * 1024));
+    expect(() =>
+      extractDashboardArtifactFiles(
+        zip([
+          ["shuvbot-run.json", largeJson],
+          ["shuvbot-findings.json", largeJson],
+          ["shuvbot-review-sessions.json", largeJson]
+        ])
+      )
+    ).toThrow("total limit");
+  });
 });
 
 function zip(entries: Array<[string, string]>): Uint8Array {

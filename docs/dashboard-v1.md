@@ -31,8 +31,7 @@ The dashboard server should:
 1. Enumerate installations and repositories permitted by the App.
 2. Find the `shuvbot` workflow runs for each repository.
 3. Read run metadata and download the uploaded `shuvbot` artifact.
-4. Join the artifact run record with pull-request reviews, review comments,
-   issue comments, and thread resolution state.
+4. Project workflow metadata and the validated artifact into the D1 read model.
 5. Expose only GET endpoints to the browser and render untrusted GitHub text as
    escaped text or sanitized Markdown.
 
@@ -46,8 +45,7 @@ The dashboard should project one record per Action run:
 
 - `runId`, workflow run ID, repository, PR or issue number, triggering comment
   ID, actor, command, mode, event, status, timestamps, and links.
-- Review decision, degraded/quorum state, finding counts, finding lifecycle
-  counts, and review/comment URLs.
+- Review decision, quorum state, finding count, and workflow URL.
 - Per-session status, model, attempts, token usage, cost, and classified error.
 - Redacted failure information and artifact availability.
 
@@ -59,10 +57,9 @@ raw session traces or rejected model payloads by default.
 
 - GitHub artifact retention bounds history unless repositories retain artifacts
   indefinitely or a later v2 adds an append-only archive.
-- A dashboard refresh may need several GitHub API calls because run records and
-  review comments are separate resources.
-- The current run record does not persist the final review URL directly; the
-  dashboard can join that URL from the workflow run and GitHub review data.
+- v1 does not join pull-request review comments, issue comments, thread
+  resolution state, subject titles, or final review URLs. Those require a later
+  read-model and GitHub API expansion.
 - Local CLI runs are not visible unless a later exporter is added. v1 should
   explicitly label them as outside the dashboard's source boundary.
 
@@ -78,8 +75,8 @@ Coordinator `shuvbot-findings.json` files must carry their existing `version: 1`
 the legacy findings array and the currently unversioned `shuvbot-run.json` are
 validated by the dashboard's own bounded schemas before projection.
 
-GitHub App polling is implemented as a server-side scheduled handler. It requires a server-side App identity with
-read-only Actions, pull requests, issues, and metadata access. Browser routes
+GitHub App polling is implemented as a server-side scheduled handler. It requires
+a server-side App identity with read-only Actions and metadata access. Browser routes
 must remain GET/HEAD-only when scheduled polling is added; credentials and D1
 writes stay behind the Worker boundary.
 
@@ -87,13 +84,16 @@ The scheduled poller runs every 15 minutes and reads bounded recent workflow
 runs from each GitHub App installation. Configure `GITHUB_APP_ID` and
 `GITHUB_APP_PRIVATE_KEY` with `wrangler secret put`; neither belongs in
 `wrangler.jsonc` or browser code. ZIP ingestion accepts only the expected
-top-level files, rejects traversal/duplicates/unknown versions, and caps both
-downloads and extracted files before JSON parsing.
+top-level files, rejects traversal/duplicates/unknown versions, caps each
+extracted file at 8 MiB, and caps aggregate extracted content at 16 MiB before
+JSON parsing. Artifact redirects are followed manually only to allowlisted
+GitHub Actions or Azure Blob hosts, without forwarding the installation token.
 
 One scheduled invocation examines at most 10 installations, 20 repositories,
 and 10 recent completed runs per repository, and ingests at most five new runs.
-Each run is capped at 100 findings and 20 session summaries; bulk inserts stay
-under D1's 100-bound-parameter query limit. These bounds assume a Workers Paid
+Each run stores at most the first 100 validated findings and 20 validated session
+summaries; larger producer collections are truncated rather than rejected. Bulk
+inserts stay under D1's 100-bound-parameter query limit. These bounds assume a Workers Paid
 deployment's 1,000-query/subrequest allowance rather than the Free plan's 50.
 
 `workers_dev` is disabled deliberately. Before adding a custom domain or route,

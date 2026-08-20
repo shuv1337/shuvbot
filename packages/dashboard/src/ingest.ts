@@ -54,12 +54,23 @@ export async function ingestDashboardArtifact(
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            shuvbot_run_id = excluded.shuvbot_run_id,
+           repository_id = excluded.repository_id,
+           subject_kind = excluded.subject_kind,
+           subject_number = excluded.subject_number,
+           triggering_comment_id = excluded.triggering_comment_id,
+           actor = excluded.actor,
+           command_name = excluded.command_name,
+           command_args = excluded.command_args,
+           mode = excluded.mode,
+           event = excluded.event,
            status = excluded.status,
            review_decision = excluded.review_decision,
            quorum_met = excluded.quorum_met,
            finding_count = excluded.finding_count,
            completed_at = excluded.completed_at,
            duration_ms = excluded.duration_ms,
+           html_url = excluded.html_url,
+           artifact_schema_version = excluded.artifact_schema_version,
            artifact_available = 1,
            failure_class = excluded.failure_class,
            failure_message = excluded.failure_message`

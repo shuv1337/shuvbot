@@ -12,6 +12,14 @@ const MAX_SESSIONS = 20;
 const shortString = z.string().max(MAX_SHORT_STRING);
 const text = z.string().max(MAX_STRING);
 const positiveInteger = z.number().int().positive();
+const githubHtmlUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((value) => {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com";
+  }, "URL must be an HTTPS github.com URL");
 const optionalUsage = z
   .object({
     inputTokens: z.number().int().nonnegative(),
@@ -52,10 +60,16 @@ const sessionSchema = z.object({
     })
     .optional()
 });
+const findingsSchema = z
+  .array(findingSchema)
+  .transform((findings) => findings.slice(0, MAX_FINDINGS));
+const sessionsSchema = z
+  .array(sessionSchema)
+  .transform((sessions) => sessions.slice(0, MAX_SESSIONS));
 
 const runSchema = z.object({
   runId: shortString.min(1),
-  repo: shortString.min(1),
+  repo: shortString.min(1).optional(),
   subject: z
     .object({
       kind: z.enum(["issue", "pull_request"]),
@@ -75,12 +89,12 @@ const runSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
   status: z.enum(["running", "success", "failure"]),
-  findings: z.array(findingSchema).max(MAX_FINDINGS).optional(),
+  findings: findingsSchema.optional(),
   review: z
     .object({
       decision: shortString,
       quorumMet: z.boolean(),
-      sessions: z.array(sessionSchema).max(MAX_SESSIONS)
+      sessions: sessionsSchema
     })
     .optional(),
   failure: z
@@ -93,11 +107,11 @@ const runSchema = z.object({
 
 const workflowSchema = z.object({
   id: positiveInteger,
-  htmlUrl: z.string().url().max(2048),
+  htmlUrl: githubHtmlUrl,
   repository: z.object({
     id: positiveInteger,
     fullName: shortString.min(1),
-    htmlUrl: z.string().url().max(2048),
+    htmlUrl: githubHtmlUrl,
     private: z.boolean()
   }),
   artifact: z.object({
@@ -113,13 +127,13 @@ const ingestionSchema = z.object({
   workflow: workflowSchema,
   run: runSchema,
   findings: z.union([
-    z.array(findingSchema).max(MAX_FINDINGS),
+    findingsSchema,
     z.object({
       version: z.literal(1),
-      findings: z.array(findingSchema).max(MAX_FINDINGS)
+      findings: findingsSchema
     })
   ]),
-  sessions: z.array(sessionSchema).max(MAX_SESSIONS).optional()
+  sessions: sessionsSchema.nullish()
 });
 
 export type DashboardArtifact = z.infer<typeof ingestionSchema> & {

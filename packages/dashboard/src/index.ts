@@ -14,24 +14,29 @@ export async function handleRequest(request: Request, env?: Env): Promise<Respon
   if (request.method !== "GET" && request.method !== "HEAD") {
     return json({ error: "Method not allowed" }, 405, { allow: "GET, HEAD" });
   }
-  if (env === undefined) throw new Error("Dashboard environment is unavailable");
   const url = new URL(request.url);
   try {
-    if (url.pathname === "/health") return json({ status: "ok" });
+    if (env === undefined) throw new Error("Dashboard environment is unavailable");
+    if (url.pathname === "/health") return json({ status: "ok" }, 200, {}, request.method);
     if (url.pathname === "/api/repositories")
-      return json({ repositories: await listRepositories(env.DB) });
+      return json({ repositories: await listRepositories(env.DB) }, 200, {}, request.method);
     if (url.pathname === "/api/runs") {
-      return json({ runs: await listRuns(env.DB, parseRunFilters(url)) });
+      return json({ runs: await listRuns(env.DB, parseRunFilters(url)) }, 200, {}, request.method);
     }
     const runMatch = url.pathname.match(/^\/api\/runs\/(\d+)$/);
     if (runMatch?.[1] !== undefined) {
-      const run = await getRun(env.DB, Number(runMatch[1]));
-      return run === null ? json({ error: "Run not found" }, 404) : json({ run });
+      const id = Number(runMatch[1]);
+      if (!Number.isSafeInteger(id)) throw new TypeError("Run id must be a safe integer");
+      const run = await getRun(env.DB, id);
+      return run === null
+        ? json({ error: "Run not found" }, 404, {}, request.method)
+        : json({ run }, 200, {}, request.method);
     }
     if (url.pathname === "/") {
       return new Response(request.method === "HEAD" ? null : DASHBOARD_HTML, {
         headers: {
           "content-type": "text/html; charset=utf-8",
+          "cache-control": "private, max-age=30",
           "content-security-policy":
             "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
           "referrer-policy": "no-referrer",
@@ -39,10 +44,10 @@ export async function handleRequest(request: Request, env?: Env): Promise<Respon
         }
       });
     }
-    return json({ error: "Not found" }, 404);
+    return json({ error: "Not found" }, 404, {}, request.method);
   } catch (error) {
     if (error instanceof TypeError || error instanceof RangeError) {
-      return json({ error: error.message }, 400);
+      return json({ error: error.message }, 400, {}, request.method);
     }
     console.error(
       JSON.stringify({
@@ -51,15 +56,21 @@ export async function handleRequest(request: Request, env?: Env): Promise<Respon
         error: error instanceof Error ? error.message : String(error)
       })
     );
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, {}, request.method);
   }
 }
 
-function json<Value>(value: Value, status = 200, headers: Record<string, string> = {}): Response {
-  return Response.json(value, {
+function json<Value>(
+  value: Value,
+  status = 200,
+  headers: Record<string, string> = {},
+  method = "GET"
+): Response {
+  const response = Response.json(value, {
     status,
     headers: { ...JSON_HEADERS, ...READ_ONLY_HEADERS, ...headers }
   });
+  return method === "HEAD" ? new Response(null, response) : response;
 }
 
 export default {
@@ -77,9 +88,20 @@ export default {
       return;
     }
     ctx.waitUntil(
-      syncDashboard(env).then((summary) => {
-        console.log(JSON.stringify({ message: "dashboard sync completed", ...summary }));
-      })
+      syncDashboard(env).then(
+        (summary) => {
+          console.log(JSON.stringify({ message: "dashboard sync completed", ...summary }));
+        },
+        (error: Error) => {
+          console.error(
+            JSON.stringify({
+              message: "dashboard sync failed",
+              error: error instanceof Error ? error.message : String(error)
+            })
+          );
+          throw error;
+        }
+      )
     );
   }
 } satisfies ExportedHandler<Env>;

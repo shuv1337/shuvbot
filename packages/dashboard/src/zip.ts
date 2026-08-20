@@ -6,6 +6,7 @@ const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const MAX_ENTRIES = 1_000;
+const MAX_EXTRACTED_BYTES = 16 * 1024 * 1024;
 const TARGETS = new Set([
   "shuvbot-run.json",
   "shuvbot-findings.json",
@@ -29,6 +30,7 @@ export function extractDashboardArtifactFiles(bytes: Uint8Array): DashboardArtif
     throw new TypeError("Artifact ZIP central directory is invalid");
 
   const files = new Map<string, string>();
+  let extractedBytes = 0;
   let offset = centralOffset;
   for (let index = 0; index < entryCount; index += 1) {
     assertRange(view, offset, 46);
@@ -46,15 +48,23 @@ export function extractDashboardArtifactFiles(bytes: Uint8Array): DashboardArtif
     assertRange(view, offset + 46, nameLength + extraLength + commentLength);
     const name = decodeName(bytes.subarray(offset + 46, offset + 46 + nameLength));
     validateEntryName(name);
-    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+    if (
+      compressedSize === 0xffffffff ||
+      uncompressedSize === 0xffffffff ||
+      localOffset === 0xffffffff
+    ) {
       throw new TypeError("ZIP64 artifacts are not supported");
     }
     if ((flags & 1) !== 0) throw new TypeError("Encrypted artifact ZIP entries are not supported");
     if (TARGETS.has(name)) {
       if (files.has(name)) throw new TypeError(`Artifact ZIP contains duplicate ${name}`);
+      extractedBytes += uncompressedSize;
+      if (extractedBytes > MAX_EXTRACTED_BYTES) {
+        throw new RangeError(`Artifact files exceed the ${MAX_EXTRACTED_BYTES}-byte total limit`);
+      }
       files.set(
         name,
-        extractEntry(bytes, view, localOffset, method, compressedSize, uncompressedSize)
+        extractEntry(bytes, view, localOffset, name, method, compressedSize, uncompressedSize)
       );
     }
     offset += 46 + nameLength + extraLength + commentLength;
@@ -88,6 +98,7 @@ function extractEntry(
   bytes: Uint8Array,
   view: DataView,
   localOffset: number,
+  expectedName: string,
   method: number,
   compressedSize: number,
   uncompressedSize: number
@@ -101,6 +112,9 @@ function extractEntry(
   }
   const nameLength = view.getUint16(localOffset + 26, true);
   const extraLength = view.getUint16(localOffset + 28, true);
+  assertRange(view, localOffset + 30, nameLength + extraLength);
+  const localName = decodeName(bytes.subarray(localOffset + 30, localOffset + 30 + nameLength));
+  if (localName !== expectedName) throw new TypeError("Artifact ZIP entry names do not match");
   const dataOffset = localOffset + 30 + nameLength + extraLength;
   assertRange(view, dataOffset, compressedSize);
   const compressed = bytes.subarray(dataOffset, dataOffset + compressedSize);

@@ -25,6 +25,29 @@ describe("dashboard artifact schema", () => {
       /exceeds/
     );
   });
+
+  test("truncates producer-sized collections and accepts a missing optional repo", () => {
+    const value = artifact();
+    value.findings.findings = Array.from({ length: 101 }, (_unused, index) => ({
+      ...finding(),
+      id: `finding-${index}`
+    }));
+    value.run.review.sessions = Array.from({ length: 21 }, (_unused, index) => ({
+      ...session(),
+      sessionId: `session-${index}`
+    }));
+    const { repo: _repo, ...run } = value.run;
+
+    const parsed = parseDashboardArtifact({ ...value, run });
+    expect(parsed.findings).toHaveLength(100);
+    expect(parsed.sessions).toHaveLength(20);
+  });
+
+  test("rejects browser URLs with an unsafe scheme", () => {
+    const value = artifact();
+    value.workflow.htmlUrl = "javascript:alert(1)";
+    expect(() => parseDashboardArtifact(value)).toThrow("HTTPS github.com");
+  });
 });
 
 function artifact() {
