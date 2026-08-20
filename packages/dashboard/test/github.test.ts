@@ -89,6 +89,19 @@ describe("dashboard GitHub client", () => {
     await expect(client.downloadArtifact("example/repo", 7)).rejects.toThrow("untrusted URL");
   });
 
+  test("rejects unrelated Azure Blob storage accounts", async () => {
+    const client = new DashboardGitHubClient(
+      "installation-token",
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://attacker.blob.core.windows.net/artifact.zip" }
+        })
+    );
+
+    await expect(client.downloadArtifact("example/repo", 7)).rejects.toThrow("untrusted URL");
+  });
+
   test("requests an installation token with read-only permissions", async () => {
     let body = "";
     const appClient = new DashboardGitHubClient("app-token", async (_input, init) => {

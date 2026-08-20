@@ -1,4 +1,4 @@
-import { parseDashboardArtifact } from "./artifact-schema.ts";
+import { parseDashboardArtifact, type DashboardArtifact } from "./artifact-schema.ts";
 import { z } from "zod";
 import {
   createGitHubAppJwt,
@@ -86,11 +86,12 @@ export async function syncDashboard(
       summary.discoveredRuns += runs.length;
       for (const workflowRun of runs) {
         if (summary.ingestedRuns >= MAX_INGESTED_RUNS) break;
+        if (await isAlreadyIngested(env.DB, workflowRun.id)) {
+          summary.skippedRuns += 1;
+          continue;
+        }
+        let parsed: DashboardArtifact;
         try {
-          if (await isAlreadyIngested(env.DB, workflowRun.id)) {
-            summary.skippedRuns += 1;
-            continue;
-          }
           const artifact = await findShuvbotArtifact(client, repository.full_name, workflowRun.id);
           if (artifact === null) {
             summary.skippedRuns += 1;
@@ -121,9 +122,7 @@ export async function syncDashboard(
             findings: files.findings,
             sessions: files.sessions ?? null
           };
-          const parsed = parseDashboardArtifact(input, encodedBytes);
-          await ingestDashboardArtifact(env.DB, parsed);
-          summary.ingestedRuns += 1;
+          parsed = parseDashboardArtifact(input, encodedBytes);
         } catch (error) {
           summary.skippedRuns += 1;
           const failure = error instanceof Error ? error : new Error(String(error));
@@ -131,7 +130,10 @@ export async function syncDashboard(
             repository: repository.full_name,
             workflowRunId: workflowRun.id
           });
+          continue;
         }
+        await ingestDashboardArtifact(env.DB, parsed);
+        summary.ingestedRuns += 1;
       }
     }
   }

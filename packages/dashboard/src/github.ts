@@ -93,26 +93,25 @@ export class DashboardGitHubClient {
 
   async downloadArtifact(repository: string, artifactId: number): Promise<Uint8Array> {
     const repositoryPath = encodeRepositoryPath(repository);
-    let response = await this.fetchImpl(
-      `${API_URL}/repos/${repositoryPath}/actions/artifacts/${artifactId}/zip`,
-      {
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${this.token}`,
-          "user-agent": "shuvbot-dashboard",
-          "x-github-api-version": "2022-11-28"
-        },
-        redirect: "manual"
-      }
-    );
+    let requestUrl = `${API_URL}/repos/${repositoryPath}/actions/artifacts/${artifactId}/zip`;
+    let response = await this.fetchImpl(requestUrl, {
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${this.token}`,
+        "user-agent": "shuvbot-dashboard",
+        "x-github-api-version": "2022-11-28"
+      },
+      redirect: "manual"
+    });
     for (let redirects = 0; isRedirect(response.status); redirects += 1) {
       if (redirects >= MAX_ARTIFACT_REDIRECTS) {
         throw new Error("GitHub artifact download exceeded the redirect limit");
       }
       const location = response.headers.get("location");
       if (location === null) throw new Error("GitHub artifact redirect has no location");
-      const redirectUrl = new URL(location, response.url || API_URL);
+      const redirectUrl = new URL(location, requestUrl);
       assertArtifactRedirectUrl(redirectUrl);
+      requestUrl = redirectUrl.href;
       response = await this.fetchImpl(redirectUrl, {
         headers: { "user-agent": "shuvbot-dashboard" },
         redirect: "manual"
@@ -246,7 +245,7 @@ function assertArtifactRedirectUrl(url: URL): void {
   const allowedHost =
     url.hostname === "objects.githubusercontent.com" ||
     url.hostname.endsWith(".actions.githubusercontent.com") ||
-    url.hostname.endsWith(".blob.core.windows.net");
+    /^productionresultssa\d+\.blob\.core\.windows\.net$/.test(url.hostname);
   if (url.protocol !== "https:" || !allowedHost) {
     throw new Error("GitHub artifact download redirected to an untrusted URL");
   }

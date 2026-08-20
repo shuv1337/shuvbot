@@ -3,6 +3,7 @@
   "name": "shuvbot-dashboard",
   "main": "src/index.ts",
   "workers_dev": false,
+  "routes": [{ "pattern": "shuvbot.shuv.dev", "custom_domain": true }],
   "compatibility_date": "2026-08-20",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [

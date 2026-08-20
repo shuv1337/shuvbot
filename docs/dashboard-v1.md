@@ -91,12 +91,13 @@ GitHub Actions or Azure Blob hosts, without forwarding the installation token.
 
 One scheduled invocation examines at most 10 installations, 20 repositories,
 and 10 recent completed runs per repository, and ingests at most five new runs.
-Each run stores at most the first 100 validated findings and 20 validated session
-summaries; larger producer collections are truncated rather than rejected. Bulk
-inserts stay under D1's 100-bound-parameter query limit. These bounds assume a Workers Paid
+Each run validates the complete producer collections, then stores at most the
+first 100 findings and 20 session summaries. Bulk inserts stay under D1's
+100-bound-parameter query limit. These bounds assume a Workers Paid
 deployment's 1,000-query/subrequest allowance rather than the Free plan's 50.
 
-`workers_dev` is disabled deliberately. Before adding a custom domain or route,
-protect it with Cloudflare Access; otherwise a read-only dashboard can still
-leak private repository history. The Worker itself exposes no browser write
-route, but Cloudflare Access remains the viewer-authentication boundary.
+`workers_dev` is disabled deliberately. The `shuvbot.shuv.dev` custom domain is
+protected by a Cloudflare Access application before the route is deployed;
+otherwise a read-only dashboard can still leak private repository history. The
+Worker itself exposes no browser write route, but Cloudflare Access remains the
+viewer-authentication boundary.

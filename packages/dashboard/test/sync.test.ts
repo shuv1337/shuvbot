@@ -43,6 +43,38 @@ describe("dashboard synchronization", () => {
     });
     expect(requested.some((url) => url.includes("example/with-workflow"))).toBe(true);
   });
+
+  test("fails the synchronization when D1 is unavailable", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const fetchImpl = async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+      const url = String(input);
+      if (url.includes("/app/installations?")) return Response.json([{ id: 1 }]);
+      if (url.endsWith("/app/installations/1/access_tokens")) {
+        return Response.json({ token: "installation-token" });
+      }
+      if (url.includes("/installation/repositories?")) {
+        return Response.json({ repositories: [repository(1, "example/repo")] });
+      }
+      if (url.includes("/actions/workflows/shuvbot.yml/runs")) {
+        return Response.json({
+          workflow_runs: [{ id: 42, html_url: "https://github.com/example/repo/actions/runs/42" }]
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    };
+    const db: D1Database = Object.assign(Object.create(null), {
+      prepare(): never {
+        throw new Error("D1 unavailable");
+      }
+    });
+    const env: Env & { GITHUB_APP_ID: string; GITHUB_APP_PRIVATE_KEY: string } = {
+      DB: db,
+      GITHUB_APP_ID: "1",
+      GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+    };
+
+    await expect(syncDashboard(env, fetchImpl)).rejects.toThrow("D1 unavailable");
+  });
 });
 
 function repository(id: number, fullName: string) {
